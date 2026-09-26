@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Jevia</title>
+  <rect width="64" height="64" fill="#0a0a0a"/>
+  <g fill="none" stroke="#f5f5f2" stroke-width="4" stroke-linecap="square">
+    <path d="M14 17h16v24c0 6-3 10-9 10s-9-4-9-9"/>
+    <path d="M39 33c3-5 5-5 9-2s6 3 10-2"/>
+  </g>
+</svg>

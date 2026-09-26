@@ -1,4 +1,9 @@
-use std::fs;
+use std::{
+    fs,
+    io::{Read, Write},
+    net::TcpListener,
+    thread,
+};
 
 use assert_cmd::Command;
 use tempfile::tempdir;
@@ -93,6 +98,54 @@ fn cache_commands_are_available() {
         .args(["cache", "clear"])
         .assert()
         .success();
+}
+
+#[test]
+fn check_completes_a_live_round_trip_without_storing_a_run() {
+    let directory = tempdir().expect("temporary directory");
+    let jevia_directory = directory.path().join(".jevia");
+    fs::create_dir_all(&jevia_directory).expect("Jevia directory is created");
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("test server binds");
+    let address = listener.local_addr().expect("test server address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("test request arrives");
+        let mut request = [0_u8; 8192];
+        let _ = stream.read(&mut request).expect("test request is readable");
+        let body = r#"{"model":"jev-test","answers":{"tier":{"type":"choice","choice":"fast","confidence":0.94,"probabilities":{"fast":0.94,"balanced":0.05,"strong":0.01}}}}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("test response is written");
+    });
+
+    let mut config = jevia_core::Config::default();
+    config.jev.base_url = format!("http://{address}");
+    fs::write(
+        jevia_directory.join("config.toml"),
+        config.to_toml().expect("config serializes"),
+    )
+    .expect("config is written");
+
+    let mut check = Command::cargo_bin("jevia").expect("binary is built");
+    let output = check
+        .current_dir(directory.path())
+        .env("TYPESAFE_API_KEY", "test-key")
+        .arg("check")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let output = String::from_utf8(output).expect("stdout is UTF-8");
+
+    server.join().expect("test server exits");
+    assert!(output.contains("jev api: ok (model=jev-test, tier=fast, confidence=0.94)"));
+    assert!(output.contains("jevia: ready"));
+    assert!(!jevia_directory.join("runs.jsonl").exists());
 }
 
 #[test]

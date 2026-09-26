@@ -25,9 +25,10 @@ The application owns the policy. Jev supplies a structured decision signal.
 ## Quick start
 
 ```bash
-cargo install --path crates/jevia-cli
+cargo install --git https://github.com/assistant-ui/jevia jevia
 jevia init
 export TYPESAFE_API_KEY="your-key"
+jevia check
 jevia route "investigate an intermittent distributed-lock failure"
 ```
 
@@ -55,6 +56,7 @@ jevia runs --json
 | `jevia runs` | Inspect recent local routing records. |
 | `jevia feedback <id> <outcome>` | Mark a run as `success`, `failure`, or `unknown`. |
 | `jevia doctor` | Validate configuration, credentials, and local storage. |
+| `jevia check` | Validate local state and complete a live Jev routing round trip without storing a run. |
 | `jevia cache status` | Inspect routing-cache settings and entry counts. |
 | `jevia cache clear` | Remove cached decisions without touching run history. |
 
@@ -171,6 +173,7 @@ without deleting or rewriting them.
 - `crates/jevia-core` contains configuration, typed API contracts, policy, and
   outcome records.
 - `crates/jevia-cli` contains filesystem persistence and terminal commands.
+- `website` contains the Farm.js product site and getting-started guide.
 
 Dashboard code does not belong in this repository. The managed dashboard is a
 separate private project with a separate security boundary.
@@ -182,6 +185,21 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
+
+Run the website separately:
+
+```bash
+cd website
+pnpm install
+pnpm dev
+```
+
+The site serves `/install.sh` and uses the current page's origin in its copyable
+install command: localhost during development and the deployed domain in
+production. The script builds the CLI from this repository with locked
+dependencies; Rust 1.92+ and Cargo must already be installed. It does not install
+Rust or modify shell configuration. Run `pnpm test` in `website` to check the
+installer without installing anything.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution and commit
 conventions and [docs/architecture.md](docs/architecture.md) for component
