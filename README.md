@@ -108,11 +108,16 @@ changes do not erase which implementation actually produced a result.
 Project configuration lives in `.jevia/config.toml` and is intended to be
 reviewed and committed. Run history lives in `.jevia/runs.jsonl` and is ignored
 by the project-local `.jevia/.gitignore` because prompts and outcomes may be
-sensitive.
+sensitive. Jevia coordinates concurrent readers and writers through the
+ignored `.jevia/runs.lock` sidecar so parallel agents cannot overwrite one
+another's evidence.
 
 By default Jevia stores task text locally so it can supply useful examples to
 future decisions. Set `store_task_text = false` under `[privacy]` to retain only
 routing metadata.
+
+`jevia doctor` validates the complete history and reports malformed records
+without deleting or rewriting them.
 
 ## Repository structure
 

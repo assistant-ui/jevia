@@ -25,6 +25,9 @@ fn init_creates_a_valid_project_configuration() {
 
     assert_eq!(parsed.router.fallback_tier, "strong");
     assert!(directory.path().join(".jevia/.gitignore").is_file());
+    let ignore = fs::read_to_string(directory.path().join(".jevia/.gitignore"))
+        .expect("ignore file is readable");
+    assert!(ignore.lines().any(|line| line == "runs.lock"));
 }
 
 #[test]
@@ -82,4 +85,35 @@ fn checked_in_harness_example_remains_valid() {
         .expect("example defines the agent harness");
     assert_eq!(harness.command, "my-agent");
     assert_eq!(harness.models.len(), config.tiers.len());
+}
+
+#[test]
+fn doctor_reports_malformed_history_without_rewriting_it() {
+    let directory = tempdir().expect("temporary directory");
+    let mut init = Command::cargo_bin("jevia").expect("binary is built");
+    init.current_dir(directory.path())
+        .arg("init")
+        .assert()
+        .success();
+    let history = directory.path().join(".jevia/runs.jsonl");
+    let malformed = "{not valid json}\n";
+    fs::write(&history, malformed).expect("malformed history is written");
+
+    let mut doctor = Command::cargo_bin("jevia").expect("binary is built");
+    let output = doctor
+        .current_dir(directory.path())
+        .env("TYPESAFE_API_KEY", "test-key")
+        .arg("doctor")
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let error = String::from_utf8(output).expect("stderr is UTF-8");
+
+    assert!(error.contains("invalid run record on line 1"));
+    assert_eq!(
+        fs::read_to_string(history).expect("history remains readable"),
+        malformed
+    );
 }

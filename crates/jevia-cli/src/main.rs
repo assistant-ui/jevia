@@ -151,7 +151,7 @@ fn init(force: bool) -> Result<()> {
 
     let ignore = paths.directory.join(".gitignore");
     if !ignore.exists() {
-        fs::write(&ignore, "runs.jsonl\n*.tmp\n")
+        fs::write(&ignore, "runs.jsonl\nruns.lock\n*.tmp\n")
             .with_context(|| format!("could not write {}", ignore.display()))?;
     }
 
@@ -312,10 +312,15 @@ fn feedback(run_id: &str, outcome: Outcome, print_json: bool) -> Result<()> {
 fn doctor() -> Result<()> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
+    let history = store::load(&paths.runs)?;
     println!("config: ok ({})", paths.config.display());
     println!("tiers: ok ({})", config.tiers.len());
     println!("harnesses: ok ({})", config.harnesses.len());
-    println!("local store: {}", paths.runs.display());
+    println!(
+        "local store: ok ({} records at {})",
+        history.len(),
+        paths.runs.display()
+    );
 
     match env::var("TYPESAFE_API_KEY") {
         Ok(value) if !value.trim().is_empty() => println!("TYPESAFE_API_KEY: set"),
