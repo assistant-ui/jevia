@@ -27,10 +27,12 @@ test("explains the prerequisite when Cargo is missing", (t) => {
   assert.doesNotMatch(result.stdout, /Jevia installed/);
 });
 
-test("installs the CLI from the official repository with locked dependencies", (t) => {
+test("installs the pinned crates.io release with locked dependencies", (t) => {
   const result = runInstaller(t, 'printf "arg: %s\\n" "$@"');
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /arg: install\narg: --locked\narg: --git\narg: https:\/\/github\.com\/assistant-ui\/jevia\narg: jevia\n/);
+  assert.match(result.stdout, /Installing Jevia 0\.1\.0 from crates\.io/);
+  assert.match(result.stdout, /arg: install\narg: --locked\narg: --version\narg: 0\.1\.0\narg: jevia\n/);
+  assert.doesNotMatch(result.stdout, /--git|github\.com/);
   assert.match(result.stdout, /Jevia installed/);
 });
 
