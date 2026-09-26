@@ -108,6 +108,21 @@ enum RunsAction {
     Show { run_id: String },
     /// Mark an execution whose Jevia supervisor exited as interrupted. Never reruns it.
     Recover { run_id: String },
+    /// Preview repair of an incomplete final JSON line or missing final newline.
+    Repair {
+        /// Back up the original bytes, then atomically apply the repair.
+        #[arg(long)]
+        apply: bool,
+    },
+    /// Preview archival of older terminal records; never archives active/pending runs.
+    Archive {
+        /// Number of most recently appended terminal records to retain.
+        #[arg(long, default_value_t = 1000)]
+        keep: usize,
+        /// Back up history, write the archive, then atomically update active history.
+        #[arg(long)]
+        apply: bool,
+    },
 }
 
 #[derive(Default, Clone, Copy)]
@@ -200,6 +215,12 @@ async fn run() -> Result<ExitCode> {
                 None => runs(limit, json)?,
                 Some(RunsAction::Show { run_id }) => show_run(&run_id)?,
                 Some(RunsAction::Recover { run_id }) => recover_run(&run_id)?,
+                Some(RunsAction::Repair { apply }) => {
+                    maintain_history(store::Maintenance::Repair, apply, json)?
+                }
+                Some(RunsAction::Archive { keep, apply }) => {
+                    maintain_history(store::Maintenance::Archive { keep }, apply, json)?
+                }
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -599,6 +620,39 @@ async fn routed_record(
     Ok(RouteRecord::new(decision, stored_task))
 }
 
+fn maintain_history(operation: store::Maintenance, apply: bool, print_json: bool) -> Result<()> {
+    let paths = ProjectPaths::discover()?;
+    if apply {
+        ensure_local_ignore(&paths.directory.join(".gitignore"))?;
+    }
+    let report = store::maintain(&paths.runs, operation, apply)?;
+    if print_json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!(
+            "{} {}: retain {} records, archive {} records, remove {} incomplete trailing bytes, add final newline: {}",
+            if report.applied { "Applied" } else { "Preview" },
+            report.operation,
+            report.retained_records,
+            report.archived_records,
+            report.truncated_tail_bytes,
+            report.added_final_newline
+        );
+        if !report.would_change {
+            println!("No changes needed.");
+        } else if !apply {
+            println!("Inspect this preview, then repeat with --apply to save a backup and apply.");
+        }
+        if let Some(path) = report.backup {
+            println!("Original backup: {}", path.display());
+        }
+        if let Some(path) = report.archive {
+            println!("Archive: {}", path.display());
+        }
+    }
+    Ok(())
+}
+
 fn runs(limit: usize, print_json: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
     let records = store::load(&paths.runs)?;
@@ -790,9 +844,11 @@ fn cache_command(action: CacheAction) -> Result<()> {
 }
 
 fn ensure_local_ignore(path: &std::path::Path) -> Result<()> {
-    const RULES: [&str; 7] = [
+    const RULES: [&str; 9] = [
         "run-leases/",
         "cache-leases/",
+        "history-backups/",
+        "history-archives/",
         "runs.jsonl",
         "runs.lock",
         "cache.jsonl",

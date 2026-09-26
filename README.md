@@ -262,6 +262,39 @@ routing metadata.
 `jevia doctor` validates the complete history and reports malformed records
 without deleting or rewriting them.
 
+### History maintenance
+
+Both maintenance commands preview by default. Inspect the report before repeating
+with `--apply`; `--json` provides counts and saved paths for automation.
+
+```sh
+jevia runs repair
+jevia runs repair --apply
+jevia runs archive --keep 1000
+jevia runs archive --keep 1000 --apply
+```
+
+Repair handles an incomplete, unterminated final JSON line after an interrupted
+write, or a valid final record missing its newline. It refuses malformed middle
+lines, complete invalid records, unsupported schemas, and duplicate IDs. It does
+not guess at missing fields or rewrite individual outcomes.
+
+Archival keeps the most recently **appended** `--keep` terminal records (minimum
+one), plus every active, routed/pending, or legacy-unknown record. Older terminal
+records move to a separate JSONL archive; original record bytes and additive
+metadata are preserved. Archived records no longer appear in `runs`, accept
+feedback, or inform routing. Choose retention to preserve the evidence you need;
+this is explicit maintenance, not automatic pruning.
+
+Before applying either operation, Jevia saves the exact original file in
+`.jevia/history-backups/`. Archival also writes `.jevia/history-archives/` before
+atomically replacing active history. The history lock covers the entire operation
+and the plan is recomputed on apply. Both directories are ignored local data;
+files use private permissions on Unix and may contain sensitive prompts. Backups
+and archives are never automatically removed, so total disk use can increase.
+If restoring manually, first stop all Jevia writers and save the current history;
+replacing it with an older backup would otherwise discard newer runs.
+
 ## Repository structure
 
 - `crates/jevia-core` contains configuration, typed API contracts, policy, and
