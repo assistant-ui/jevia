@@ -2,6 +2,7 @@ mod cache;
 mod lease;
 mod paths;
 mod processes;
+mod stats;
 mod storage;
 mod store;
 
@@ -90,6 +91,15 @@ enum Command {
         #[arg(long)]
         reason: Option<String>,
         /// Print the updated record as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Summarize recent routing outcomes without calling Jev or changing history.
+    Stats {
+        /// Latest records in append order to include (not a time window).
+        #[arg(long, default_value_t = 1000, value_parser = clap::value_parser!(u32).range(1..=100_000))]
+        limit: u32,
+        /// Print versioned aggregate JSON without task text or run identifiers.
         #[arg(long)]
         json: bool,
     },
@@ -270,6 +280,17 @@ async fn run() -> Result<ExitCode> {
         }
         Command::Doctor => {
             doctor().await?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Stats { limit, json } => {
+            let paths = ProjectPaths::discover()?;
+            let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
+            let report = stats::collect(&storage, limit as usize).await?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print!("{}", report.render());
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::Check => {

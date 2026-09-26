@@ -1,4 +1,5 @@
 use std::{
+    collections::VecDeque,
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, BufWriter, Write},
     path::Path,
@@ -27,16 +28,43 @@ pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
 }
 
 fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
+    let mut records = Vec::new();
+    read_records(path, |record| records.push(record))?;
+    Ok(records)
+}
+
+/// Validate the full JSONL stream while retaining only the requested tail.
+/// Memory scales with the window, not with the size of the retained history.
+pub fn recent(path: &Path, limit: usize, evidence_only: bool) -> Result<Vec<RouteRecord>> {
+    let parent = path
+        .parent()
+        .context("run history path does not have a parent directory")?;
+    if !parent.exists() {
+        return Ok(Vec::new());
+    }
+    let _lock = acquire_lock(path, LockMode::Shared)?;
+    let mut records = VecDeque::new();
+    read_records(path, |record| {
+        if limit != 0 && (!evidence_only || record.is_learning_evidence()) {
+            if records.len() == limit {
+                records.pop_front();
+            }
+            records.push_back(record);
+        }
+    })?;
+    Ok(records.into_iter().collect())
+}
+
+fn read_records(path: &Path, mut visit: impl FnMut(RouteRecord)) -> Result<()> {
     let file = match File::open(path) {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => {
             return Err(error)
                 .with_context(|| format!("could not open run history at {}", path.display()));
         }
     };
 
-    let mut records = Vec::new();
     for (index, line) in BufReader::new(file).lines().enumerate() {
         let line = line.with_context(|| {
             format!("could not read line {} from {}", index + 1, path.display())
@@ -59,9 +87,9 @@ fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
                 path.display()
             );
         }
-        records.push(record);
+        visit(record);
     }
-    Ok(records)
+    Ok(())
 }
 
 pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
@@ -331,6 +359,40 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn bounded_recent_matches_full_history_and_filters_before_limiting() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("runs.jsonl");
+        assert!(recent(&path, 10, false).unwrap().is_empty());
+        for index in 0..20 {
+            let mut record = sample_record();
+            record.decision.run_id = format!("run-{index}");
+            record.decision.created_at_ms = 20 - index;
+            if index % 3 == 0 {
+                record.outcome = Outcome::Success;
+                record.outcome_evidence = Some(OutcomeEvidence {
+                    source: OutcomeSource::Manual,
+                    recorded_at_ms: 1,
+                });
+            }
+            append(&path, &record).unwrap();
+        }
+        let records = load(&path).unwrap();
+        for evidence_only in [false, true] {
+            let selected: Vec<_> = records
+                .iter()
+                .filter(|r| !evidence_only || r.is_learning_evidence())
+                .cloned()
+                .collect();
+            for limit in [0, 1, 5, 20, 30, usize::MAX] {
+                assert_eq!(
+                    recent(&path, limit, evidence_only).unwrap(),
+                    selected[selected.len().saturating_sub(limit)..]
+                );
+            }
+        }
+    }
 
     #[test]
     fn lifecycle_recovers_without_claiming_a_task_failure() {

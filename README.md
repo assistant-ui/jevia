@@ -70,6 +70,7 @@ jevia runs --json
 | `jevia route <task>` | Ask Jev for a tier and record the decision. |
 | <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch a configured harness, and record its exit outcome. |
 | `jevia runs` | Inspect recent records in the configured backend. |
+| `jevia stats [--limit <records>] [--json]` | Summarize recent routing decisions, verified outcomes, manual feedback, and cache hits. |
 | `jevia feedback <id> <outcome>` | Mark a run as `success`, `failure`, or `unknown`. |
 | `jevia doctor` | Validate configuration, credentials, and configured storage. |
 | `jevia storage init` | Explicitly initialize an opt-in database schema and project. |
@@ -81,6 +82,61 @@ jevia runs --json
 | `jevia cache clear` | Remove cached decisions without touching run history. |
 
 Run `jevia <command> --help` for command-specific options.
+
+## Routing insights
+
+```sh
+jevia stats
+jevia stats --limit 500
+jevia stats --json
+```
+
+`stats` reads the configured JSONL, SQLite, or PostgreSQL history without calling
+Jev, launching a harness, changing outcomes, or reading the decision-cache file.
+It needs no Jev API key; PostgreSQL still requires its configured database
+connection. Initialize an opted-in database with `jevia storage init` first.
+This command is unreleased and is not available in v0.1.1.
+
+The default window is the **latest 1,000 records in append order**, not a date
+range or an all-time total. `--limit` accepts 1–100,000. The report says when older
+records were excluded; archived records are not included. SQL reads are bounded
+and project-scoped. JSONL still scans and validates the full file under its shared
+history lock, but retains only the requested tail in memory.
+
+Totals and per-tier groups use the **selected tier recorded at routing time**,
+including tiers since removed from configuration. Tiers are not concrete model
+identities: changing a harness's model mapping does not split historical groups.
+Each record counts once, using its current outcome and provenance:
+
+- **Verified success rate:** verifier-backed successes divided by verifier-backed
+  successes plus failures. Manual feedback, process-exit-only results, active
+  runs, unknown outcomes, and legacy outcomes without provenance are excluded.
+  A configured verifier's result is not a guarantee of task correctness.
+- **Manual feedback:** separate success/failure counts. Correcting a verified
+  outcome with manual feedback moves that record to the manual group; prior
+  feedback events and the old verifier result are not counted again.
+- **Learning evidence:** known, non-active verifier-backed or manual outcomes,
+  using the same eligibility rule as routing. This is the eligible count in the
+  stats window, not necessarily the smaller evidence window sent to Jev.
+- **Cache hits:** recorded cached decisions divided by all records in the window,
+  not current cache occupancy or a count of API calls. Bypassed/disabled-cache
+  decisions still count in the denominator. Legacy records without a decision
+  source use the existing `live` default.
+- **Other outcomes:** process-exit-only and unattributed known outcomes, plus
+  active and unknown counts. Active takes precedence over unknown, so the outcome
+  groups partition the records without double-counting.
+
+Rates with no eligible observations display `n/a`, not 0%. The JSON report uses
+`schema_version: 1`, `storage`, `window` (`limit`, `order`, `has_older_records`),
+`totals`, and a tier-keyed `tiers` map. Rates are fractions from 0 to 1, or `null`
+when their denominator is zero. `verified`, `manual`, `process_exit`, and
+`unattributed` each contain `successes` and `failures`; `active` and `unknown`
+are separate counts. Output excludes task text, run IDs, feedback notes,
+execution commands, and connection URLs; historical tier labels are included.
+
+These are descriptive, potentially small or biased samples—not a model ranking,
+a controlled benchmark, or proof that adaptive routing improves results. No
+cost savings are estimated because token/cost telemetry is not recorded.
 
 ## Harness adapters
 

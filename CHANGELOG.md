@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add `jevia stats [--limit <records>] [--json]` with totals and per-tier verified
+  success rates, separate manual feedback, learning evidence, and recorded cache
+  hits across JSONL, SQLite, and PostgreSQL. Report sample limits and undefined
+  rates explicitly; never expose task text or infer correctness from process exit.
+- Bound JSONL recent-history memory to the selected window while preserving full
+  stream validation, append ordering, evidence filtering, and shared read locks.
 - Add opt-in SQLite and PostgreSQL history backends while preserving JSONL as
   the default, with indexed evidence queries and transactional feedback/lifecycle
   updates. Decision caching stays local and respects shared evidence changes.
