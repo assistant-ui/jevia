@@ -1,0 +1,24 @@
+diff --git a/dist/runtime/internal/app.mjs b/dist/runtime/internal/app.mjs
+index f591faf2ed71ee1c7346e426c7e8a42e37db831e..1497648d145baa0b17f8a62cf08751ded14a775b 100644
+--- a/dist/runtime/internal/app.mjs
++++ b/dist/runtime/internal/app.mjs
+@@ -49,7 +49,7 @@ function createNitroApp() {
+     await nitroApp.hooks.callHook("request", event).catch((error) => {
+       captureError(error, { event, tags: ["request"] });
+     });
+-    const response = await h3App.request(req, void 0, req.context);
++    const response = await h3App["~request"](req, req.context);
+     await nitroApp.hooks.callHook("response", response, event).catch((error) => {
+       captureError(error, { event, tags: ["request", "response"] });
+     });
+@@ -98,8 +98,8 @@ function createH3App(captureError) {
+       return errorHandler(error, event);
+     }
+   });
+-  h3App._findRoute = (event) => findRoute(event.req.method, event.url.pathname);
+-  h3App._getMiddleware = (event, route) => {
++  h3App["~findRoute"] = (event) => findRoute(event.req.method, event.url.pathname);
++  h3App["~getMiddleware"] = (event, route) => {
+     const pathname = event.url.pathname;
+     const method = event.req.method;
+     const { routeRules, routeRuleMiddleware } = getRouteRules(method, pathname);

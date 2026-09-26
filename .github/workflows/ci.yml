@@ -31,12 +31,16 @@ jobs:
           cache-dependency-path: website/pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Audit website dependencies
+        run: pnpm audit
       - name: Check types
         run: pnpm type-check
       - name: Test website
         run: pnpm test
       - name: Build website
         run: pnpm build
+      - name: Test built website
+        run: pnpm test:build
 
   check:
     name: Rust checks

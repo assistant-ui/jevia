@@ -6,6 +6,8 @@
     "dev": "farm dev",
     "build": "farm build",
     "test": "node --test tests/*.test.mjs",
+    "test:build": "node --test tests/build/*.test.mjs",
+    "audit": "pnpm audit",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -23,6 +25,21 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@ai-sdk/provider-utils@>=4.0.0-beta.10 <4.0.33": "4.0.33",
+      "h3@>=2.0.1-0 <2.0.1-rc.18": "2.0.1-rc.18",
+      "sharp@<0.35.4": "0.35.4",
+      "srvx@<0.11.13": "0.11.13",
+      "uuid@<11.1.1": "11.1.1",
+      "vite@<7.3.6": "7.3.6",
+      "yaml@>=2.0.0 <2.8.3": "2.8.3"
+    },
+    "patchedDependencies": {
+      "sharp@0.35.4": "patches/sharp@0.35.4.patch",
+      "nitro@3.0.1-alpha.0": "patches/nitro@3.0.1-alpha.0.patch"
+    }
   },
   "packageManager": "pnpm@10.9.0"
 }
