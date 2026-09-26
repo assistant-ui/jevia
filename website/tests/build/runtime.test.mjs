@@ -18,9 +18,27 @@ test("prerendering emits the homepage and the unchanged installer", async () => 
   assert.match(html, /Model routing that/);
   assert.match(html, /Install the CLI/);
   assert.match(html, /Check the full path/);
+  assert.match(html, /rel="canonical" href="https:\/\/jevia\.vercel\.app\/"/);
+  assert.match(html, /property="og:url" content="https:\/\/jevia\.vercel\.app\/"/);
+  assert.match(html, /property="og:image" content="https:\/\/jevia\.vercel\.app\/og-image\.png"/);
+  assert.match(html, /name="twitter:card" content="summary_large_image"/);
   const source = await readFile(new URL("../../public/install.sh", import.meta.url));
   const built = await readFile(new URL("static/install.sh", output));
   assert.deepEqual(built, source);
+});
+
+test("the build includes crawler discovery and social image assets", async () => {
+  const robots = await readFile(new URL("static/robots.txt", output), "utf8");
+  assert.match(robots, /^User-agent: \*$/m);
+  assert.match(robots, /^Sitemap: https:\/\/jevia\.vercel\.app\/sitemap\.xml$/m);
+
+  const sitemap = await readFile(new URL("static/sitemap.xml", output), "utf8");
+  assert.match(sitemap, /<loc>https:\/\/jevia\.vercel\.app\/<\/loc>/);
+
+  for (const asset of ["favicon.ico", "favicon.png", "og-image.png"]) {
+    const contents = await readFile(new URL(`static/${asset}`, output));
+    assert.ok(contents.length > 0, `${asset} should not be empty`);
+  }
 });
 
 test("the Nitro runtime renders the homepage through patched H3", { timeout: 5000 }, async () => {
