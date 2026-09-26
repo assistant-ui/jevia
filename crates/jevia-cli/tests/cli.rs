@@ -78,6 +78,27 @@ fn help_is_available() {
 }
 
 #[test]
+fn execution_deadlines_require_explicit_non_interactive_mode() {
+    Command::cargo_bin("jevia")
+        .unwrap()
+        .args(["run", "agent", "task", "--timeout-seconds", "5"])
+        .assert()
+        .failure();
+    Command::cargo_bin("jevia")
+        .unwrap()
+        .args([
+            "run",
+            "agent",
+            "task",
+            "--non-interactive",
+            "--timeout-seconds",
+            "0",
+        ])
+        .assert()
+        .failure();
+}
+
+#[test]
 fn init_creates_a_valid_project_configuration() {
     let directory = tempdir().expect("temporary directory");
     let mut command = Command::cargo_bin("jevia").expect("binary is built");
