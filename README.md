@@ -156,6 +156,29 @@ CLI versions refuse version 2 rather than silently discard lifecycle metadata.
 The ignored `run-leases/` sidecars are retained so concurrent processes always
 coordinate on the same lock file.
 
+### Bounded non-interactive execution
+
+For a headless harness, opt into owned process-tree supervision:
+
+```sh
+jevia run agent "fix the parser" --non-interactive --timeout-seconds 300 --verification-timeout-seconds 120
+```
+
+Each deadline applies only to its execution phase, not the Jev routing request.
+Both flags require `--non-interactive` and accept 1–86400 seconds. Unspecified
+deadlines are unlimited. This mode disables stdin and uses a Unix process group
+or Windows job object; stdout/stderr still stream normally. Ctrl-C (and SIGTERM
+on Unix) stops the owned group/job and records `cancelled`; a deadline records
+`timed_out`. Outcomes remain unknown, failed/cancelled harnesses skip verification,
+and verification cancellation preserves the harness evidence. Exit codes are 130
+for cancellation and 124 for timeout. Cleanup errors record `interrupted` instead
+of claiming the process tree was stopped.
+
+Without this flag, existing interactive terminal behavior remains unchanged.
+This is not a sandbox: descendants that deliberately escape a process group/job,
+SIGKILL of Jevia, and machine crashes cannot be handled reliably. Use explicit
+recovery and inspect the workspace in those cases; no work is automatically retried.
+
 ## Routing cache
 
 Jevia caches equivalent routing decisions locally so repeated work does not

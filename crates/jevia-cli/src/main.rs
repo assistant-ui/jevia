@@ -1,6 +1,7 @@
 mod cache;
 mod lease;
 mod paths;
+mod processes;
 mod store;
 
 use std::{env, fs, io::Write, process::ExitCode, str::FromStr, time::Instant};
@@ -11,7 +12,6 @@ use jevia_core::{
     Config, ExecutionEvidence, HarnessInvocation, JevClient, Outcome, RouteRecord, RunState,
     VerificationEvidence, route_cache_key,
 };
-use tokio::process::Command as ChildCommand;
 
 use crate::paths::ProjectPaths;
 
@@ -49,6 +49,15 @@ enum Command {
     Run {
         /// Harness name from the `[harnesses]` configuration.
         harness: String,
+        /// Own the process tree and disable stdin (use a headless harness).
+        #[arg(long)]
+        non_interactive: bool,
+        /// Stop the harness after this many seconds; does not limit routing.
+        #[arg(long, requires = "non_interactive", value_parser = clap::value_parser!(u64).range(1..=86400))]
+        timeout_seconds: Option<u64>,
+        /// Independent deadline for post-run verification.
+        #[arg(long, requires = "non_interactive", value_parser = clap::value_parser!(u64).range(1..=86400))]
+        verification_timeout_seconds: Option<u64>,
         /// Task passed to the harness argument template.
         task: String,
         /// Bypass the local routing-decision cache.
@@ -96,6 +105,13 @@ enum RunsAction {
     Show { run_id: String },
     /// Mark an execution whose Jevia supervisor exited as interrupted. Never reruns it.
     Recover { run_id: String },
+}
+
+#[derive(Default, Clone, Copy)]
+struct RunOptions {
+    non_interactive: bool,
+    timeout_seconds: Option<u64>,
+    verification_timeout_seconds: Option<u64>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -152,10 +168,26 @@ async fn run() -> Result<ExitCode> {
         }
         Command::Run {
             harness,
+            non_interactive,
+            timeout_seconds,
+            verification_timeout_seconds,
             task,
             args,
             no_cache,
-        } => run_harness(&harness, &task, &args, no_cache).await,
+        } => {
+            run_harness(
+                &harness,
+                &task,
+                &args,
+                no_cache,
+                RunOptions {
+                    non_interactive,
+                    timeout_seconds,
+                    verification_timeout_seconds,
+                },
+            )
+            .await
+        }
         Command::Runs {
             action,
             limit,
@@ -232,6 +264,7 @@ async fn run_harness(
     task: &str,
     extra_args: &[String],
     no_cache: bool,
+    options: RunOptions,
 ) -> Result<ExitCode> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
@@ -261,17 +294,36 @@ async fn run_harness(
     )?;
     store::append(&paths.runs, &record)?;
 
-    execute_harness(&paths, harness_name, &invocation, &record).await
+    execute_harness_with_options(&paths, harness_name, &invocation, &record, options).await
 }
 
+#[cfg(test)]
 async fn execute_harness(
     paths: &ProjectPaths,
     harness_name: &str,
     invocation: &HarnessInvocation,
     record: &RouteRecord,
 ) -> Result<ExitCode> {
+    execute_harness_with_options(
+        paths,
+        harness_name,
+        invocation,
+        record,
+        RunOptions::default(),
+    )
+    .await
+}
+
+async fn execute_harness_with_options(
+    paths: &ProjectPaths,
+    harness_name: &str,
+    invocation: &HarnessInvocation,
+    record: &RouteRecord,
+    options: RunOptions,
+) -> Result<ExitCode> {
     let _lease = lease::try_acquire(&paths.directory.join("run-leases"), &record.decision.run_id)?
         .context("run already has an active Jevia supervisor")?;
+    let mut runner = processes::Runner::new(options.non_interactive)?;
     eprintln!(
         "jevia: run={} tier={} suggested={} confidence={:.2} fallback={}",
         record.decision.run_id,
@@ -297,13 +349,21 @@ async fn execute_harness(
         Some(execution.clone()),
     )?;
     let started = Instant::now();
-    let status = ChildCommand::new(&invocation.program)
-        .args(&invocation.args)
-        .current_dir(&paths.root)
-        .status()
+    let status = runner
+        .run(
+            &invocation.program,
+            &invocation.args,
+            &paths.root,
+            options.timeout_seconds.map(std::time::Duration::from_secs),
+        )
         .await;
     let status = match status {
-        Ok(status) => status,
+        Ok(processes::ProcessResult::Exited(status)) => status,
+        Ok(processes::ProcessResult::Stopped { state, .. }) => {
+            execution.duration_ms =
+                u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            return record_stopped(paths, record, execution, state);
+        }
         Err(error) => {
             execution.duration_ms =
                 u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -352,13 +412,28 @@ async fn execute_harness(
         Some(execution.clone()),
     )?;
     let verification_started = Instant::now();
-    let verification_status = ChildCommand::new(&verification.program)
-        .args(&verification.args)
-        .current_dir(&paths.root)
-        .status()
+    let verification_status = runner
+        .run(
+            &verification.program,
+            &verification.args,
+            &paths.root,
+            options
+                .verification_timeout_seconds
+                .map(std::time::Duration::from_secs),
+        )
         .await;
     let verification_status = match verification_status {
-        Ok(status) => status,
+        Ok(processes::ProcessResult::Exited(status)) => status,
+        Ok(processes::ProcessResult::Stopped { state, launched }) => {
+            execution.verification = Some(VerificationEvidence {
+                command: verification.program.clone(),
+                launched,
+                duration_ms: u64::try_from(verification_started.elapsed().as_millis())
+                    .unwrap_or(u64::MAX),
+                exit_code: None,
+            });
+            return record_stopped(paths, record, execution, state);
+        }
         Err(error) => {
             let verification_duration_ms =
                 u64::try_from(verification_started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -399,6 +474,27 @@ async fn execute_harness(
     );
 
     Ok(child_exit_code(&verification_status))
+}
+
+fn record_stopped(
+    paths: &ProjectPaths,
+    record: &RouteRecord,
+    execution: ExecutionEvidence,
+    state: RunState,
+) -> Result<ExitCode> {
+    store::record_state(
+        &paths.runs,
+        &record.decision.run_id,
+        state,
+        Outcome::Unknown,
+        Some(execution),
+    )?;
+    eprintln!("jevia: state={state:?} outcome=unknown; work was not rerun");
+    Ok(ExitCode::from(match state {
+        RunState::Cancelled => 130,
+        RunState::TimedOut => 124,
+        _ => 1,
+    }))
 }
 
 fn child_exit_code(status: &std::process::ExitStatus) -> ExitCode {
@@ -922,6 +1018,91 @@ mod tests {
                 args: verification_args,
             }),
         }
+    }
+
+    fn long_process() -> (String, Vec<String>) {
+        #[cfg(unix)]
+        {
+            ("sleep".into(), vec!["20".into()])
+        }
+        #[cfg(windows)]
+        {
+            (
+                "cmd".into(),
+                vec!["/C".into(), "ping -n 20 127.0.0.1 >NUL".into()],
+            )
+        }
+    }
+
+    #[tokio::test]
+    async fn harness_timeout_records_unknown_and_skips_verification() {
+        let dir = tempdir().unwrap();
+        let paths = ProjectPaths::at(dir.path().to_path_buf());
+        let record = sample_record();
+        store::append(&paths.runs, &record).unwrap();
+        let (program, args) = long_process();
+        let invocation = HarnessInvocation {
+            program,
+            args,
+            model: "test".into(),
+            verification: Some(VerificationInvocation {
+                program: "must-not-run".into(),
+                args: vec![],
+            }),
+        };
+        let code = execute_harness_with_options(
+            &paths,
+            "test",
+            &invocation,
+            &record,
+            RunOptions {
+                non_interactive: true,
+                timeout_seconds: Some(1),
+                verification_timeout_seconds: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(code, ExitCode::from(124));
+        let stored = store::load(&paths.runs).unwrap().remove(0);
+        assert_eq!(stored.outcome, Outcome::Unknown);
+        assert_eq!(stored.lifecycle.unwrap().state, RunState::TimedOut);
+        assert!(stored.execution.unwrap().verification.is_none());
+    }
+
+    #[tokio::test]
+    async fn verifier_timeout_preserves_successful_harness_evidence() {
+        let dir = tempdir().unwrap();
+        let paths = ProjectPaths::at(dir.path().to_path_buf());
+        let record = sample_record();
+        store::append(&paths.runs, &record).unwrap();
+        let (program, args) = long_process();
+        let invocation = HarnessInvocation {
+            program: "rustc".into(),
+            args: vec!["--version".into()],
+            model: "test".into(),
+            verification: Some(VerificationInvocation { program, args }),
+        };
+        let code = execute_harness_with_options(
+            &paths,
+            "test",
+            &invocation,
+            &record,
+            RunOptions {
+                non_interactive: true,
+                timeout_seconds: None,
+                verification_timeout_seconds: Some(1),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(code, ExitCode::from(124));
+        let stored = store::load(&paths.runs).unwrap().remove(0);
+        assert_eq!(stored.outcome, Outcome::Unknown);
+        assert_eq!(stored.lifecycle.unwrap().state, RunState::TimedOut);
+        let execution = stored.execution.unwrap();
+        assert_eq!(execution.exit_code, Some(0));
+        assert!(execution.verification.unwrap().launched);
     }
 
     fn sample_record() -> RouteRecord {

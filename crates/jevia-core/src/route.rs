@@ -21,6 +21,8 @@ pub enum RunState {
     Completed,
     LaunchFailed,
     Interrupted,
+    Cancelled,
+    TimedOut,
 }
 
 impl RunState {
