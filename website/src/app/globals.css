@@ -712,11 +712,19 @@ pre {
     width: min(320px, calc(100vw - 86px));
   }
 
-  .command-block:not([data-markdown]) .copy-button span {
+  .command-line code {
+    min-width: 0;
+  }
+
+  .command-prompt {
+    user-select: none;
+  }
+
+  .command-block .copy-button[data-format="command"] span {
     display: none;
   }
 
-  .command-block:not([data-markdown]) .copy-button {
+  .command-block .copy-button[data-format="command"] {
     width: 29px;
     min-width: 0;
     justify-content: center;
@@ -724,12 +732,13 @@ pre {
   }
 
   .command-block[data-markdown] .command-line {
-    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.4rem;
   }
 
-  .command-block[data-markdown] .command-actions {
-    grid-column: 1 / -1;
-    justify-self: end;
+  .command-block .copy-button[data-format="markdown"] {
+    min-width: 78px;
+    gap: 0.25rem;
+    padding-inline: 0.375rem;
   }
 }
 
