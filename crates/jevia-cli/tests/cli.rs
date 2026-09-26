@@ -68,3 +68,18 @@ fn run_reports_when_a_harness_is_not_configured() {
     assert!(error.contains("harness `missing` is not configured"));
     assert!(error.contains("available harnesses: none"));
 }
+
+#[test]
+fn checked_in_harness_example_remains_valid() {
+    let example =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/jevia.toml");
+    let input = fs::read_to_string(example).expect("example config is readable");
+    let config = jevia_core::Config::from_toml(&input).expect("example config is valid");
+
+    let harness = config
+        .harnesses
+        .get("agent")
+        .expect("example defines the agent harness");
+    assert_eq!(harness.command, "my-agent");
+    assert_eq!(harness.models.len(), config.tiers.len());
+}

@@ -75,6 +75,9 @@ balanced = "provider/standard"
 strong = "provider/frontier"
 ~~~
 
+A complete ready-to-copy configuration is available at
+[examples/jevia.toml](examples/jevia.toml).
+
 Then route and run a task through that adapter:
 
 ~~~bash
