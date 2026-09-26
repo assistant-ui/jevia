@@ -29,6 +29,17 @@ Owns command parsing, project discovery, credential lookup, and the local
 JSONL store. Task text is local and ignored by Git unless a user explicitly
 moves or publishes it.
 
+`jevia doctor` validates local state without a network request. `jevia check`
+adds one live Jev round trip to verify credentials, connectivity, and response
+decoding, but deliberately does not persist that synthetic check as routing
+history or cache data.
+
+### `website`
+
+Owns the public Farm.js product site and copyable onboarding flow. It is a
+static product surface with no access to routing history, API credentials, or
+managed-service data. The private dashboard remains a separate repository.
+
 ### Harness adapters
 
 Adapters translate a selected capability tier into a harness-specific model

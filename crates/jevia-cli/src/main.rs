@@ -78,6 +78,8 @@ enum Command {
     },
     /// Validate the local installation without making an API request.
     Doctor,
+    /// Validate the local installation and make a live routing request.
+    Check,
     /// Inspect or clear the local routing-decision cache.
     Cache {
         #[command(subcommand)]
@@ -157,6 +159,10 @@ async fn run() -> Result<ExitCode> {
         }
         Command::Doctor => {
             doctor()?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Check => {
+            check().await?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Cache { action } => {
@@ -458,6 +464,33 @@ fn feedback(run_id: &str, outcome: Outcome, print_json: bool) -> Result<()> {
 }
 
 fn doctor() -> Result<()> {
+    let _config = local_diagnostics()?;
+    required_api_key("doctor")?;
+    Ok(())
+}
+
+async fn check() -> Result<()> {
+    let config = local_diagnostics()?;
+    let api_key = required_api_key("check")?;
+    let client = JevClient::new(api_key, &config.jev)?;
+    let decision = client
+        .route(
+            "Verify that Jevia can reach Jev and decode a routing decision.",
+            &config,
+            &[],
+        )
+        .await
+        .context("live routing check failed")?;
+
+    println!(
+        "jev api: ok (model={}, tier={}, confidence={:.2})",
+        decision.jev_model, decision.tier, decision.confidence
+    );
+    println!("jevia: ready");
+    Ok(())
+}
+
+fn local_diagnostics() -> Result<Config> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
     let history = store::load(&paths.runs)?;
@@ -479,14 +512,20 @@ fn doctor() -> Result<()> {
         paths.cache.display()
     );
 
+    Ok(config)
+}
+
+fn required_api_key(command: &str) -> Result<String> {
     match env::var("TYPESAFE_API_KEY") {
-        Ok(value) if !value.trim().is_empty() => println!("TYPESAFE_API_KEY: set"),
+        Ok(value) if !value.trim().is_empty() => {
+            println!("TYPESAFE_API_KEY: set");
+            Ok(value)
+        }
         _ => {
             println!("TYPESAFE_API_KEY: missing");
-            bail!("doctor found a missing required credential")
+            bail!("{command} found a missing required credential")
         }
     }
-    Ok(())
 }
 
 fn cache_command(action: CacheAction) -> Result<()> {

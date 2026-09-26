@@ -5,3 +5,11 @@
 .env
 .env.*
 !.env.example
+
+# Website
+website/node_modules/
+website/.farm/
+website/.output/
+website/.vercel/
+website/dist/
+website/*.tsbuildinfo

@@ -11,6 +11,8 @@ Describe the user-visible result of this change.
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - [ ] `cargo test --workspace --all-features`
+- [ ] `pnpm --dir website type-check` (when the website changes)
+- [ ] `pnpm --dir website build` (when the website changes)
 
 ## Risk and compatibility
 
