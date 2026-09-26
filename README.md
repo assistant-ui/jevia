@@ -24,12 +24,24 @@ The application owns the policy. Jev supplies a structured decision signal.
 
 ## Quick start
 
+Requires Rust 1.92 or newer and Cargo.
+
 ```bash
-cargo install --git https://github.com/assistant-ui/jevia jevia
+cargo install jevia --version 0.1.0 --locked
+jevia --version
 jevia init
 export TYPESAFE_API_KEY="your-key"
 jevia check
 jevia route "investigate an intermittent distributed-lock failure"
+```
+
+`jevia check` makes one live Jev request and requires a valid API key. Use
+`jevia doctor` for local checks without an API request.
+
+To try unreleased development changes instead:
+
+```bash
+cargo install --git https://github.com/assistant-ui/jevia --locked jevia
 ```
 
 Record the real result after the task completes:
