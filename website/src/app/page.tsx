@@ -75,7 +75,9 @@ export default function HomePage() {
 
       <section id="top" className="hero page-frame" aria-labelledby="hero-title">
         <div className="hero-copy">
-          <h1 id="hero-title">Model routing that learns.</h1>
+          <h1 id="hero-title">
+            Model routing that <span className="hero-highlight">learns.</span>
+          </h1>
           <p className="hero-description">
             Jevia routes your task to a model tier and uses verified outcomes to improve
             future decisions.

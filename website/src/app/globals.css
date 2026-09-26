@@ -212,6 +212,15 @@ pre {
   line-height: 1.25;
 }
 
+.hero-highlight {
+  padding: 0.06em 0.025em;
+  background: var(--foreground);
+  color: var(--background);
+  white-space: nowrap;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .hero-description {
   max-width: 510px;
   margin: 0.75rem 0 0;
@@ -584,6 +593,20 @@ pre {
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.shell-command {
+  color: var(--foreground);
+}
+
+.shell-string,
+.shell-variable {
+  color: #d4d4d4;
+}
+
+.shell-option,
+.shell-operator {
+  color: #919191;
 }
 
 .copy-button {

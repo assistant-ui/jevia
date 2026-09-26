@@ -3,6 +3,8 @@
 import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { tokenizeShellCommand } from "../lib/shell-tokens";
+
 interface CommandBlockProps {
   command: string;
   label: string;
@@ -50,7 +52,15 @@ export function CommandBlock({
         <span className="command-prompt" aria-hidden="true">
           $
         </span>
-        <code>{command}</code>
+        <code>
+          {disabled
+            ? command
+            : tokenizeShellCommand(command).map((token) => (
+                <span key={token.start} className={`shell-${token.kind}`}>
+                  {token.text}
+                </span>
+              ))}
+        </code>
         <button
           className="copy-button"
           type="button"
