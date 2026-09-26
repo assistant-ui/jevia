@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "farm dev",
     "build": "farm build",
+    "test": "node --test tests/*.test.mjs",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

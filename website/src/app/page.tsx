@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 
 import { CommandBlock } from "../components/command-block";
+import { InstallCommand } from "../components/install-command";
 import { ScrollTimescale } from "../components/scroll-timescale";
 import {
   TimescaleContent,
@@ -19,8 +20,8 @@ const SETUP_STEPS = [
     number: "01",
     label: "Install",
     title: "Install the CLI",
-    description: "Build the Jevia binary from the public Rust workspace.",
-    command: "cargo install --git https://github.com/assistant-ui/jevia jevia",
+    description: "Install Jevia with the setup script. Requires Rust 1.92+.",
+    command: null,
   },
   {
     number: "02",
@@ -80,11 +81,7 @@ export default function HomePage() {
             future decisions.
           </p>
           <div className="hero-command">
-            <CommandBlock
-              label="Install Jevia"
-              command="cargo install --git https://github.com/assistant-ui/jevia jevia"
-              minimal
-            />
+            <InstallCommand />
           </div>
         </div>
         <span className="frame-junctions" aria-hidden="true" />
@@ -106,7 +103,11 @@ export default function HomePage() {
                   <TimescaleContent>
                     <h3>{step.title}</h3>
                     <p>{step.description}</p>
-                    <CommandBlock command={step.command} label={step.label} compact minimal />
+                    {step.command === null ? (
+                      <InstallCommand compact />
+                    ) : (
+                      <CommandBlock command={step.command} label={step.label} compact minimal />
+                    )}
                   </TimescaleContent>
                 </TimescaleItem>
               ))}

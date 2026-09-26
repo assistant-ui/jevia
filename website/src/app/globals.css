@@ -76,14 +76,27 @@ pre {
 }
 
 .site-shell {
+  position: relative;
   min-height: 100vh;
+}
+
+.site-shell::before {
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  box-sizing: border-box;
+  width: var(--frame-width);
+  border-inline: 1px dashed var(--border);
+  content: "";
+  pointer-events: none;
+  transform: translateX(-50%);
 }
 
 .page-frame {
   position: relative;
   width: var(--frame-width);
   margin-inline: auto;
-  border-inline: 1px dashed var(--border);
+  border-inline: 1px solid transparent;
 }
 
 .site-header {
@@ -210,10 +223,6 @@ pre {
 .hero-command {
   width: min(640px, 100%);
   margin-top: 1.5rem;
-}
-
-.quickstart {
-  border-bottom: 1px dashed var(--border);
 }
 
 .quickstart-panel {
@@ -596,10 +605,15 @@ pre {
     background-color 140ms ease;
 }
 
-.copy-button:hover {
+.copy-button:hover:not(:disabled) {
   border-color: var(--border-strong);
   background: #202023;
   color: var(--foreground);
+}
+
+.copy-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .command-block[data-compact] .command-meta {

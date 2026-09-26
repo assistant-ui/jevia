@@ -8,6 +8,7 @@ interface CommandBlockProps {
   label: string;
   compact?: boolean;
   minimal?: boolean;
+  disabled?: boolean;
 }
 
 export function CommandBlock({
@@ -15,6 +16,7 @@ export function CommandBlock({
   label,
   compact = false,
   minimal = false,
+  disabled = false,
 }: CommandBlockProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
@@ -52,6 +54,7 @@ export function CommandBlock({
         <button
           className="copy-button"
           type="button"
+          disabled={disabled}
           onClick={copyCommand}
           aria-label={`${status}: ${label}`}
           title={`${status} command`}
