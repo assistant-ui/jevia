@@ -231,6 +231,18 @@ to a live request. API errors are never cached, expired decisions are never
 used as an offline fallback, and <code>jevia cache clear</code> provides an
 explicit recovery path for a damaged cache.
 
+Concurrent equivalent cache misses normally share one live routing request.
+Waiters recheck both the cache and current learning evidence before using a
+decision; they still receive independent run IDs. Coordination uses up to 256
+stable lock stripes in the ignored `cache-leases/` directory, so lock files do
+not grow per task. Unrelated requests can occasionally share a stripe and wait.
+No global history/cache lock is held during network calls. An OS lease is
+released if its owner exits; failures are not cached, so another caller can try.
+
+Waiting is bounded to the configured Jev timeout plus one second (at most 30
+seconds). On expiry or a coordination error, routing proceeds live; duplicate
+requests are possible in that fallback. `--no-cache` skips coordination too.
+
 ## Local data
 
 Project configuration lives in `.jevia/config.toml` and is intended to be

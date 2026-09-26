@@ -515,28 +515,69 @@ async fn routed_record(
     config: &Config,
     paths: &ProjectPaths,
 ) -> Result<RouteRecord> {
-    let history = store::load(&paths.runs)?;
-    let cache_key = if config.cache.enabled && !no_cache {
-        match route_cache_key(task, harness_name, config, &history) {
-            Ok(key) => match cache::lookup(&paths.cache, &key) {
-                Ok(Some(decision)) => {
-                    eprintln!("jevia: routing cache hit");
-                    let stored_task = config.privacy.store_task_text.then(|| task.to_owned());
-                    return Ok(RouteRecord::new(decision.for_cache_hit(), stored_task));
-                }
-                Ok(None) => Some(key),
-                Err(error) => {
-                    eprintln!("jevia: routing cache unavailable: {error:#}");
-                    None
-                }
-            },
+    let wait_started = Instant::now();
+    let wait_budget =
+        std::time::Duration::from_millis(config.jev.timeout_ms.saturating_add(1_000).min(30_000));
+    // The lease remains held through the HTTP request and cache insertion, never
+    // while holding a global history/cache lock. Reload evidence after each wait.
+    let (history, cache_key, _request_lease) = loop {
+        let history = store::load(&paths.runs)?;
+        if !config.cache.enabled || no_cache {
+            break (history, None, None);
+        }
+        let key = match route_cache_key(task, harness_name, config, &history) {
+            Ok(key) => key,
             Err(error) => {
                 eprintln!("jevia: routing cache key unavailable: {error:#}");
-                None
+                break (history, None, None);
+            }
+        };
+        match cache::lookup(&paths.cache, &key) {
+            Ok(Some(decision)) => {
+                eprintln!("jevia: routing cache hit");
+                let stored_task = config.privacy.store_task_text.then(|| task.to_owned());
+                return Ok(RouteRecord::new(decision.for_cache_hit(), stored_task));
+            }
+            Ok(None) => {}
+            Err(error) => {
+                eprintln!("jevia: routing cache unavailable: {error:#}");
+                break (history, None, None);
             }
         }
-    } else {
-        None
+        if wait_started.elapsed() >= wait_budget {
+            eprintln!("jevia: cache coordination wait expired; routing live");
+            break (history, Some(key), None);
+        }
+        // The first byte of the SHA-256 key selects one of 256 fixed stripes.
+        // Sidecars stay stable without growing once per distinct task forever.
+        match lease::try_acquire(&paths.directory.join("cache-leases"), &key[..2]) {
+            Ok(Some(guard)) => {
+                let latest = store::load(&paths.runs)?;
+                let latest_key = route_cache_key(task, harness_name, config, &latest)?;
+                if latest_key != key {
+                    continue;
+                }
+                // Another process may have populated the cache between our
+                // first lookup and acquisition of the request lease.
+                match cache::lookup(&paths.cache, &key) {
+                    Ok(Some(decision)) => {
+                        eprintln!("jevia: routing cache hit");
+                        let stored_task = config.privacy.store_task_text.then(|| task.to_owned());
+                        return Ok(RouteRecord::new(decision.for_cache_hit(), stored_task));
+                    }
+                    Ok(None) => break (latest, Some(key), Some(guard)),
+                    Err(error) => {
+                        eprintln!("jevia: routing cache unavailable: {error:#}");
+                        break (latest, None, None);
+                    }
+                }
+            }
+            Ok(None) => tokio::time::sleep(std::time::Duration::from_millis(25)).await,
+            Err(error) => {
+                eprintln!("jevia: cache coordination unavailable: {error:#}");
+                break (history, Some(key), None);
+            }
+        }
     };
 
     let api_key = env::var("TYPESAFE_API_KEY")
@@ -749,8 +790,9 @@ fn cache_command(action: CacheAction) -> Result<()> {
 }
 
 fn ensure_local_ignore(path: &std::path::Path) -> Result<()> {
-    const RULES: [&str; 6] = [
+    const RULES: [&str; 7] = [
         "run-leases/",
+        "cache-leases/",
         "runs.jsonl",
         "runs.lock",
         "cache.jsonl",
