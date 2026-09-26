@@ -9,7 +9,42 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Current version of a persisted run record.
-pub const RECORD_SCHEMA_VERSION: u32 = 1;
+pub const RECORD_SCHEMA_VERSION: u32 = 2;
+
+/// Execution progress is separate from whether the task succeeded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunState {
+    Routed,
+    Running,
+    Verifying,
+    Completed,
+    LaunchFailed,
+    Interrupted,
+}
+
+impl RunState {
+    pub fn is_active(self) -> bool {
+        matches!(self, Self::Running | Self::Verifying)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunLifecycle {
+    pub state: RunState,
+    pub started_at_ms: Option<u64>,
+    pub finished_at_ms: Option<u64>,
+}
+
+impl Default for RunLifecycle {
+    fn default() -> Self {
+        Self {
+            state: RunState::Routed,
+            started_at_ms: None,
+            finished_at_ms: None,
+        }
+    }
+}
 
 /// Result observed after a routed task runs.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,6 +160,9 @@ pub struct RouteRecord {
     /// Present when Jevia launched and observed a configured harness.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<ExecutionEvidence>,
+    /// Absent in legacy schema-version-1 records; never infer execution from it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle: Option<RunLifecycle>,
 }
 
 impl RouteRecord {
@@ -135,6 +173,7 @@ impl RouteRecord {
             task,
             outcome: Outcome::Unknown,
             execution: None,
+            lifecycle: Some(RunLifecycle::default()),
         }
     }
 }

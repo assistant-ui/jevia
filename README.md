@@ -133,6 +133,29 @@ process exit code, and verification evidence. This data appears in
 routing requests, so model changes do not erase which implementation actually
 produced a verified result.
 
+## Run lifecycle
+
+Execution progress is separate from task outcome. New records track `routed`,
+`running`, `verifying`, `completed`, `launch_failed`, or `interrupted`, with start
+and finish timestamps. A completed process may still have a failed task outcome.
+
+```sh
+jevia runs show <run-id>
+jevia runs recover <run-id>
+```
+
+`show` prints the complete record as JSON. `recover` explicitly marks a formerly
+running/verifying execution as interrupted only if no Jevia supervisor holds its
+per-run lease. It leaves the task outcome unknown and never reruns or terminates
+processes. After a supervisor crash, inspect any surviving child processes and
+workspace changes before starting new work. Legacy unknown outcomes are not
+assumed to represent interrupted executions. Feedback on active runs is refused.
+
+New and updated records use schema version 2; version 1 remains readable. Older
+CLI versions refuse version 2 rather than silently discard lifecycle metadata.
+The ignored `run-leases/` sidecars are retained so concurrent processes always
+coordinate on the same lock file.
+
 ## Routing cache
 
 Jevia caches equivalent routing decisions locally so repeated work does not

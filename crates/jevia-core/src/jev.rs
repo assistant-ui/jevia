@@ -421,6 +421,7 @@ mod tests {
             task: Some(task.to_owned()),
             outcome,
             execution: None,
+            lifecycle: None,
         }
     }
 }

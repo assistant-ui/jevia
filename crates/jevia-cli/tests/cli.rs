@@ -9,6 +9,69 @@ use assert_cmd::Command;
 use tempfile::tempdir;
 
 #[test]
+fn runs_show_and_recover_preserve_the_task_and_record_interruption() {
+    let directory = tempdir().unwrap();
+    let state = directory.path().join(".jevia");
+    Command::cargo_bin("jevia")
+        .unwrap()
+        .current_dir(directory.path())
+        .arg("init")
+        .assert()
+        .success();
+    let record = serde_json::json!({
+        "schema_version": 2, "run_id": "interrupted-test", "tier": "fast", "suggested_tier": "fast",
+        "confidence": 0.9, "probabilities": {}, "fallback_applied": false, "jev_model": "test",
+        "created_at_ms": 1, "task": "do not rerun me", "outcome": "unknown",
+        "lifecycle": {"state": "running", "started_at_ms": 1, "finished_at_ms": null}
+    });
+    fs::write(state.join("runs.jsonl"), format!("{record}\n")).unwrap();
+    let output = Command::cargo_bin("jevia")
+        .unwrap()
+        .current_dir(directory.path())
+        .args(["runs", "show", "interrupted-test", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let shown: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(shown["lifecycle"]["state"], "running");
+    use sha2::{Digest, Sha256};
+    let leases = state.join("run-leases");
+    fs::create_dir_all(&leases).unwrap();
+    let name = Sha256::digest(b"interrupted-test")
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let lock = fs::File::create(leases.join(format!("{name}.lock"))).unwrap();
+    lock.lock().unwrap();
+    Command::cargo_bin("jevia")
+        .unwrap()
+        .current_dir(directory.path())
+        .args(["runs", "recover", "interrupted-test"])
+        .assert()
+        .failure();
+    drop(lock);
+    Command::cargo_bin("jevia")
+        .unwrap()
+        .current_dir(directory.path())
+        .args(["runs", "recover", "interrupted-test"])
+        .assert()
+        .success();
+    let recovered: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(state.join("runs.jsonl")).unwrap()).unwrap();
+    assert_eq!(recovered["lifecycle"]["state"], "interrupted");
+    assert_eq!(recovered["outcome"], "unknown");
+    assert_eq!(recovered["task"], "do not rerun me");
+    Command::cargo_bin("jevia")
+        .unwrap()
+        .current_dir(directory.path())
+        .args(["runs", "recover", "interrupted-test"])
+        .assert()
+        .failure();
+}
+
+#[test]
 fn help_is_available() {
     let mut command = Command::cargo_bin("jevia").expect("binary is built");
     command.arg("--help").assert().success();
