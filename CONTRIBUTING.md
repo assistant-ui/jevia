@@ -33,6 +33,8 @@ Keep commits focused and do not mix unrelated formatting or generated changes
 into a feature commit. Pull requests should explain the user-visible outcome,
 the verification performed, and any security or compatibility implications.
 
+See [RELEASING.md](RELEASING.md) for the crates.io release checklist.
+
 ## Design principles
 
 - Keep routing policy deterministic and inspectable.

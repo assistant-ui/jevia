@@ -54,6 +54,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Run tests
         run: cargo test --workspace --all-features
+      - name: Verify publishable packages
+        run: cargo publish --workspace --dry-run --locked --registry crates-io
 
   portability:
     name: Portability (${{ matrix.os }})
