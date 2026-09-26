@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
+import { getInstallGuide } from "../lib/install-guide";
 import { CommandBlock } from "./command-block";
 
 // The origin cannot change without a new page load, so no listener is needed.
@@ -20,6 +21,7 @@ export function InstallCommand({ compact = false }: { compact?: boolean }) {
         compact={compact}
         minimal
         disabled={!origin}
+        markdown={compact ? undefined : origin ? getInstallGuide(origin) : ""}
       />
       <noscript>
         <a href="/install.sh">Download the install script</a>

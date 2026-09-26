@@ -1,9 +1,7 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
-import { useEffect, useState } from "react";
-
 import { tokenizeShellCommand } from "../lib/shell-tokens";
+import { CopyButton } from "./copy-button";
 
 interface CommandBlockProps {
   command: string;
@@ -11,6 +9,7 @@ interface CommandBlockProps {
   compact?: boolean;
   minimal?: boolean;
   disabled?: boolean;
+  markdown?: string;
 }
 
 export function CommandBlock({
@@ -19,29 +18,16 @@ export function CommandBlock({
   compact = false,
   minimal = false,
   disabled = false,
+  markdown,
 }: CommandBlockProps) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
-
-  useEffect(() => {
-    if (copyState === "idle") return;
-    const timeout = window.setTimeout(() => setCopyState("idle"), 1800);
-    return () => window.clearTimeout(timeout);
-  }, [copyState]);
-
-  async function copyCommand() {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopyState("copied");
-    } catch {
-      setCopyState("error");
-    }
-  }
-
-  const status =
-    copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy";
+  const hasMarkdown = markdown !== undefined;
 
   return (
-    <div className="command-block" data-compact={compact || undefined}>
+    <div
+      className="command-block"
+      data-compact={compact || undefined}
+      data-markdown={hasMarkdown || undefined}
+    >
       {!minimal && (
         <div className="command-meta">
           <span>{label}</span>
@@ -61,29 +47,18 @@ export function CommandBlock({
                 </span>
               ))}
         </code>
-        <button
-          className="copy-button"
-          type="button"
-          disabled={disabled}
-          onClick={copyCommand}
-          aria-label={`${status}: ${label}`}
-          title={`${status} command`}
-        >
-          {copyState === "copied" ? (
-            <Check size={14} strokeWidth={1.8} aria-hidden="true" />
-          ) : (
-            <Copy size={14} strokeWidth={1.8} aria-hidden="true" />
+        <div className="command-actions">
+          <CopyButton value={command} label={label} disabled={disabled} />
+          {hasMarkdown && (
+            <CopyButton
+              value={markdown ?? ""}
+              label="Jevia setup instructions"
+              format="markdown"
+              disabled={disabled || !markdown}
+            />
           )}
-          <span>{status}</span>
-        </button>
+        </div>
       </div>
-      <span className="sr-only" aria-live="polite">
-        {copyState === "copied"
-          ? `${label} command copied`
-          : copyState === "error"
-            ? `Could not copy ${label} command`
-            : ""}
-      </span>
     </div>
   );
 }
