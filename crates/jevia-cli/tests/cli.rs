@@ -44,3 +44,42 @@ fn init_does_not_overwrite_configuration_without_force() {
         .assert()
         .failure();
 }
+
+#[test]
+fn run_reports_when_a_harness_is_not_configured() {
+    let directory = tempdir().expect("temporary directory");
+    let mut init = Command::cargo_bin("jevia").expect("binary is built");
+    init.current_dir(directory.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    let mut run = Command::cargo_bin("jevia").expect("binary is built");
+    let output = run
+        .current_dir(directory.path())
+        .args(["run", "missing", "test task"])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let error = String::from_utf8(output).expect("stderr is UTF-8");
+
+    assert!(error.contains("harness `missing` is not configured"));
+    assert!(error.contains("available harnesses: none"));
+}
+
+#[test]
+fn checked_in_harness_example_remains_valid() {
+    let example =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/jevia.toml");
+    let input = fs::read_to_string(example).expect("example config is readable");
+    let config = jevia_core::Config::from_toml(&input).expect("example config is valid");
+
+    let harness = config
+        .harnesses
+        .get("agent")
+        .expect("example defines the agent harness");
+    assert_eq!(harness.command, "my-agent");
+    assert_eq!(harness.models.len(), config.tiers.len());
+}

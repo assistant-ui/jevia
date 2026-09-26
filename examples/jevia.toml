@@ -1,0 +1,32 @@
+version = 1
+
+[router]
+confidence_floor = 0.65
+fallback_tier = "strong"
+history_limit = 20
+
+[jev]
+base_url = "https://api.typesafe.ai"
+model = "jev-latest"
+timeout_ms = 10000
+
+[privacy]
+store_task_text = true
+
+[tiers.fast]
+description = "Routine, mechanical, or narrowly scoped work with low ambiguity"
+
+[tiers.balanced]
+description = "Ordinary engineering work requiring moderate reasoning or repository context"
+
+[tiers.strong]
+description = "Ambiguous, high-risk, architectural, or deeply multi-step work"
+
+[harnesses.agent]
+command = "my-agent"
+args = ["run", "--model", "{model}", "{task}"]
+
+[harnesses.agent.models]
+fast = "provider/small"
+balanced = "provider/standard"
+strong = "provider/frontier"

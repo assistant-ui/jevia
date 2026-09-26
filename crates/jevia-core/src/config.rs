@@ -15,6 +15,8 @@ pub struct Config {
     pub jev: JevConfig,
     pub privacy: PrivacyConfig,
     pub tiers: BTreeMap<String, TierConfig>,
+    #[serde(default)]
+    pub harnesses: BTreeMap<String, HarnessConfig>,
 }
 
 impl Config {
@@ -68,6 +70,9 @@ impl Config {
         if self.jev.timeout_ms == 0 {
             return Err(ConfigError::ZeroTimeout);
         }
+        for (name, harness) in &self.harnesses {
+            harness.validate(name, self.tiers.keys())?;
+        }
         Ok(())
     }
 }
@@ -107,6 +112,7 @@ impl Default for Config {
             jev: JevConfig::default(),
             privacy: PrivacyConfig::default(),
             tiers,
+            harnesses: BTreeMap::new(),
         }
     }
 }
@@ -179,6 +185,163 @@ pub struct TierConfig {
     pub description: String,
 }
 
+/// Process template and tier-to-model mapping for a coding-agent harness.
+/// Arguments are executed directly, never through a shell.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HarnessConfig {
+    pub command: String,
+    pub args: Vec<String>,
+    pub models: BTreeMap<String, String>,
+}
+
+impl HarnessConfig {
+    fn validate<'a>(
+        &self,
+        name: &str,
+        tier_names: impl Iterator<Item = &'a String>,
+    ) -> Result<(), ConfigError> {
+        if name.trim().is_empty() {
+            return Err(ConfigError::EmptyHarnessName);
+        }
+        if self.command.trim().is_empty() {
+            return Err(ConfigError::EmptyHarnessCommand(name.to_owned()));
+        }
+        if !self.args.iter().any(|argument| argument.contains("{task}")) {
+            return Err(ConfigError::MissingHarnessPlaceholder {
+                harness: name.to_owned(),
+                placeholder: "{task}",
+            });
+        }
+        if !self
+            .args
+            .iter()
+            .any(|argument| argument.contains("{model}"))
+        {
+            return Err(ConfigError::MissingHarnessPlaceholder {
+                harness: name.to_owned(),
+                placeholder: "{model}",
+            });
+        }
+        for argument in &self.args {
+            let remainder = argument
+                .replace("{task}", "")
+                .replace("{model}", "")
+                .replace("{tier}", "")
+                .replace("{run_id}", "");
+            if remainder.contains('{') || remainder.contains('}') {
+                return Err(ConfigError::UnknownHarnessPlaceholder {
+                    harness: name.to_owned(),
+                    argument: argument.clone(),
+                });
+            }
+        }
+        for tier in tier_names {
+            match self.models.get(tier) {
+                Some(model) if !model.trim().is_empty() => {}
+                _ => {
+                    return Err(ConfigError::MissingHarnessModel {
+                        harness: name.to_owned(),
+                        tier: tier.clone(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Render a direct process invocation for a selected tier.
+    pub fn invocation(
+        &self,
+        harness_name: &str,
+        tier: &str,
+        task: &str,
+        run_id: &str,
+        extra_args: &[String],
+    ) -> Result<HarnessInvocation, ConfigError> {
+        let model = self
+            .models
+            .get(tier)
+            .filter(|model| !model.trim().is_empty())
+            .ok_or_else(|| ConfigError::MissingHarnessModel {
+                harness: harness_name.to_owned(),
+                tier: tier.to_owned(),
+            })?;
+        let mut args: Vec<_> = self
+            .args
+            .iter()
+            .map(|argument| render_argument(argument, harness_name, task, model, tier, run_id))
+            .collect::<Result<_, _>>()?;
+        args.extend_from_slice(extra_args);
+
+        Ok(HarnessInvocation {
+            program: self.command.clone(),
+            args,
+        })
+    }
+}
+
+fn render_argument(
+    template: &str,
+    harness_name: &str,
+    task: &str,
+    model: &str,
+    tier: &str,
+    run_id: &str,
+) -> Result<String, ConfigError> {
+    let mut rendered = String::with_capacity(template.len());
+    let mut cursor = 0;
+
+    while let Some(relative_start) = template[cursor..].find('{') {
+        let start = cursor + relative_start;
+        if template[cursor..start].contains('}') {
+            return Err(ConfigError::UnknownHarnessPlaceholder {
+                harness: harness_name.to_owned(),
+                argument: template.to_owned(),
+            });
+        }
+        rendered.push_str(&template[cursor..start]);
+        let relative_end =
+            template[start..]
+                .find('}')
+                .ok_or_else(|| ConfigError::UnknownHarnessPlaceholder {
+                    harness: harness_name.to_owned(),
+                    argument: template.to_owned(),
+                })?;
+        let end = start + relative_end + 1;
+        let value = match &template[start..end] {
+            "{task}" => task,
+            "{model}" => model,
+            "{tier}" => tier,
+            "{run_id}" => run_id,
+            _ => {
+                return Err(ConfigError::UnknownHarnessPlaceholder {
+                    harness: harness_name.to_owned(),
+                    argument: template.to_owned(),
+                });
+            }
+        };
+        rendered.push_str(value);
+        cursor = end;
+    }
+
+    if template[cursor..].contains('}') {
+        return Err(ConfigError::UnknownHarnessPlaceholder {
+            harness: harness_name.to_owned(),
+            argument: template.to_owned(),
+        });
+    }
+    rendered.push_str(&template[cursor..]);
+    Ok(rendered)
+}
+
+/// A shell-free process invocation rendered from a harness template.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HarnessInvocation {
+    pub program: String,
+    pub args: Vec<String>,
+}
+
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("could not parse configuration: {0}")]
@@ -203,6 +366,19 @@ pub enum ConfigError {
     EmptyModel,
     #[error("Jev timeout_ms must be greater than zero")]
     ZeroTimeout,
+    #[error("harness names cannot be empty")]
+    EmptyHarnessName,
+    #[error("harness `{0}` command cannot be empty")]
+    EmptyHarnessCommand(String),
+    #[error("harness `{harness}` args must contain {placeholder}")]
+    MissingHarnessPlaceholder {
+        harness: String,
+        placeholder: &'static str,
+    },
+    #[error("harness `{harness}` argument contains an unknown placeholder: {argument}")]
+    UnknownHarnessPlaceholder { harness: String, argument: String },
+    #[error("harness `{harness}` does not map tier `{tier}` to a model")]
+    MissingHarnessModel { harness: String, tier: String },
 }
 
 #[cfg(test)]
@@ -237,6 +413,87 @@ mod tests {
         assert!(matches!(
             config.validate(),
             Err(ConfigError::InvalidConfidenceFloor(value)) if value == 1.1
+        ));
+    }
+
+    #[test]
+    fn harness_invocation_substitutes_without_a_shell() {
+        let harness = HarnessConfig {
+            command: "agent".to_owned(),
+            args: vec![
+                "run".to_owned(),
+                "--model={model}".to_owned(),
+                "{task}".to_owned(),
+                "--trace={run_id}".to_owned(),
+            ],
+            models: [("balanced".to_owned(), "provider/model".to_owned())]
+                .into_iter()
+                .collect(),
+        };
+        let extra = vec!["--verbose".to_owned()];
+
+        let invocation = harness
+            .invocation(
+                "agent",
+                "balanced",
+                "fix {model}; echo unsafe",
+                "run-1",
+                &extra,
+            )
+            .expect("invocation renders");
+
+        assert_eq!(invocation.program, "agent");
+        assert_eq!(
+            invocation.args,
+            [
+                "run",
+                "--model=provider/model",
+                "fix {model}; echo unsafe",
+                "--trace=run-1",
+                "--verbose",
+            ]
+        );
+    }
+
+    #[test]
+    fn config_rejects_incomplete_harness_model_mappings() {
+        let mut config = Config::default();
+        config.harnesses.insert(
+            "agent".to_owned(),
+            HarnessConfig {
+                command: "agent".to_owned(),
+                args: vec![
+                    "--model".to_owned(),
+                    "{model}".to_owned(),
+                    "{task}".to_owned(),
+                ],
+                models: [("fast".to_owned(), "small".to_owned())]
+                    .into_iter()
+                    .collect(),
+            },
+        );
+
+        assert!(matches!(
+            config.validate(),
+            Err(ConfigError::MissingHarnessModel { harness, tier })
+                if harness == "agent" && tier == "balanced"
+        ));
+    }
+
+    #[test]
+    fn invocation_rejects_unknown_placeholders_without_panicking() {
+        let harness = HarnessConfig {
+            command: "agent".to_owned(),
+            args: vec!["{unknown}".to_owned()],
+            models: [("balanced".to_owned(), "provider/model".to_owned())]
+                .into_iter()
+                .collect(),
+        };
+
+        assert!(matches!(
+            harness.invocation("agent", "balanced", "task", "run-1", &[]),
+            Err(ConfigError::UnknownHarnessPlaceholder { harness, argument })
+                if harness == "agent" && argument == "{unknown}"
         ));
     }
 }
