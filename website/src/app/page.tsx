@@ -1,17 +1,15 @@
 import { ArrowUpRight } from "lucide-react";
 
 import { CommandBlock } from "../components/command-block";
+import { ScrollTimescale } from "../components/scroll-timescale";
 import {
-  TimescaleAge,
   TimescaleContent,
-  TimescaleHeader,
   TimescaleItem,
   TimescaleRail,
   TimescaleRoot,
   TimescaleTick,
   TimescaleTrack,
   TimescaleViewport,
-  TimescaleYear,
 } from "../components/timescale";
 
 export const dynamic = "force-static";
@@ -75,37 +73,29 @@ export default function HomePage() {
       </header>
 
       <section id="top" className="hero page-frame" aria-labelledby="hero-title">
-        <h1 id="hero-title">Model routing that learns.</h1>
-        <p className="hero-description">
-          Jevia routes your task to a model tier and uses verified outcomes to improve
-          future decisions.
-        </p>
-
-        <div className="hero-command">
-          <CommandBlock
-            label="Install Jevia"
-            command="cargo install --git https://github.com/assistant-ui/jevia jevia"
-          />
+        <div className="hero-copy">
+          <h1 id="hero-title">Model routing that learns.</h1>
+          <p className="hero-description">
+            Jevia routes your task to a model tier and uses verified outcomes to improve
+            future decisions.
+          </p>
+          <div className="hero-command">
+            <CommandBlock
+              label="Install Jevia"
+              command="cargo install --git https://github.com/assistant-ui/jevia jevia"
+              minimal
+            />
+          </div>
         </div>
+        <span className="frame-junctions" aria-hidden="true" />
       </section>
 
-      <section id="quickstart" className="quickstart page-frame" aria-labelledby="setup-title">
-        <header className="section-heading">
-          <h2 id="setup-title">Get started</h2>
-          <p className="scroll-hint" aria-hidden="true">
-            Scroll horizontally <span>→</span>
-          </p>
-        </header>
-
+      <ScrollTimescale>
         <TimescaleRoot className="setup-timescale">
-          <TimescaleHeader>
-            <TimescaleAge>Step</TimescaleAge>
-            <TimescaleYear>Action</TimescaleYear>
-          </TimescaleHeader>
-
           <TimescaleViewport
             tabIndex={0}
-            aria-label="Jevia setup timeline. Scroll horizontally for all five steps."
+            role="region"
+            aria-label="Jevia setup timeline. Scroll down, swipe horizontally, or use the arrow keys to explore five steps."
           >
             <TimescaleTrack role="list">
               <TimescaleRail />
@@ -113,26 +103,17 @@ export default function HomePage() {
               {SETUP_STEPS.map((step) => (
                 <TimescaleItem key={step.number} role="listitem">
                   <TimescaleTick />
-                  <TimescaleAge>{step.number}</TimescaleAge>
-                  <TimescaleYear>{step.label}</TimescaleYear>
                   <TimescaleContent>
                     <h3>{step.title}</h3>
                     <p>{step.description}</p>
-                    <CommandBlock command={step.command} label={step.label} compact />
+                    <CommandBlock command={step.command} label={step.label} compact minimal />
                   </TimescaleContent>
                 </TimescaleItem>
               ))}
             </TimescaleTrack>
           </TimescaleViewport>
         </TimescaleRoot>
-      </section>
-
-      <footer className="site-footer page-frame">
-        <div className="footer-intro">
-          <strong>jevia</strong>
-          <p>Outcome-aware model routing for coding agents and local harnesses.</p>
-        </div>
-      </footer>
+      </ScrollTimescale>
     </main>
   );
 }

@@ -7,9 +7,15 @@ interface CommandBlockProps {
   command: string;
   label: string;
   compact?: boolean;
+  minimal?: boolean;
 }
 
-export function CommandBlock({ command, label, compact = false }: CommandBlockProps) {
+export function CommandBlock({
+  command,
+  label,
+  compact = false,
+  minimal = false,
+}: CommandBlockProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   useEffect(() => {
@@ -32,10 +38,12 @@ export function CommandBlock({ command, label, compact = false }: CommandBlockPr
 
   return (
     <div className="command-block" data-compact={compact || undefined}>
-      <div className="command-meta">
-        <span>{label}</span>
-        <span aria-hidden="true">bash</span>
-      </div>
+      {!minimal && (
+        <div className="command-meta">
+          <span>{label}</span>
+          <span aria-hidden="true">bash</span>
+        </div>
+      )}
       <div className="command-line">
         <span className="command-prompt" aria-hidden="true">
           $
