@@ -8,6 +8,7 @@ pub struct ProjectPaths {
     pub directory: PathBuf,
     pub config: PathBuf,
     pub runs: PathBuf,
+    pub cache: PathBuf,
 }
 
 impl ProjectPaths {
@@ -17,6 +18,7 @@ impl ProjectPaths {
             root,
             config: directory.join("config.toml"),
             runs: directory.join("runs.jsonl"),
+            cache: directory.join("cache.jsonl"),
             directory,
         }
     }

@@ -342,6 +342,7 @@ mod tests {
                 fallback_applied: false,
                 jev_model: "jev-test".to_owned(),
                 created_at_ms: 1,
+                source: jevia_core::DecisionSource::Live,
             },
             task: Some("test task".to_owned()),
             outcome: Outcome::Unknown,

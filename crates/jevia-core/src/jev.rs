@@ -1,15 +1,17 @@
 use std::{
     collections::BTreeMap,
+    fmt::Write as _,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::{Config, JevConfig, Outcome, RouteDecision, RouteRecord};
+use crate::{Config, DecisionSource, JevConfig, Outcome, RouteDecision, RouteRecord};
 
 /// Minimal Jev HTTP client. The API key is intentionally excluded from Debug,
 /// errors, and serialized values.
@@ -72,6 +74,42 @@ impl JevClient {
         let body = response.bytes().await?;
         decode_decision(&body, config)
     }
+}
+
+/// Hash every input that can change a routing decision without persisting task
+/// text in the cache index.
+pub fn route_cache_key(
+    task: &str,
+    harness_name: Option<&str>,
+    config: &Config,
+    history: &[RouteRecord],
+) -> Result<String, JevError> {
+    config.validate()?;
+    if task.trim().is_empty() {
+        return Err(JevError::EmptyTask);
+    }
+
+    let request = build_request(task, config, history);
+    let harness = harness_name.map(|name| {
+        json!({
+            "name": name,
+            "config": config.harnesses.get(name),
+        })
+    });
+    let material = json!({
+        "cache_schema_version": 1,
+        "api_base_url": config.jev.base_url.trim().trim_end_matches('/'),
+        "router": &config.router,
+        "harness": harness,
+        "request": request,
+    });
+    let encoded = serde_json::to_vec(&material).map_err(JevError::CacheKey)?;
+    let digest = Sha256::digest(encoded);
+    let mut key = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        write!(&mut key, "{byte:02x}").expect("writing to a string cannot fail");
+    }
+    Ok(key)
 }
 
 #[derive(Debug, Serialize)]
@@ -193,6 +231,7 @@ fn decode_decision(body: &[u8], config: &Config) -> Result<RouteDecision, JevErr
         fallback_applied,
         jev_model: response.model,
         created_at_ms: now_ms(),
+        source: DecisionSource::Live,
     })
 }
 
@@ -216,6 +255,8 @@ pub enum JevError {
     ApiStatus(u16),
     #[error("Jev returned invalid JSON: {0}")]
     InvalidJson(#[from] serde_json::Error),
+    #[error("could not encode a routing cache key: {0}")]
+    CacheKey(serde_json::Error),
     #[error("Jev response did not contain the `tier` answer")]
     MissingTierAnswer,
     #[error("Jev returned `{0}` for the tier answer instead of `choice`")]
@@ -321,6 +362,46 @@ mod tests {
 
         assert_eq!(decision.tier, "balanced");
         assert!(!decision.fallback_applied);
+        assert_eq!(decision.source, DecisionSource::Live);
+    }
+
+    #[test]
+    fn cache_key_changes_only_when_routing_inputs_change() {
+        let config = Config::default();
+        let pending = record("pending", "balanced", Outcome::Unknown);
+        let completed = record("completed", "balanced", Outcome::Success);
+
+        let baseline = route_cache_key("fix parser", Some("agent"), &config, &[])
+            .expect("cache key is created");
+        let repeated = route_cache_key("fix parser", Some("agent"), &config, &[pending])
+            .expect("cache key is created");
+        let with_evidence = route_cache_key("fix parser", Some("agent"), &config, &[completed])
+            .expect("cache key is created");
+        let other_task = route_cache_key("fix lexer", Some("agent"), &config, &[])
+            .expect("cache key is created");
+        let other_harness = route_cache_key("fix parser", Some("other"), &config, &[])
+            .expect("cache key is created");
+
+        assert_eq!(baseline, repeated);
+        assert_ne!(baseline, with_evidence);
+        assert_ne!(baseline, other_task);
+        assert_ne!(baseline, other_harness);
+        assert_eq!(baseline.len(), 64);
+        assert!(!baseline.contains("fix parser"));
+    }
+
+    #[test]
+    fn cache_key_changes_with_local_routing_policy() {
+        let config = Config::default();
+        let baseline =
+            route_cache_key("fix parser", None, &config, &[]).expect("cache key is created");
+        let mut changed = config.clone();
+        changed.router.confidence_floor = 0.9;
+
+        let changed =
+            route_cache_key("fix parser", None, &changed, &[]).expect("cache key is created");
+
+        assert_ne!(baseline, changed);
     }
 
     fn record(task: &str, tier: &str, outcome: Outcome) -> RouteRecord {
@@ -335,6 +416,7 @@ mod tests {
                 fallback_applied: false,
                 jev_model: "jev-test".to_owned(),
                 created_at_ms: 1,
+                source: DecisionSource::Live,
             },
             task: Some(task.to_owned()),
             outcome,

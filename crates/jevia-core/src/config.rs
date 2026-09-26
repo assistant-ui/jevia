@@ -14,6 +14,8 @@ pub struct Config {
     pub router: RouterConfig,
     pub jev: JevConfig,
     pub privacy: PrivacyConfig,
+    #[serde(default)]
+    pub cache: CacheConfig,
     pub tiers: BTreeMap<String, TierConfig>,
     #[serde(default)]
     pub harnesses: BTreeMap<String, HarnessConfig>,
@@ -70,6 +72,18 @@ impl Config {
         if self.jev.timeout_ms == 0 {
             return Err(ConfigError::ZeroTimeout);
         }
+        if self.cache.ttl_seconds == 0 {
+            return Err(ConfigError::ZeroCacheTtl);
+        }
+        if self.cache.ttl_seconds > 604_800 {
+            return Err(ConfigError::CacheTtlTooLarge(self.cache.ttl_seconds));
+        }
+        if self.cache.max_entries == 0 {
+            return Err(ConfigError::ZeroCacheEntries);
+        }
+        if self.cache.max_entries > 10_000 {
+            return Err(ConfigError::CacheEntriesTooLarge(self.cache.max_entries));
+        }
         for (name, harness) in &self.harnesses {
             harness.validate(name, self.tiers.keys())?;
         }
@@ -111,6 +125,7 @@ impl Default for Config {
             router: RouterConfig::default(),
             jev: JevConfig::default(),
             privacy: PrivacyConfig::default(),
+            cache: CacheConfig::default(),
             tiers,
             harnesses: BTreeMap::new(),
         }
@@ -173,6 +188,28 @@ impl Default for PrivacyConfig {
     fn default() -> Self {
         Self {
             store_task_text: true,
+        }
+    }
+}
+
+/// Local routing-decision cache controls.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CacheConfig {
+    /// Reuse equivalent, unexpired Jev decisions.
+    pub enabled: bool,
+    /// Maximum age of a cached decision.
+    pub ttl_seconds: u64,
+    /// Maximum number of decisions retained locally.
+    pub max_entries: usize,
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            ttl_seconds: 900,
+            max_entries: 256,
         }
     }
 }
@@ -414,6 +451,14 @@ pub enum ConfigError {
     EmptyModel,
     #[error("Jev timeout_ms must be greater than zero")]
     ZeroTimeout,
+    #[error("cache ttl_seconds must be greater than zero")]
+    ZeroCacheTtl,
+    #[error("cache ttl_seconds cannot exceed 604800, got {0}")]
+    CacheTtlTooLarge(u64),
+    #[error("cache max_entries must be greater than zero")]
+    ZeroCacheEntries,
+    #[error("cache max_entries cannot exceed 10000, got {0}")]
+    CacheEntriesTooLarge(usize),
     #[error("harness names cannot be empty")]
     EmptyHarnessName,
     #[error("harness `{0}` command cannot be empty")]
@@ -463,6 +508,20 @@ mod tests {
         assert!(matches!(
             config.validate(),
             Err(ConfigError::InvalidConfidenceFloor(value)) if value == 1.1
+        ));
+    }
+
+    #[test]
+    fn rejects_invalid_cache_limits() {
+        let mut config = Config::default();
+        config.cache.ttl_seconds = 0;
+        assert!(matches!(config.validate(), Err(ConfigError::ZeroCacheTtl)));
+
+        config.cache.ttl_seconds = 900;
+        config.cache.max_entries = 0;
+        assert!(matches!(
+            config.validate(),
+            Err(ConfigError::ZeroCacheEntries)
         ));
     }
 

@@ -55,6 +55,8 @@ jevia runs --json
 | `jevia runs` | Inspect recent local routing records. |
 | `jevia feedback <id> <outcome>` | Mark a run as `success`, `failure`, or `unknown`. |
 | `jevia doctor` | Validate configuration, credentials, and local storage. |
+| `jevia cache status` | Inspect routing-cache settings and entry counts. |
+| `jevia cache clear` | Remove cached decisions without touching run history. |
 
 Run `jevia <command> --help` for command-specific options.
 
@@ -114,6 +116,37 @@ process exit code, and verification evidence. This data appears in
 routing requests, so model changes do not erase which implementation actually
 produced a verified result.
 
+## Routing cache
+
+Jevia caches equivalent routing decisions locally so repeated work does not
+always require another network request. The default policy keeps up to 256
+decisions for 15 minutes:
+
+~~~toml
+[cache]
+enabled = true
+ttl_seconds = 900
+max_entries = 256
+~~~
+
+A cache key is a SHA-256 fingerprint over the exact task, Jev endpoint and
+model, routing policy, tier definitions, selected harness mapping, and the
+recent completed evidence actually sent to Jev. A new success, failure,
+verification result, policy change, model change, or harness change therefore
+produces a miss automatically. Pending outcomes do not invalidate an otherwise
+equivalent decision.
+
+Cache files contain the fingerprint and decision signal, not task text. Every
+hit receives a fresh run ID and timestamp, and run records expose
+<code>source=live</code> or <code>source=cache</code>. Use
+<code>--no-cache</code> on <code>jevia route</code> or
+<code>jevia run</code> when a forced live decision is needed.
+
+Cache errors never block routing: Jevia reports the problem and falls through
+to a live request. API errors are never cached, expired decisions are never
+used as an offline fallback, and <code>jevia cache clear</code> provides an
+explicit recovery path for a damaged cache.
+
 ## Local data
 
 Project configuration lives in `.jevia/config.toml` and is intended to be
@@ -122,6 +155,9 @@ by the project-local `.jevia/.gitignore` because prompts and outcomes may be
 sensitive. Jevia coordinates concurrent readers and writers through the
 ignored `.jevia/runs.lock` sidecar so parallel agents cannot overwrite one
 another's evidence.
+
+Routing decisions live in the ignored `.jevia/cache.jsonl` file and use the
+same locking and atomic-replacement guarantees through `.jevia/cache.lock`.
 
 By default Jevia stores task text locally so it can supply useful examples to
 future decisions. Set `store_task_text = false` under `[privacy]` to retain only

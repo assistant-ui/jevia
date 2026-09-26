@@ -28,6 +28,8 @@ fn init_creates_a_valid_project_configuration() {
     let ignore = fs::read_to_string(directory.path().join(".jevia/.gitignore"))
         .expect("ignore file is readable");
     assert!(ignore.lines().any(|line| line == "runs.lock"));
+    assert!(ignore.lines().any(|line| line == "cache.jsonl"));
+    assert!(ignore.lines().any(|line| line == "cache.lock"));
 }
 
 #[test]
@@ -46,6 +48,51 @@ fn init_does_not_overwrite_configuration_without_force() {
         .arg("init")
         .assert()
         .failure();
+}
+
+#[test]
+fn init_preserves_existing_ignore_rules() {
+    let directory = tempdir().expect("temporary directory");
+    let jevia_directory = directory.path().join(".jevia");
+    fs::create_dir_all(&jevia_directory).expect("Jevia directory is created");
+    fs::write(jevia_directory.join(".gitignore"), "custom-rule\n")
+        .expect("custom ignore file is written");
+
+    let mut command = Command::cargo_bin("jevia").expect("binary is built");
+    command
+        .current_dir(directory.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    let ignore =
+        fs::read_to_string(jevia_directory.join(".gitignore")).expect("ignore file is readable");
+    assert!(ignore.lines().any(|line| line == "custom-rule"));
+    assert!(ignore.lines().any(|line| line == "cache.jsonl"));
+}
+
+#[test]
+fn cache_commands_are_available() {
+    let directory = tempdir().expect("temporary directory");
+    let mut init = Command::cargo_bin("jevia").expect("binary is built");
+    init.current_dir(directory.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    let mut status = Command::cargo_bin("jevia").expect("binary is built");
+    status
+        .current_dir(directory.path())
+        .args(["cache", "status"])
+        .assert()
+        .success();
+
+    let mut clear = Command::cargo_bin("jevia").expect("binary is built");
+    clear
+        .current_dir(directory.path())
+        .args(["cache", "clear"])
+        .assert()
+        .success();
 }
 
 #[test]

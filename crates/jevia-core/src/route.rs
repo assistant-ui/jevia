@@ -1,6 +1,12 @@
-use std::{collections::BTreeMap, fmt, str::FromStr};
+use std::{
+    collections::BTreeMap,
+    fmt,
+    str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Current version of a persisted run record.
 pub const RECORD_SCHEMA_VERSION: u32 = 1;
@@ -38,6 +44,24 @@ impl FromStr for Outcome {
     }
 }
 
+/// Origin of a routing decision.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DecisionSource {
+    #[default]
+    Live,
+    Cache,
+}
+
+impl fmt::Display for DecisionSource {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Live => "live",
+            Self::Cache => "cache",
+        })
+    }
+}
+
 /// Inspectable result after model output and local safety policy are combined.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RouteDecision {
@@ -51,6 +75,19 @@ pub struct RouteDecision {
     pub fallback_applied: bool,
     pub jev_model: String,
     pub created_at_ms: u64,
+    #[serde(default)]
+    pub source: DecisionSource,
+}
+
+impl RouteDecision {
+    /// Reuse the decision signal while giving a cache hit its own run identity.
+    pub fn for_cache_hit(&self) -> Self {
+        let mut decision = self.clone();
+        decision.run_id = Uuid::new_v4().to_string();
+        decision.created_at_ms = now_ms();
+        decision.source = DecisionSource::Cache;
+        decision
+    }
 }
 
 /// Observable facts from a configured harness execution.
@@ -102,6 +139,14 @@ impl RouteRecord {
     }
 }
 
+fn now_ms() -> u64 {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    u64::try_from(millis).unwrap_or(u64::MAX)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,6 +171,7 @@ mod tests {
 
         assert_eq!(record.outcome, Outcome::Success);
         assert_eq!(record.execution, None);
+        assert_eq!(record.decision.source, DecisionSource::Live);
     }
 
     #[test]
@@ -159,5 +205,27 @@ mod tests {
                 .verification,
             None
         );
+    }
+
+    #[test]
+    fn cache_hits_receive_fresh_run_metadata() {
+        let decision = RouteDecision {
+            run_id: "original".to_owned(),
+            tier: "balanced".to_owned(),
+            suggested_tier: "balanced".to_owned(),
+            confidence: 0.8,
+            probabilities: BTreeMap::new(),
+            fallback_applied: false,
+            jev_model: "jev-test".to_owned(),
+            created_at_ms: 1,
+            source: DecisionSource::Live,
+        };
+
+        let cached = decision.for_cache_hit();
+
+        assert_ne!(cached.run_id, decision.run_id);
+        assert!(cached.created_at_ms > decision.created_at_ms);
+        assert_eq!(cached.source, DecisionSource::Cache);
+        assert_eq!(cached.tier, decision.tier);
     }
 }
