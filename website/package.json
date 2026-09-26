@@ -24,7 +24,7 @@
     "typescript": "^5.3.3"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": "22.x"
   },
   "pnpm": {
     "overrides": {

@@ -26,7 +26,7 @@ jobs:
           version: 10.9.0
       - uses: actions/setup-node@v7
         with:
-          node-version: 22.13.0
+          node-version-file: website/.node-version
           cache: pnpm
           cache-dependency-path: website/pnpm-lock.yaml
       - name: Install dependencies
