@@ -151,8 +151,8 @@ processes. After a supervisor crash, inspect any surviving child processes and
 workspace changes before starting new work. Legacy unknown outcomes are not
 assumed to represent interrupted executions. Feedback on active runs is refused.
 
-New and updated records use schema version 2; version 1 remains readable. Older
-CLI versions refuse version 2 rather than silently discard lifecycle metadata.
+New and updated records use schema version 3; versions 1 and 2 remain readable.
+Older CLI versions refuse version 3 rather than silently discard new metadata.
 The ignored `run-leases/` sidecars are retained so concurrent processes always
 coordinate on the same lock file.
 
@@ -178,6 +178,27 @@ Without this flag, existing interactive terminal behavior remains unchanged.
 This is not a sandbox: descendants that deliberately escape a process group/job,
 SIGKILL of Jevia, and machine crashes cannot be handled reliably. Use explicit
 recovery and inspect the workspace in those cases; no work is automatically retried.
+
+## Outcome provenance
+
+Run records distinguish `process_exit`, `verification`, and `manual` evidence.
+Process-only success/failure remains visible, but only known outcomes from a
+completed verifier or explicit human feedback are supplied to Jev as learning
+evidence. Legacy outcomes without provenance are not silently promoted; confirm
+them with `feedback` if you want them used in routing. `runs` reports the source
+and whether the result is eligible for learning.
+
+```sh
+jevia feedback <run-id> success
+jevia feedback <run-id> failure --reason "The integration test still fails"
+jevia runs show <run-id>
+```
+
+Changing an already-known outcome requires a nonempty `--reason`. Every feedback
+operation retains the prior outcome/source, timestamp, and optional reason in a
+local audit trail; original execution evidence is preserved. Reasons are limited
+to 4096 bytes and are never sent to Jev. Setting the outcome to `unknown` removes
+it from learning evidence. These local records are not a tamper-proof audit log.
 
 ## Routing cache
 

@@ -83,6 +83,10 @@ repository and security boundary; no dashboard code belongs here.
 - A failed harness skips verification and records failure.
 - A configured verifier is authoritative after a successful harness run.
 - A verifier that cannot start leaves the outcome unknown.
+- Only known, verifier-backed or explicitly manual outcomes inform later routing;
+  process-only and legacy results remain inspectable but are excluded from learning.
+- Manual feedback preserves prior outcomes and original execution evidence. Local
+  feedback reasons are never included in a Jev request.
 - Completed harness runs retain model, harness, verification, duration, and
   exit evidence.
 - Cache hits receive fresh run identities and remain distinguishable from live
@@ -109,8 +113,8 @@ same synchronized atomic-replacement pattern as history updates. Cache
 corruption is reported without rewriting the file; `jevia cache clear` is the
 explicit recovery operation.
 
-Schema-version-1 history remains readable. New or mutated records use version 2
-to preserve lifecycle metadata from older writers. A per-run OS file lease is
+Schema-version-1 and -2 history remains readable. New or mutated records use
+version 3 to protect lifecycle and outcome provenance from older writers. A per-run OS file lease is
 held from before the running transition until the terminal record is saved.
 Explicit recovery obtains that same lease non-blockingly before marking a
 running/verifying record interrupted; it never reruns work or infers task failure.

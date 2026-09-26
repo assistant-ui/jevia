@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::{Config, DecisionSource, JevConfig, Outcome, RouteDecision, RouteRecord};
+use crate::{Config, DecisionSource, JevConfig, RouteDecision, RouteRecord};
 
 /// Minimal Jev HTTP client. The API key is intentionally excluded from Debug,
 /// errors, and serialized values.
@@ -135,7 +135,7 @@ fn build_request<'a>(
     let mut completed: Vec<_> = history
         .iter()
         .rev()
-        .filter(|record| record.outcome != Outcome::Unknown)
+        .filter(|record| record.is_learning_evidence())
         .take(config.router.history_limit)
         .map(|record| {
             json!({
@@ -143,6 +143,7 @@ fn build_request<'a>(
                 "tier": record.decision.tier,
                 "confidence": record.decision.confidence,
                 "outcome": record.outcome,
+                "outcome_source": record.outcome_evidence.as_ref().map(|evidence| evidence.source),
                 "execution": record.execution,
             })
         })
@@ -277,7 +278,7 @@ impl From<StatusCode> for JevError {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ExecutionEvidence, VerificationEvidence};
+    use crate::{ExecutionEvidence, Outcome, OutcomeSource, VerificationEvidence};
 
     use super::*;
 
@@ -341,6 +342,42 @@ mod tests {
         assert_eq!(decision.suggested_tier, "fast");
         assert_eq!(decision.tier, "strong");
         assert!(decision.fallback_applied);
+    }
+
+    #[test]
+    fn routing_excludes_unverified_results_and_local_feedback_notes() {
+        let mut unverified = record("process only", "fast", Outcome::Success);
+        unverified.outcome_evidence.as_mut().unwrap().source = OutcomeSource::ProcessExit;
+        let mut legacy = record("legacy", "fast", Outcome::Success);
+        legacy.outcome_evidence = None;
+        let mut verified = record("verified", "fast", Outcome::Success);
+        verified.outcome_evidence.as_mut().unwrap().source = OutcomeSource::Verification;
+        let mut manual = record("manual", "fast", Outcome::Failure);
+        manual.feedback.push(crate::FeedbackEvent {
+            previous_outcome: Outcome::Success,
+            previous_source: Some(OutcomeSource::ProcessExit),
+            outcome: Outcome::Failure,
+            recorded_at_ms: 2,
+            reason: Some("private-note".into()),
+        });
+        let config = Config::default();
+        let baseline = route_cache_key("task", None, &config, &[]).unwrap();
+        assert_eq!(
+            baseline,
+            route_cache_key("task", None, &config, &[unverified.clone(), legacy.clone()]).unwrap()
+        );
+        let request = build_request("task", &config, &[unverified, legacy, verified, manual]);
+        let outcomes = request.state["recent_completed_outcomes"]
+            .as_array()
+            .unwrap();
+        assert_eq!(outcomes.len(), 2);
+        assert_eq!(outcomes[0]["outcome_source"], "verification");
+        assert_eq!(outcomes[1]["outcome_source"], "manual");
+        assert!(
+            !serde_json::to_string(&request)
+                .unwrap()
+                .contains("private-note")
+        );
     }
 
     #[test]
@@ -422,6 +459,11 @@ mod tests {
             outcome,
             execution: None,
             lifecycle: None,
+            outcome_evidence: Some(crate::OutcomeEvidence {
+                source: crate::OutcomeSource::Manual,
+                recorded_at_ms: 1,
+            }),
+            feedback: Vec::new(),
         }
     }
 }
