@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use jevia_core::{ExecutionEvidence, Outcome, RouteRecord};
+use jevia_core::{ExecutionEvidence, Outcome, RECORD_SCHEMA_VERSION, RouteRecord, RunState};
 use tempfile::NamedTempFile;
 
 pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
@@ -45,7 +45,7 @@ fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
                 path.display()
             )
         })?;
-        if record.schema_version != 1 {
+        if !matches!(record.schema_version, 1 | RECORD_SCHEMA_VERSION) {
             bail!(
                 "unsupported run record schema {} on line {} of {}",
                 record.schema_version,
@@ -78,7 +78,17 @@ pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
 }
 
 pub fn update_outcome(path: &Path, run_id: &str, outcome: Outcome) -> Result<RouteRecord> {
-    update(path, run_id, |record| record.outcome = outcome)
+    update(path, run_id, |record| {
+        if record
+            .lifecycle
+            .as_ref()
+            .is_some_and(|life| life.state.is_active())
+        {
+            bail!("cannot change feedback while a run is active; inspect or recover it first");
+        }
+        record.outcome = outcome;
+        Ok(())
+    })
 }
 
 pub fn record_execution(
@@ -87,16 +97,52 @@ pub fn record_execution(
     outcome: Outcome,
     execution: ExecutionEvidence,
 ) -> Result<RouteRecord> {
+    record_state(path, run_id, RunState::Completed, outcome, Some(execution))
+}
+
+pub fn record_state(
+    path: &Path,
+    run_id: &str,
+    state: RunState,
+    outcome: Outcome,
+    execution: Option<ExecutionEvidence>,
+) -> Result<RouteRecord> {
     update(path, run_id, |record| {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let now = u64::try_from(now).unwrap_or(u64::MAX);
+        let life = record.lifecycle.get_or_insert_with(Default::default);
+        if !matches!(
+            life.state,
+            RunState::Routed | RunState::Running | RunState::Verifying
+        ) {
+            bail!("run is already terminal; execution is never automatically retried");
+        }
+        if state == RunState::Running && life.state != RunState::Routed {
+            bail!("run has already started");
+        }
+        if state == RunState::Interrupted && !life.state.is_active() {
+            bail!("only an active execution can be recovered");
+        }
+        life.started_at_ms.get_or_insert(now);
+        life.state = state;
+        if !state.is_active() {
+            life.finished_at_ms = Some(now);
+        }
         record.outcome = outcome;
-        record.execution = Some(execution);
+        if let Some(execution) = execution {
+            record.execution = Some(execution);
+        }
+        Ok(())
     })
 }
 
 fn update(
     path: &Path,
     run_id: &str,
-    update_record: impl FnOnce(&mut RouteRecord),
+    update_record: impl FnOnce(&mut RouteRecord) -> Result<()>,
 ) -> Result<RouteRecord> {
     let _lock = acquire_lock(path, LockMode::Exclusive)?;
     let mut records = load_unlocked(path)?;
@@ -104,7 +150,8 @@ fn update(
         .iter_mut()
         .find(|record| record.decision.run_id == run_id)
         .context("run id was not found in local history")?;
-    update_record(updated);
+    update_record(updated)?;
+    updated.schema_version = RECORD_SCHEMA_VERSION;
     let result = updated.clone();
 
     let parent = path
@@ -210,6 +257,47 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn lifecycle_recovers_without_claiming_a_task_failure() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("runs.jsonl");
+        append(&path, &sample_record()).unwrap();
+        let running =
+            record_state(&path, "run-1", RunState::Running, Outcome::Unknown, None).unwrap();
+        assert_eq!(running.schema_version, 2);
+        assert!(running.lifecycle.unwrap().started_at_ms.is_some());
+        assert!(update_outcome(&path, "run-1", Outcome::Success).is_err());
+        let recovered = record_state(
+            &path,
+            "run-1",
+            RunState::Interrupted,
+            Outcome::Unknown,
+            None,
+        )
+        .unwrap();
+        assert_eq!(recovered.outcome, Outcome::Unknown);
+        assert!(recovered.lifecycle.unwrap().finished_at_ms.is_some());
+        assert!(record_state(&path, "run-1", RunState::Running, Outcome::Unknown, None).is_err());
+    }
+
+    #[test]
+    fn routed_and_legacy_unknown_records_are_not_recoverable() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("runs.jsonl");
+        append(&path, &sample_record()).unwrap();
+        assert!(
+            record_state(
+                &path,
+                "run-1",
+                RunState::Interrupted,
+                Outcome::Unknown,
+                None
+            )
+            .is_err()
+        );
+        assert_eq!(load(&path).unwrap()[0].lifecycle, None);
+    }
 
     #[test]
     fn appends_loads_and_updates_records() {
@@ -347,6 +435,7 @@ mod tests {
             task: Some("test task".to_owned()),
             outcome: Outcome::Unknown,
             execution: None,
+            lifecycle: None,
         }
     }
 }

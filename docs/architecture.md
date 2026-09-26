@@ -109,6 +109,11 @@ same synchronized atomic-replacement pattern as history updates. Cache
 corruption is reported without rewriting the file; `jevia cache clear` is the
 explicit recovery operation.
 
-Execution evidence is an optional additive field so existing schema-version-1
-history remains readable. Manual feedback changes the outcome without
-inventing harness metadata.
+Schema-version-1 history remains readable. New or mutated records use version 2
+to preserve lifecycle metadata from older writers. A per-run OS file lease is
+held from before the running transition until the terminal record is saved.
+Explicit recovery obtains that same lease non-blockingly before marking a
+running/verifying record interrupted; it never reruns work or infers task failure.
+The durable phases are routed, running, verifying, completed, launch_failed, and
+interrupted. Start and finish timestamps are distinct from routing time.
+Manual feedback is refused on active runs and never invents harness metadata.

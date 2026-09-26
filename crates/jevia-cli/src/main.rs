@@ -1,4 +1,5 @@
 mod cache;
+mod lease;
 mod paths;
 mod store;
 
@@ -7,7 +8,7 @@ use std::{env, fs, io::Write, process::ExitCode, str::FromStr, time::Instant};
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use jevia_core::{
-    Config, ExecutionEvidence, HarnessInvocation, JevClient, Outcome, RouteRecord,
+    Config, ExecutionEvidence, HarnessInvocation, JevClient, Outcome, RouteRecord, RunState,
     VerificationEvidence, route_cache_key,
 };
 use tokio::process::Command as ChildCommand;
@@ -59,11 +60,13 @@ enum Command {
     },
     /// Show recent local routing records.
     Runs {
+        #[command(subcommand)]
+        action: Option<RunsAction>,
         /// Maximum number of records to print.
         #[arg(long, default_value_t = 20)]
         limit: usize,
         /// Print records as a JSON array.
-        #[arg(long)]
+        #[arg(long, global = true)]
         json: bool,
     },
     /// Attach an observed outcome to a previous routing decision.
@@ -85,6 +88,14 @@ enum Command {
         #[command(subcommand)]
         action: CacheAction,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum RunsAction {
+    /// Inspect one complete run record, including its execution lifecycle.
+    Show { run_id: String },
+    /// Mark an execution whose Jevia supervisor exited as interrupted. Never reruns it.
+    Recover { run_id: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -145,8 +156,16 @@ async fn run() -> Result<ExitCode> {
             args,
             no_cache,
         } => run_harness(&harness, &task, &args, no_cache).await,
-        Command::Runs { limit, json } => {
-            runs(limit, json)?;
+        Command::Runs {
+            action,
+            limit,
+            json,
+        } => {
+            match action {
+                None => runs(limit, json)?,
+                Some(RunsAction::Show { run_id }) => show_run(&run_id)?,
+                Some(RunsAction::Recover { run_id }) => recover_run(&run_id)?,
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::Feedback {
@@ -251,6 +270,8 @@ async fn execute_harness(
     invocation: &HarnessInvocation,
     record: &RouteRecord,
 ) -> Result<ExitCode> {
+    let _lease = lease::try_acquire(&paths.directory.join("run-leases"), &record.decision.run_id)?
+        .context("run already has an active Jevia supervisor")?;
     eprintln!(
         "jevia: run={} tier={} suggested={} confidence={:.2} fallback={}",
         record.decision.run_id,
@@ -261,21 +282,45 @@ async fn execute_harness(
     );
     eprintln!("jevia: launching harness `{harness_name}`");
 
+    let mut execution = ExecutionEvidence {
+        harness: harness_name.to_owned(),
+        model: invocation.model.clone(),
+        duration_ms: 0,
+        exit_code: None,
+        verification: None,
+    };
+    store::record_state(
+        &paths.runs,
+        &record.decision.run_id,
+        RunState::Running,
+        Outcome::Unknown,
+        Some(execution.clone()),
+    )?;
     let started = Instant::now();
     let status = ChildCommand::new(&invocation.program)
         .args(&invocation.args)
         .current_dir(&paths.root)
         .status()
-        .await
-        .with_context(|| format!("could not launch harness `{harness_name}`"))?;
-    let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-    let mut execution = ExecutionEvidence {
-        harness: harness_name.to_owned(),
-        model: invocation.model.clone(),
-        duration_ms,
-        exit_code: status.code(),
-        verification: None,
+        .await;
+    let status = match status {
+        Ok(status) => status,
+        Err(error) => {
+            execution.duration_ms =
+                u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            store::record_state(
+                &paths.runs,
+                &record.decision.run_id,
+                RunState::LaunchFailed,
+                Outcome::Unknown,
+                Some(execution),
+            )?;
+            return Err(error)
+                .with_context(|| format!("could not launch harness `{harness_name}`"));
+        }
     };
+    let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    execution.duration_ms = duration_ms;
+    execution.exit_code = status.code();
     if !status.success() {
         store::record_execution(
             &paths.runs,
@@ -299,6 +344,13 @@ async fn execute_harness(
     };
 
     eprintln!("jevia: verifying harness `{harness_name}`");
+    store::record_state(
+        &paths.runs,
+        &record.decision.run_id,
+        RunState::Verifying,
+        Outcome::Unknown,
+        Some(execution.clone()),
+    )?;
     let verification_started = Instant::now();
     let verification_status = ChildCommand::new(&verification.program)
         .args(&verification.args)
@@ -316,11 +368,12 @@ async fn execute_harness(
                 duration_ms: verification_duration_ms,
                 exit_code: None,
             });
-            store::record_execution(
+            store::record_state(
                 &paths.runs,
                 &record.decision.run_id,
+                RunState::LaunchFailed,
                 Outcome::Unknown,
-                execution,
+                Some(execution),
             )?;
             return Err(error).with_context(|| {
                 format!("could not launch verification for harness `{harness_name}`")
@@ -420,6 +473,12 @@ fn runs(limit: usize, print_json: bool) -> Result<()> {
         return Ok(());
     }
     for record in records.iter().rev() {
+        let state = record
+            .lifecycle
+            .as_ref()
+            .map(|life| format!("{:?}", life.state))
+            .unwrap_or_else(|| "legacy".to_owned());
+        println!("state={state}");
         if let Some(execution) = &record.execution {
             let verification = match &execution.verification {
                 Some(verification) if !verification.launched => "unknown",
@@ -449,6 +508,34 @@ fn runs(limit: usize, print_json: bool) -> Result<()> {
             );
         }
     }
+    Ok(())
+}
+
+fn show_run(run_id: &str) -> Result<()> {
+    let paths = ProjectPaths::discover()?;
+    let record = store::load(&paths.runs)?
+        .into_iter()
+        .find(|r| r.decision.run_id == run_id)
+        .context("run id was not found in local history")?;
+    println!("{}", serde_json::to_string_pretty(&record)?);
+    Ok(())
+}
+
+fn recover_run(run_id: &str) -> Result<()> {
+    let paths = ProjectPaths::discover()?;
+    let _lease = lease::try_acquire(&paths.directory.join("run-leases"), run_id)?
+        .context("run still has an active Jevia supervisor; recovery refused")?;
+    let record = store::record_state(
+        &paths.runs,
+        run_id,
+        RunState::Interrupted,
+        Outcome::Unknown,
+        None,
+    )?;
+    println!("{}", serde_json::to_string_pretty(&record)?);
+    eprintln!(
+        "jevia: marked interrupted; no processes were rerun or stopped. Inspect the workspace and any surviving agent before retrying."
+    );
     Ok(())
 }
 
@@ -554,7 +641,8 @@ fn cache_command(action: CacheAction) -> Result<()> {
 }
 
 fn ensure_local_ignore(path: &std::path::Path) -> Result<()> {
-    const RULES: [&str; 5] = [
+    const RULES: [&str; 6] = [
+        "run-leases/",
         "runs.jsonl",
         "runs.lock",
         "cache.jsonl",
@@ -701,6 +789,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn harness_launch_failure_retains_identity_and_terminal_state() {
+        let directory = tempdir().unwrap();
+        let paths = ProjectPaths::at(directory.path().to_path_buf());
+        let record = sample_record();
+        store::append(&paths.runs, &record).unwrap();
+        let invocation = HarnessInvocation {
+            program: "jevia-nonexistent-lifecycle-harness".to_owned(),
+            args: vec![],
+            model: "provider/test".to_owned(),
+            verification: None,
+        };
+        assert!(
+            execute_harness(&paths, "test", &invocation, &record)
+                .await
+                .is_err()
+        );
+        let record = store::load(&paths.runs).unwrap().remove(0);
+        let life = record.lifecycle.unwrap();
+        assert_eq!(life.state, RunState::LaunchFailed);
+        assert!(life.started_at_ms.is_some());
+        assert!(life.finished_at_ms.is_some());
+        assert_eq!(record.outcome, Outcome::Unknown);
+        assert_eq!(record.execution.unwrap().model, "provider/test");
+    }
+
+    #[tokio::test]
     async fn successful_verification_records_success() {
         let directory = tempdir().expect("temporary directory");
         let paths = ProjectPaths::at(directory.path().to_path_buf());
@@ -827,6 +941,7 @@ mod tests {
             task: Some("test task".to_owned()),
             outcome: Outcome::Unknown,
             execution: None,
+            lifecycle: None,
         }
     }
 }

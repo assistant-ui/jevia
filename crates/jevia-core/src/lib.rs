@@ -10,5 +10,6 @@ pub use config::{
 };
 pub use jev::{JevClient, JevError, route_cache_key};
 pub use route::{
-    DecisionSource, ExecutionEvidence, Outcome, RouteDecision, RouteRecord, VerificationEvidence,
+    DecisionSource, ExecutionEvidence, Outcome, RECORD_SCHEMA_VERSION, RouteDecision, RouteRecord,
+    RunLifecycle, RunState, VerificationEvidence,
 };
