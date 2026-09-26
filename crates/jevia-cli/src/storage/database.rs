@@ -68,16 +68,7 @@ impl Database {
                 let file = fs::canonicalize(file)?;
                 let uri = url::Url::from_file_path(&file)
                     .map_err(|_| anyhow!("invalid SQLite file path"))?;
-                if uri.host_str().is_some() {
-                    bail!("SQLite requires a local disk; network shares are not supported");
-                }
-                // file:///C:/... contains a URL-only leading slash. SQLite
-                // needs the native drive path on Windows, not /C:/....
-                #[cfg(windows)]
-                let filename = uri.path().strip_prefix('/').unwrap_or(uri.path());
-                #[cfg(not(windows))]
-                let filename = uri.path();
-                let url = format!("sqlite://{filename}?mode=rw");
+                let url = sqlite_url(&uri, cfg!(windows))?;
                 (url, "local".to_owned(), Some(file))
             }
             StorageConfig::Postgres {
@@ -461,6 +452,25 @@ fn validate_record(record: &RouteRecord) -> Result<()> {
     Ok(())
 }
 
+fn sqlite_url(uri: &url::Url, windows: bool) -> Result<String> {
+    if uri.host_str().is_some() {
+        bail!("SQLite requires a local disk; network shares are not supported");
+    }
+    let filename = if windows {
+        // SQLx Any first parses a generic URL, then SQLite percent-decodes its
+        // filename. A raw sqlite://C:/... loses ':' as an empty URL port; a
+        // leading /C:/... is not a native drive path. Encode the drive colon
+        // so both parsers preserve the exact same Windows filename.
+        uri.path()
+            .strip_prefix('/')
+            .unwrap_or(uri.path())
+            .replacen(':', "%3A", 1)
+    } else {
+        uri.path().to_owned()
+    };
+    Ok(format!("sqlite://{filename}?mode=rw"))
+}
+
 fn postgres_url(raw: &str, insecure: bool) -> Result<String> {
     let mut url =
         url::Url::parse(raw).map_err(|_| anyhow!("invalid PostgreSQL URL (contents redacted)"))?;
@@ -507,6 +517,36 @@ fn postgres_url(raw: &str, insecure: bool) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sqlite_urls_preserve_windows_drives_through_both_url_parsers() {
+        for (file_url, windows, expected) in [
+            (
+                "file:///C:/Users/Test%20Name/jevia.db",
+                true,
+                "C:/Users/Test Name/jevia.db",
+            ),
+            ("file:///D:/project/100%25.db", true, "D:/project/100%.db"),
+            (
+                "file:///tmp/Test%20Name/jevia.db",
+                false,
+                "/tmp/Test Name/jevia.db",
+            ),
+        ] {
+            let uri = url::Url::parse(file_url).unwrap();
+            let any = AnyConnectOptions::from_str(&sqlite_url(&uri, windows).unwrap()).unwrap();
+            let sqlite =
+                sqlx::sqlite::SqliteConnectOptions::from_str(any.database_url.as_str()).unwrap();
+            assert_eq!(sqlite.get_filename().to_str().unwrap(), expected);
+        }
+        assert!(
+            sqlite_url(
+                &url::Url::parse("file://server/share/jevia.db").unwrap(),
+                true
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn credentials_are_not_exposed_and_tls_cannot_be_downgraded() {
