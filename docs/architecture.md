@@ -128,3 +128,13 @@ running/verifying record interrupted; it never reruns work or infers task failur
 The durable phases are routed, running, verifying, completed, launch_failed, and
 interrupted. Start and finish timestamps are distinct from routing time.
 Manual feedback is refused on active runs and never invents harness metadata.
+
+History maintenance is explicit and preview-first. Apply takes the same exclusive
+history lock, revalidates the complete input, durably saves an exact original-byte
+backup, and then atomically replaces the active file. Archival also saves removed
+records before replacement. Raw record bytes are retained, including additive
+metadata; unknown schemas and duplicate identities are refused. Repair only
+handles a truncated final JSON line without a newline, or a missing final newline
+on otherwise valid history. Active/pending and legacy-unknown records cannot be
+archived. Archives are outside the active learning/feedback history and are never
+deleted automatically. Maintenance still scans the full active history in memory.

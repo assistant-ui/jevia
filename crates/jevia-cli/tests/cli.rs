@@ -99,6 +99,59 @@ fn execution_deadlines_require_explicit_non_interactive_mode() {
 }
 
 #[test]
+fn history_maintenance_previews_before_applying_and_ignores_private_snapshots() {
+    let directory = tempdir().unwrap();
+    Command::cargo_bin("jevia")
+        .unwrap()
+        .current_dir(directory.path())
+        .arg("init")
+        .assert()
+        .success();
+    let state = directory.path().join(".jevia");
+    let original = b"{\"schema_version\":";
+    fs::write(state.join("runs.jsonl"), original).unwrap();
+    let preview = Command::cargo_bin("jevia")
+        .unwrap()
+        .current_dir(directory.path())
+        .args(["runs", "repair", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let preview: serde_json::Value = serde_json::from_slice(&preview).unwrap();
+    assert_eq!(preview["would_change"], true);
+    assert_eq!(preview["applied"], false);
+    assert_eq!(fs::read(state.join("runs.jsonl")).unwrap(), original);
+    assert!(!state.join("history-backups").exists());
+    let applied = Command::cargo_bin("jevia")
+        .unwrap()
+        .current_dir(directory.path())
+        .args(["runs", "repair", "--apply", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let applied: serde_json::Value = serde_json::from_slice(&applied).unwrap();
+    assert_eq!(applied["applied"], true);
+    assert_eq!(
+        fs::read(applied["backup"].as_str().unwrap()).unwrap(),
+        original
+    );
+    assert!(fs::read(state.join("runs.jsonl")).unwrap().is_empty());
+    Command::cargo_bin("jevia")
+        .unwrap()
+        .current_dir(directory.path())
+        .args(["runs", "archive", "--keep", "1", "--json"])
+        .assert()
+        .success();
+    let ignore = fs::read_to_string(state.join(".gitignore")).unwrap();
+    assert!(ignore.lines().any(|line| line == "history-backups/"));
+    assert!(ignore.lines().any(|line| line == "history-archives/"));
+}
+
+#[test]
 fn init_creates_a_valid_project_configuration() {
     let directory = tempdir().expect("temporary directory");
     let mut command = Command::cargo_bin("jevia").expect("binary is built");
