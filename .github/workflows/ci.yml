@@ -15,7 +15,7 @@ concurrency:
 jobs:
   website:
     name: Website checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: website
@@ -44,7 +44,7 @@ jobs:
 
   check:
     name: Rust checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
