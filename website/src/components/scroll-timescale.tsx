@@ -10,16 +10,12 @@ export function ScrollTimescale({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const section = sectionRef.current;
-    const panel = section?.querySelector<HTMLElement>(".quickstart-panel");
     const viewport = section?.querySelector<HTMLElement>(".timescale-viewport");
     const track = section?.querySelector<HTMLElement>(".timescale-track");
-    if (!section || !panel || !viewport || !track) return;
+    if (!section || !viewport || !track) return;
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let distance = 0;
-    let driven = false;
-    let renderedLeft = viewport.scrollLeft;
-    let frame = 0;
 
     const clamp = (value: number) => Math.min(distance, Math.max(0, value));
     const updateControls = () => {
@@ -30,37 +26,13 @@ export function ScrollTimescale({ children }: { children: ReactNode }) {
       );
     };
 
-    const update = () => {
-      frame = 0;
-      if (driven) {
-        renderedLeft = clamp(-section.getBoundingClientRect().top);
-        viewport.scrollLeft = renderedLeft;
-      }
+    const measure = () => {
+      distance = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
       updateControls();
     };
 
-    const scheduleUpdate = () => {
-      if (!frame) frame = window.requestAnimationFrame(update);
-    };
-
-    const measure = () => {
-      distance = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-      driven =
-        !reducedMotion.matches &&
-        distance > 0 &&
-        panel.offsetHeight <= window.innerHeight + 1;
-      section.dataset.scrollDriven = String(driven);
-      section.style.height = driven ? `${panel.offsetHeight + distance}px` : "";
-      scheduleUpdate();
-    };
-
     const moveTo = (left: number) => {
-      renderedLeft = clamp(left);
-      if (driven) {
-        const top = section.getBoundingClientRect().top + window.scrollY;
-        window.scrollTo({ top: top + renderedLeft, behavior: "instant" });
-      }
-      viewport.scrollTo({ left: renderedLeft, behavior: "instant" });
+      viewport.scrollTo({ left: clamp(left), behavior: "instant" });
       updateControls();
     };
 
@@ -80,42 +52,50 @@ export function ScrollTimescale({ children }: { children: ReactNode }) {
       }
     };
 
-    const onHorizontalScroll = () => {
-      updateControls();
-      if (!driven || Math.abs(viewport.scrollLeft - renderedLeft) < 1) return;
-      const bounds = section.getBoundingClientRect();
-      const isPinned = bounds.top <= 1 && bounds.bottom >= window.innerHeight - 1;
-      // Keep touch, horizontal trackpad input, and keyboard focus in sync with the page.
-      if (isPinned || viewport.contains(document.activeElement)) {
-        renderedLeft = viewport.scrollLeft;
-        window.scrollTo({
-          top: bounds.top + window.scrollY + renderedLeft,
-          behavior: "instant",
-        });
+    const onWheel = (event: WheelEvent) => {
+      if (
+        reducedMotion.matches ||
+        event.defaultPrevented ||
+        !event.cancelable ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        Math.abs(event.deltaX) > Math.abs(event.deltaY) ||
+        event.deltaY === 0 ||
+        distance <= 0
+      ) {
+        return;
       }
+
+      const bounds = section.getBoundingClientRect();
+      // Start as soon as the compact section is visible, without moving the page
+      // or adding vertical travel. Short screens keep their normal page scroll.
+      if (bounds.top < -1 || bounds.bottom > window.innerHeight + 1) return;
+
+      const unit =
+        event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+      const left = viewport.scrollLeft;
+      const next = clamp(left + event.deltaY * unit);
+      // Let the browser handle the gesture normally at either end of the track.
+      if (Math.abs(next - left) < 1) return;
+
+      event.preventDefault();
+      moveTo(next);
     };
 
     const observer = new ResizeObserver(measure);
-    observer.observe(panel);
     observer.observe(viewport);
     observer.observe(track);
-    window.addEventListener("scroll", scheduleUpdate, { passive: true });
-    window.addEventListener("resize", measure);
-    viewport.addEventListener("scroll", onHorizontalScroll, { passive: true });
+    window.addEventListener("wheel", onWheel, { passive: false });
+    viewport.addEventListener("scroll", updateControls, { passive: true });
     viewport.addEventListener("keydown", onKeyDown);
-    reducedMotion.addEventListener("change", measure);
     measure();
 
     return () => {
       observer.disconnect();
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", measure);
-      viewport.removeEventListener("scroll", onHorizontalScroll);
+      window.removeEventListener("wheel", onWheel);
+      viewport.removeEventListener("scroll", updateControls);
       viewport.removeEventListener("keydown", onKeyDown);
-      reducedMotion.removeEventListener("change", measure);
-      delete section.dataset.scrollDriven;
-      section.style.height = "";
       moveRef.current = () => {};
     };
   }, []);

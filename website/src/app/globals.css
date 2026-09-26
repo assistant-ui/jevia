@@ -218,16 +218,9 @@ pre {
 
 .quickstart-panel {
   display: flex;
-  min-height: 100svh;
   flex-direction: column;
-  justify-content: flex-start;
-  padding-block: clamp(3rem, 12vh, 6rem);
+  padding-block: 2rem;
   background: var(--background);
-}
-
-.quickstart[data-scroll-driven="true"] .quickstart-panel {
-  position: sticky;
-  top: 0;
 }
 
 .section-heading {
@@ -236,7 +229,7 @@ pre {
   align-items: flex-end;
   justify-content: space-between;
   gap: 2rem;
-  padding: 0 2.5rem 1.5rem;
+  padding: 0 2.5rem 1rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -275,22 +268,34 @@ pre {
 }
 
 .setup-timescale {
-  margin-top: 2.5rem;
+  --timescale-fade: 40px;
+  margin-top: 1.75rem;
 }
 
 .setup-timescale.timescale-root {
-  --timescale-rail: 8px;
+  --timescale-rail: 12px;
 }
 
 .timescale-root.setup-timescale[data-orientation="horizontal"] .timescale-viewport {
   padding-inline: 40px;
-  mask-image: none;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--timescale-fade),
+    black calc(100% - var(--timescale-fade)),
+    transparent
+  );
   touch-action: pan-x pan-y;
+}
+
+.timescale-root.setup-timescale[data-orientation="horizontal"] .timescale-tick {
+  height: 20px;
+  background: var(--muted);
 }
 
 .timescale-root.setup-timescale[data-orientation="horizontal"] .timescale-content {
   margin-top: 0;
-  padding-top: 1.5rem;
+  padding-top: 2rem;
 }
 
 .timescale-intro-scroll {
@@ -612,16 +617,13 @@ pre {
     font-size: 1.75rem;
   }
 
-  .quickstart-panel {
-    padding-block: 2rem;
-  }
-
   .section-heading {
     align-items: flex-start;
     padding-inline: 1.25rem;
   }
 
   .timescale-root.setup-timescale[data-orientation="horizontal"] .timescale-viewport {
+    --timescale-fade: 20px;
     padding-inline: 20px;
   }
 
@@ -641,10 +643,6 @@ pre {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .quickstart-panel {
-    min-height: auto;
-  }
-
   *,
   *::before,
   *::after {
