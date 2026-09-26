@@ -277,6 +277,7 @@ impl HarnessConfig {
         Ok(HarnessInvocation {
             program: self.command.clone(),
             args,
+            model: model.clone(),
         })
     }
 }
@@ -340,6 +341,8 @@ fn render_argument(
 pub struct HarnessInvocation {
     pub program: String,
     pub args: Vec<String>,
+    /// Concrete model selected for this harness execution.
+    pub model: String,
 }
 
 #[derive(Debug, Error)]
@@ -443,6 +446,7 @@ mod tests {
             .expect("invocation renders");
 
         assert_eq!(invocation.program, "agent");
+        assert_eq!(invocation.model, "provider/model");
         assert_eq!(
             invocation.args,
             [

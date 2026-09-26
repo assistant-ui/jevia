@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use jevia_core::{Outcome, RouteRecord};
+use jevia_core::{ExecutionEvidence, Outcome, RouteRecord};
 use tempfile::NamedTempFile;
 
 pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
@@ -64,12 +64,32 @@ pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
 }
 
 pub fn update_outcome(path: &Path, run_id: &str, outcome: Outcome) -> Result<RouteRecord> {
+    update(path, run_id, |record| record.outcome = outcome)
+}
+
+pub fn record_execution(
+    path: &Path,
+    run_id: &str,
+    outcome: Outcome,
+    execution: ExecutionEvidence,
+) -> Result<RouteRecord> {
+    update(path, run_id, |record| {
+        record.outcome = outcome;
+        record.execution = Some(execution);
+    })
+}
+
+fn update(
+    path: &Path,
+    run_id: &str,
+    update_record: impl FnOnce(&mut RouteRecord),
+) -> Result<RouteRecord> {
     let mut records = load(path)?;
     let updated = records
         .iter_mut()
         .find(|record| record.decision.run_id == run_id)
         .context("run id was not found in local history")?;
-    updated.outcome = outcome;
+    update_record(updated);
     let result = updated.clone();
 
     let parent = path
@@ -140,6 +160,25 @@ mod tests {
         );
     }
 
+    #[test]
+    fn records_execution_evidence_with_the_outcome() {
+        let directory = tempdir().expect("temporary directory");
+        let path = directory.path().join("runs.jsonl");
+        append(&path, &sample_record()).expect("record appends");
+        let execution = ExecutionEvidence {
+            harness: "agent".to_owned(),
+            model: "provider/model".to_owned(),
+            duration_ms: 42,
+            exit_code: Some(0),
+        };
+
+        let updated = record_execution(&path, "run-1", Outcome::Success, execution.clone())
+            .expect("execution updates");
+
+        assert_eq!(updated.outcome, Outcome::Success);
+        assert_eq!(updated.execution, Some(execution));
+    }
+
     fn sample_record() -> RouteRecord {
         RouteRecord {
             schema_version: 1,
@@ -155,6 +194,7 @@ mod tests {
             },
             task: Some("test task".to_owned()),
             outcome: Outcome::Unknown,
+            execution: None,
         }
     }
 }

@@ -9,4 +9,4 @@ pub use config::{
     TierConfig,
 };
 pub use jev::{JevClient, JevError};
-pub use route::{Outcome, RouteDecision, RouteRecord};
+pub use route::{ExecutionEvidence, Outcome, RouteDecision, RouteRecord};
