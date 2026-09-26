@@ -23,7 +23,7 @@ test("includes the complete installation and verification sequence", () => {
   assert.ok(guide.startsWith("# Install and verify Jevia\n"));
   assert.match(guide, /prebuilt binary/);
   assert.match(guide, /does not require Rust or Cargo/);
-  assert.match(guide, /releases\/tag\/v0\.1\.0/);
+  assert.match(guide, /releases\/tag\/v0\.1\.1/);
   assert.match(guide, /SHA-256 checksum/);
   const steps = [
     "curl --version",
