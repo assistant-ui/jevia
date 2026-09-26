@@ -8,7 +8,7 @@ task
   -> typed Jev choice over stable capability tiers
   -> local confidence policy
   -> route decision
-  -> harness adapter (future milestone)
+  -> configured harness adapter
   -> observed outcome
   -> local outcome history
 ```
@@ -29,10 +29,12 @@ moves or publishes it.
 
 ### Harness adapters
 
-Adapters will translate a selected capability tier into a harness-specific
-model and reasoning setting. Tier definitions remain stable when individual
-model catalogs change. Adapters are intentionally not part of the first
-milestone so the routing and persistence contracts can be reviewed first.
+Adapters translate a selected capability tier into a harness-specific model
+and argument list. Tier definitions remain stable when individual model
+catalogs change. Templates are rendered into a process and argument vector;
+they are never passed through a shell. Jevia launches the child in the project
+root, mirrors its exit code, and records success or failure from the resulting
+process status.
 
 ### Managed services
 
@@ -48,6 +50,9 @@ repository and security boundary; no dashboard code belongs here.
 - API credentials are read from the process environment and never persisted.
 - Every persisted record carries a schema version.
 - Only completed outcomes are supplied as evidence to later decisions.
+- Harness templates must map every configured tier to a model.
+- Harness arguments are executed directly without shell interpolation.
+- A harness that cannot start leaves its routing outcome unknown.
 
 ## Persistence
 

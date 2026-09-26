@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use jevia_core::{Outcome, RouteRecord};
+use tempfile::NamedTempFile;
 
 pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
     let file = match File::open(path) {
@@ -50,7 +51,7 @@ pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
         .parent()
         .context("run history path does not have a parent directory")?;
     fs::create_dir_all(parent).with_context(|| format!("could not create {}", parent.display()))?;
-    let file = private_file_options(true)
+    let file = private_append_options()
         .open(path)
         .with_context(|| format!("could not open {} for writing", path.display()))?;
     let mut writer = BufWriter::new(file);
@@ -71,38 +72,38 @@ pub fn update_outcome(path: &Path, run_id: &str, outcome: Outcome) -> Result<Rou
     updated.outcome = outcome;
     let result = updated.clone();
 
-    let temporary = path.with_extension("jsonl.tmp");
-    let file = private_file_options(false)
-        .open(&temporary)
-        .with_context(|| format!("could not create {}", temporary.display()))?;
-    let mut writer = BufWriter::new(file);
-    for record in &records {
-        serde_json::to_writer(&mut writer, record).context("could not encode run record")?;
+    let parent = path
+        .parent()
+        .context("run history path does not have a parent directory")?;
+    let mut temporary = NamedTempFile::new_in(parent)
+        .with_context(|| format!("could not create a temporary file in {}", parent.display()))?;
+    {
+        let mut writer = BufWriter::new(temporary.as_file_mut());
+        for record in &records {
+            serde_json::to_writer(&mut writer, record).context("could not encode run record")?;
+            writer
+                .write_all(b"\n")
+                .context("could not terminate run record")?;
+        }
         writer
-            .write_all(b"\n")
-            .context("could not terminate run record")?;
+            .flush()
+            .context("could not flush updated run history")?;
     }
-    writer
-        .flush()
-        .context("could not flush updated run history")?;
-    writer
-        .get_ref()
+    temporary
+        .as_file()
         .sync_all()
         .context("could not sync updated run history")?;
-    fs::rename(&temporary, path)
-        .with_context(|| format!("could not replace {}", path.display()))?;
+    temporary
+        .persist(path)
+        .map_err(|error| error.error)
+        .with_context(|| format!("could not atomically replace {}", path.display()))?;
 
     Ok(result)
 }
 
-fn private_file_options(append: bool) -> OpenOptions {
+fn private_append_options() -> OpenOptions {
     let mut options = OpenOptions::new();
-    options.create(true).write(true);
-    if append {
-        options.append(true);
-    } else {
-        options.truncate(true);
-    }
+    options.create(true).append(true);
 
     #[cfg(unix)]
     {

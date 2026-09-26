@@ -5,7 +5,8 @@ use std::{env, fs, io::Write, process::ExitCode, str::FromStr};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
-use jevia_core::{Config, JevClient, Outcome, RouteRecord};
+use jevia_core::{Config, HarnessInvocation, JevClient, Outcome, RouteRecord};
+use tokio::process::Command as ChildCommand;
 
 use crate::paths::ProjectPaths;
 
@@ -35,6 +36,16 @@ enum Command {
         /// Print the complete record as JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// Route a task and launch a configured coding-agent harness.
+    Run {
+        /// Harness name from the `[harnesses]` configuration.
+        harness: String,
+        /// Task passed to the harness argument template.
+        task: String,
+        /// Additional arguments appended after the configured template.
+        #[arg(last = true)]
+        args: Vec<String>,
     },
     /// Show recent local routing records.
     Runs {
@@ -80,7 +91,7 @@ impl From<OutcomeArgument> for Outcome {
 #[tokio::main]
 async fn main() -> ExitCode {
     match run().await {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(exit_code) => exit_code,
         Err(error) => {
             eprintln!("error: {error:#}");
             ExitCode::FAILURE
@@ -88,18 +99,38 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn run() -> Result<()> {
+async fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Init { force } => init(force),
-        Command::Route { task, json } => route(&task, json).await,
-        Command::Runs { limit, json } => runs(limit, json),
+        Command::Init { force } => {
+            init(force)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Route { task, json } => {
+            route(&task, json).await?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Run {
+            harness,
+            task,
+            args,
+        } => run_harness(&harness, &task, &args).await,
+        Command::Runs { limit, json } => {
+            runs(limit, json)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Feedback {
             run_id,
             outcome,
             json,
-        } => feedback(&run_id, outcome.into(), json),
-        Command::Doctor => doctor(),
+        } => {
+            feedback(&run_id, outcome.into(), json)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Doctor => {
+            doctor()?;
+            Ok(ExitCode::SUCCESS)
+        }
     }
 }
 
@@ -132,13 +163,7 @@ fn init(force: bool) -> Result<()> {
 async fn route(task: &str, print_json: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
-    let history = store::load(&paths.runs)?;
-    let api_key = env::var("TYPESAFE_API_KEY")
-        .context("TYPESAFE_API_KEY is not set; Jevia never stores this key in config")?;
-    let client = JevClient::new(api_key, &config.jev)?;
-    let decision = client.route(task, &config, &history).await?;
-    let stored_task = config.privacy.store_task_text.then(|| task.to_owned());
-    let record = RouteRecord::new(decision, stored_task);
+    let record = routed_record(task, &config, &paths).await?;
     store::append(&paths.runs, &record)?;
 
     if print_json {
@@ -147,6 +172,84 @@ async fn route(task: &str, print_json: bool) -> Result<()> {
         print_record(&record);
     }
     Ok(())
+}
+
+async fn run_harness(harness_name: &str, task: &str, extra_args: &[String]) -> Result<ExitCode> {
+    let paths = ProjectPaths::discover()?;
+    let config = load_config(&paths)?;
+    let harness = config.harnesses.get(harness_name).with_context(|| {
+        let available = config
+            .harnesses
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "harness `{harness_name}` is not configured; available harnesses: {}",
+            if available.is_empty() {
+                "none"
+            } else {
+                &available
+            }
+        )
+    })?;
+    let record = routed_record(task, &config, &paths).await?;
+    let invocation = harness.invocation(
+        harness_name,
+        &record.decision.tier,
+        task,
+        &record.decision.run_id,
+        extra_args,
+    )?;
+    store::append(&paths.runs, &record)?;
+
+    execute_harness(&paths, harness_name, &invocation, &record).await
+}
+
+async fn execute_harness(
+    paths: &ProjectPaths,
+    harness_name: &str,
+    invocation: &HarnessInvocation,
+    record: &RouteRecord,
+) -> Result<ExitCode> {
+    eprintln!(
+        "jevia: run={} tier={} suggested={} confidence={:.2} fallback={}",
+        record.decision.run_id,
+        record.decision.tier,
+        record.decision.suggested_tier,
+        record.decision.confidence,
+        record.decision.fallback_applied
+    );
+    eprintln!("jevia: launching harness `{harness_name}`");
+
+    let status = ChildCommand::new(&invocation.program)
+        .args(&invocation.args)
+        .current_dir(&paths.root)
+        .status()
+        .await
+        .with_context(|| format!("could not launch harness `{harness_name}`"))?;
+    let outcome = if status.success() {
+        Outcome::Success
+    } else {
+        Outcome::Failure
+    };
+    store::update_outcome(&paths.runs, &record.decision.run_id, outcome)?;
+    eprintln!("jevia: outcome={outcome}");
+
+    Ok(status
+        .code()
+        .and_then(|code| u8::try_from(code).ok())
+        .map_or(ExitCode::FAILURE, ExitCode::from))
+}
+
+async fn routed_record(task: &str, config: &Config, paths: &ProjectPaths) -> Result<RouteRecord> {
+    let history = store::load(&paths.runs)?;
+    let api_key = env::var("TYPESAFE_API_KEY")
+        .context("TYPESAFE_API_KEY is not set; Jevia never stores this key in config")?;
+    let client = JevClient::new(api_key, &config.jev)?;
+    let decision = client.route(task, config, &history).await?;
+    let stored_task = config.privacy.store_task_text.then(|| task.to_owned());
+    Ok(RouteRecord::new(decision, stored_task))
 }
 
 fn runs(limit: usize, print_json: bool) -> Result<()> {
@@ -191,6 +294,7 @@ fn doctor() -> Result<()> {
     let config = load_config(&paths)?;
     println!("config: ok ({})", paths.config.display());
     println!("tiers: ok ({})", config.tiers.len());
+    println!("harnesses: ok ({})", config.harnesses.len());
     println!("local store: {}", paths.runs.display());
 
     match env::var("TYPESAFE_API_KEY") {
@@ -217,4 +321,72 @@ fn print_record(record: &RouteRecord) {
     println!("fallback:   {}", record.decision.fallback_applied);
     println!("jev model:  {}", record.decision.jev_model);
     let _ = std::io::stdout().flush();
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use jevia_core::{HarnessInvocation, RouteDecision};
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn successful_harness_process_records_success() {
+        let directory = tempdir().expect("temporary directory");
+        let paths = ProjectPaths::at(directory.path().to_path_buf());
+        fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
+        let record = sample_record();
+        store::append(&paths.runs, &record).expect("record is appended");
+        let invocation = HarnessInvocation {
+            program: "rustc".to_owned(),
+            args: vec!["--version".to_owned()],
+        };
+
+        execute_harness(&paths, "test", &invocation, &record)
+            .await
+            .expect("harness succeeds");
+
+        let records = store::load(&paths.runs).expect("records load");
+        assert_eq!(records[0].outcome, Outcome::Success);
+    }
+
+    #[tokio::test]
+    async fn failed_harness_process_records_failure() {
+        let directory = tempdir().expect("temporary directory");
+        let paths = ProjectPaths::at(directory.path().to_path_buf());
+        fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
+        let record = sample_record();
+        store::append(&paths.runs, &record).expect("record is appended");
+        let invocation = HarnessInvocation {
+            program: "rustc".to_owned(),
+            args: vec!["--definitely-not-a-real-rustc-option".to_owned()],
+        };
+
+        execute_harness(&paths, "test", &invocation, &record)
+            .await
+            .expect("process failure is a recorded outcome, not a Jevia error");
+
+        let records = store::load(&paths.runs).expect("records load");
+        assert_eq!(records[0].outcome, Outcome::Failure);
+    }
+
+    fn sample_record() -> RouteRecord {
+        RouteRecord {
+            schema_version: 1,
+            decision: RouteDecision {
+                run_id: "run-1".to_owned(),
+                tier: "balanced".to_owned(),
+                suggested_tier: "balanced".to_owned(),
+                confidence: 0.8,
+                probabilities: BTreeMap::new(),
+                fallback_applied: false,
+                jev_model: "jev-test".to_owned(),
+                created_at_ms: 1,
+            },
+            task: Some("test task".to_owned()),
+            outcome: Outcome::Unknown,
+        }
+    }
 }

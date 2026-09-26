@@ -44,3 +44,27 @@ fn init_does_not_overwrite_configuration_without_force() {
         .assert()
         .failure();
 }
+
+#[test]
+fn run_reports_when_a_harness_is_not_configured() {
+    let directory = tempdir().expect("temporary directory");
+    let mut init = Command::cargo_bin("jevia").expect("binary is built");
+    init.current_dir(directory.path())
+        .arg("init")
+        .assert()
+        .success();
+
+    let mut run = Command::cargo_bin("jevia").expect("binary is built");
+    let output = run
+        .current_dir(directory.path())
+        .args(["run", "missing", "test task"])
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    let error = String::from_utf8(output).expect("stderr is UTF-8");
+
+    assert!(error.contains("harness `missing` is not configured"));
+    assert!(error.contains("available harnesses: none"));
+}

@@ -4,9 +4,9 @@ Jevia is an outcome-aware model router for coding agents. It asks Jev for a
 typed routing decision, applies a deterministic safety policy, and records the
 eventual result so later decisions can use evidence from earlier runs.
 
-> Jevia is experimental. The first milestone establishes the CLI, routing
-> contract, local outcome store, and Jev integration. Harness adapters and the
-> managed control plane are intentionally separate follow-up milestones.
+> Jevia is experimental. The current milestones establish the CLI, routing
+> contract, local outcome store, Jev integration, and generic harness
+> execution. The managed control plane remains separate.
 
 ## Why Jevia
 
@@ -51,11 +51,49 @@ jevia runs --json
 | --- | --- |
 | `jevia init` | Create `.jevia/config.toml` and local store rules. |
 | `jevia route <task>` | Ask Jev for a tier and record the decision. |
+| <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch a configured harness, and record its exit outcome. |
 | `jevia runs` | Inspect recent local routing records. |
 | `jevia feedback <id> <outcome>` | Mark a run as `success`, `failure`, or `unknown`. |
 | `jevia doctor` | Validate configuration, credentials, and local storage. |
 
 Run `jevia <command> --help` for command-specific options.
+
+## Harness adapters
+
+Harness adapters are shell-free process templates. Add a harness to
+<code>.jevia/config.toml</code> and map every capability tier to a concrete
+model:
+
+~~~toml
+[harnesses.agent]
+command = "my-agent"
+args = ["run", "--model", "{model}", "{task}"]
+
+[harnesses.agent.models]
+fast = "provider/small"
+balanced = "provider/standard"
+strong = "provider/frontier"
+~~~
+
+Then route and run a task through that adapter:
+
+~~~bash
+jevia run agent "investigate the failing integration test"
+~~~
+
+Extra harness arguments must follow <code>--</code> and are appended without
+shell interpretation:
+
+~~~bash
+jevia run agent "update the parser" -- --verbose
+~~~
+
+Templates support <code>{task}</code>, <code>{model}</code>,
+<code>{tier}</code>, and <code>{run_id}</code>. Jevia requires the task and
+model placeholders, rejects unknown placeholders, launches the configured
+executable directly, and mirrors its exit code. A zero exit records success; a
+non-zero exit records failure. If the process cannot start, the run remains
+unknown so an environment problem does not incorrectly train the router.
 
 ## Local data
 
