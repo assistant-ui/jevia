@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 import { CommandBlock } from "../components/command-block";
 import {
@@ -54,21 +54,6 @@ const SETUP_STEPS = [
   },
 ];
 
-const FOOTER_DETAILS = [
-  { label: "Runtime", value: "Rust" },
-  { label: "Router", value: "Jev" },
-  { label: "Mode", value: "Local-first" },
-  { label: "Cache", value: "Exact + bounded" },
-  { label: "Source code", value: "GitHub", href: "https://github.com/assistant-ui/jevia" },
-  {
-    label: "License",
-    value: "MIT License",
-    href: "https://github.com/assistant-ui/jevia/blob/main/LICENSE",
-  },
-  { label: "Typeface", value: "Geist" },
-  { label: "Interface", value: "Farm.js + React" },
-];
-
 export default function HomePage() {
   return (
     <main className="site-shell">
@@ -90,14 +75,10 @@ export default function HomePage() {
       </header>
 
       <section id="top" className="hero page-frame" aria-labelledby="hero-title">
-        <p className="eyebrow">Local-first / outcome-aware / Rust</p>
-        <h1 id="hero-title">
-          Route the task.
-          <span>Learn from the result.</span>
-        </h1>
+        <h1 id="hero-title">Model routing that learns.</h1>
         <p className="hero-description">
-          Jevia picks a model tier, records the verified outcome, and makes the next route
-          with better evidence.
+          Jevia routes your task to a model tier and uses verified outcomes to improve
+          future decisions.
         </p>
 
         <div className="hero-command">
@@ -106,19 +87,11 @@ export default function HomePage() {
             command="cargo install --git https://github.com/assistant-ui/jevia jevia"
           />
         </div>
-
-        <a className="text-link" href="#quickstart">
-          View the setup path
-          <ArrowRight size={14} strokeWidth={1.7} aria-hidden="true" />
-        </a>
       </section>
 
       <section id="quickstart" className="quickstart page-frame" aria-labelledby="setup-title">
         <header className="section-heading">
-          <div>
-            <p className="section-index">Quickstart / 01—05</p>
-            <h2 id="setup-title">From install to first route.</h2>
-          </div>
+          <h2 id="setup-title">Get started</h2>
           <p className="scroll-hint" aria-hidden="true">
             Scroll horizontally <span>→</span>
           </p>
@@ -158,51 +131,6 @@ export default function HomePage() {
         <div className="footer-intro">
           <strong>jevia</strong>
           <p>Outcome-aware model routing for coding agents and local harnesses.</p>
-        </div>
-
-        <dl className="footer-grid">
-          {FOOTER_DETAILS.map((detail) => (
-            <div className="footer-cell" key={detail.label}>
-              <dt>{detail.label}</dt>
-              <dd>
-                {detail.href ? (
-                  <a href={detail.href} target="_blank" rel="noreferrer">
-                    {detail.value}
-                  </a>
-                ) : (
-                  detail.value
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
-
-        <div className="footer-built-for">
-          <span>Built for</span>
-          <ol>
-            <li>
-              <span>01</span> Coding agents
-            </li>
-            <li>
-              <span>02</span> CLI harnesses
-            </li>
-            <li>
-              <span>03</span> Local workflows
-            </li>
-            <li>
-              <span>04</span> Verifiable routing
-            </li>
-          </ol>
-        </div>
-
-        <div className="footer-bottom">
-          <span className="wordmark-mark" aria-hidden="true">
-            J
-          </span>
-          <span>Jevia · Open source</span>
-          <a href="https://github.com/assistant-ui/jevia" target="_blank" rel="noreferrer">
-            Source
-          </a>
         </div>
       </footer>
     </main>
