@@ -1,3 +1,4 @@
+mod cache;
 mod paths;
 mod store;
 
@@ -7,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use jevia_core::{
     Config, ExecutionEvidence, HarnessInvocation, JevClient, Outcome, RouteRecord,
-    VerificationEvidence,
+    VerificationEvidence, route_cache_key,
 };
 use tokio::process::Command as ChildCommand;
 
@@ -39,6 +40,9 @@ enum Command {
         /// Print the complete record as JSON.
         #[arg(long)]
         json: bool,
+        /// Bypass the local routing-decision cache.
+        #[arg(long)]
+        no_cache: bool,
     },
     /// Route a task and launch a configured coding-agent harness.
     Run {
@@ -46,6 +50,9 @@ enum Command {
         harness: String,
         /// Task passed to the harness argument template.
         task: String,
+        /// Bypass the local routing-decision cache.
+        #[arg(long)]
+        no_cache: bool,
         /// Additional arguments appended after the configured template.
         #[arg(last = true)]
         args: Vec<String>,
@@ -71,6 +78,19 @@ enum Command {
     },
     /// Validate the local installation without making an API request.
     Doctor,
+    /// Inspect or clear the local routing-decision cache.
+    Cache {
+        #[command(subcommand)]
+        action: CacheAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum CacheAction {
+    /// Show cache configuration and entry counts.
+    Status,
+    /// Remove all cached routing decisions.
+    Clear,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -109,15 +129,20 @@ async fn run() -> Result<ExitCode> {
             init(force)?;
             Ok(ExitCode::SUCCESS)
         }
-        Command::Route { task, json } => {
-            route(&task, json).await?;
+        Command::Route {
+            task,
+            json,
+            no_cache,
+        } => {
+            route(&task, json, no_cache).await?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Run {
             harness,
             task,
             args,
-        } => run_harness(&harness, &task, &args).await,
+            no_cache,
+        } => run_harness(&harness, &task, &args, no_cache).await,
         Command::Runs { limit, json } => {
             runs(limit, json)?;
             Ok(ExitCode::SUCCESS)
@@ -132,6 +157,10 @@ async fn run() -> Result<ExitCode> {
         }
         Command::Doctor => {
             doctor()?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Cache { action } => {
+            cache_command(action)?;
             Ok(ExitCode::SUCCESS)
         }
     }
@@ -152,21 +181,17 @@ fn init(force: bool) -> Result<()> {
     fs::write(&paths.config, config)
         .with_context(|| format!("could not write {}", paths.config.display()))?;
 
-    let ignore = paths.directory.join(".gitignore");
-    if !ignore.exists() {
-        fs::write(&ignore, "runs.jsonl\nruns.lock\n*.tmp\n")
-            .with_context(|| format!("could not write {}", ignore.display()))?;
-    }
+    ensure_local_ignore(&paths.directory.join(".gitignore"))?;
 
     println!("Initialized Jevia in {}", paths.root.display());
     println!("Config: {}", paths.config.display());
     Ok(())
 }
 
-async fn route(task: &str, print_json: bool) -> Result<()> {
+async fn route(task: &str, print_json: bool, no_cache: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
-    let record = routed_record(task, &config, &paths).await?;
+    let record = routed_record(task, None, no_cache, &config, &paths).await?;
     store::append(&paths.runs, &record)?;
 
     if print_json {
@@ -177,7 +202,12 @@ async fn route(task: &str, print_json: bool) -> Result<()> {
     Ok(())
 }
 
-async fn run_harness(harness_name: &str, task: &str, extra_args: &[String]) -> Result<ExitCode> {
+async fn run_harness(
+    harness_name: &str,
+    task: &str,
+    extra_args: &[String],
+    no_cache: bool,
+) -> Result<ExitCode> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
     let harness = config.harnesses.get(harness_name).with_context(|| {
@@ -196,7 +226,7 @@ async fn run_harness(harness_name: &str, task: &str, extra_args: &[String]) -> R
             }
         )
     })?;
-    let record = routed_record(task, &config, &paths).await?;
+    let record = routed_record(task, Some(harness_name), no_cache, &config, &paths).await?;
     let invocation = harness.invocation(
         harness_name,
         &record.decision.tier,
@@ -319,12 +349,52 @@ fn child_exit_code(status: &std::process::ExitStatus) -> ExitCode {
         .map_or(ExitCode::FAILURE, ExitCode::from)
 }
 
-async fn routed_record(task: &str, config: &Config, paths: &ProjectPaths) -> Result<RouteRecord> {
+async fn routed_record(
+    task: &str,
+    harness_name: Option<&str>,
+    no_cache: bool,
+    config: &Config,
+    paths: &ProjectPaths,
+) -> Result<RouteRecord> {
     let history = store::load(&paths.runs)?;
+    let cache_key = if config.cache.enabled && !no_cache {
+        match route_cache_key(task, harness_name, config, &history) {
+            Ok(key) => match cache::lookup(&paths.cache, &key) {
+                Ok(Some(decision)) => {
+                    eprintln!("jevia: routing cache hit");
+                    let stored_task = config.privacy.store_task_text.then(|| task.to_owned());
+                    return Ok(RouteRecord::new(decision.for_cache_hit(), stored_task));
+                }
+                Ok(None) => Some(key),
+                Err(error) => {
+                    eprintln!("jevia: routing cache unavailable: {error:#}");
+                    None
+                }
+            },
+            Err(error) => {
+                eprintln!("jevia: routing cache key unavailable: {error:#}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let api_key = env::var("TYPESAFE_API_KEY")
         .context("TYPESAFE_API_KEY is not set; Jevia never stores this key in config")?;
     let client = JevClient::new(api_key, &config.jev)?;
     let decision = client.route(task, config, &history).await?;
+    if let Some(key) = cache_key
+        && let Err(error) = cache::insert(
+            &paths.cache,
+            key,
+            decision.clone(),
+            config.cache.ttl_seconds,
+            config.cache.max_entries,
+        )
+    {
+        eprintln!("jevia: could not update routing cache: {error:#}");
+    }
     let stored_task = config.privacy.store_task_text.then(|| task.to_owned());
     Ok(RouteRecord::new(decision, stored_task))
 }
@@ -352,10 +422,11 @@ fn runs(limit: usize, print_json: bool) -> Result<()> {
                 None => "none",
             };
             println!(
-                "{}  tier={}  model={}  confidence={:.2}  outcome={}  verification={}  duration={}ms",
+                "{}  tier={}  model={}  source={}  confidence={:.2}  outcome={}  verification={}  duration={}ms",
                 record.decision.run_id,
                 record.decision.tier,
                 execution.model,
+                record.decision.source,
                 record.decision.confidence,
                 record.outcome,
                 verification,
@@ -363,9 +434,10 @@ fn runs(limit: usize, print_json: bool) -> Result<()> {
             );
         } else {
             println!(
-                "{}  tier={}  confidence={:.2}  outcome={}",
+                "{}  tier={}  source={}  confidence={:.2}  outcome={}",
                 record.decision.run_id,
                 record.decision.tier,
+                record.decision.source,
                 record.decision.confidence,
                 record.outcome
             );
@@ -389,6 +461,8 @@ fn doctor() -> Result<()> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
     let history = store::load(&paths.runs)?;
+    let cache_stats = cache::stats(&paths.cache)
+        .context("routing cache is invalid; run `jevia cache clear` to reset it")?;
     println!("config: ok ({})", paths.config.display());
     println!("tiers: ok ({})", config.tiers.len());
     println!("harnesses: ok ({})", config.harnesses.len());
@@ -397,6 +471,13 @@ fn doctor() -> Result<()> {
         history.len(),
         paths.runs.display()
     );
+    println!(
+        "routing cache: ok ({} total, {} active, {} expired at {})",
+        cache_stats.total,
+        cache_stats.active,
+        cache_stats.expired,
+        paths.cache.display()
+    );
 
     match env::var("TYPESAFE_API_KEY") {
         Ok(value) if !value.trim().is_empty() => println!("TYPESAFE_API_KEY: set"),
@@ -404,6 +485,64 @@ fn doctor() -> Result<()> {
             println!("TYPESAFE_API_KEY: missing");
             bail!("doctor found a missing required credential")
         }
+    }
+    Ok(())
+}
+
+fn cache_command(action: CacheAction) -> Result<()> {
+    let paths = ProjectPaths::discover()?;
+    match action {
+        CacheAction::Status => {
+            let config = load_config(&paths)?;
+            let stats = cache::stats(&paths.cache)?;
+            println!("enabled:     {}", config.cache.enabled);
+            println!("ttl:         {}s", config.cache.ttl_seconds);
+            println!("max entries: {}", config.cache.max_entries);
+            println!("total:       {}", stats.total);
+            println!("active:      {}", stats.active);
+            println!("expired:     {}", stats.expired);
+            println!("path:        {}", paths.cache.display());
+        }
+        CacheAction::Clear => {
+            if cache::clear(&paths.cache)? {
+                println!("Cleared routing cache at {}", paths.cache.display());
+            } else {
+                println!("Routing cache is already empty.");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn ensure_local_ignore(path: &std::path::Path) -> Result<()> {
+    const RULES: [&str; 5] = [
+        "runs.jsonl",
+        "runs.lock",
+        "cache.jsonl",
+        "cache.lock",
+        "*.tmp",
+    ];
+
+    let mut contents = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => {
+            return Err(error).with_context(|| format!("could not read {}", path.display()));
+        }
+    };
+    let mut changed = false;
+    for rule in RULES {
+        if !contents.lines().any(|line| line == rule) {
+            if !contents.is_empty() && !contents.ends_with('\n') {
+                contents.push('\n');
+            }
+            contents.push_str(rule);
+            contents.push('\n');
+            changed = true;
+        }
+    }
+    if changed {
+        fs::write(path, contents).with_context(|| format!("could not write {}", path.display()))?;
     }
     Ok(())
 }
@@ -421,6 +560,7 @@ fn print_record(record: &RouteRecord) {
     println!("confidence: {:.2}", record.decision.confidence);
     println!("fallback:   {}", record.decision.fallback_applied);
     println!("jev model:  {}", record.decision.jev_model);
+    println!("source:     {}", record.decision.source);
     let _ = std::io::stdout().flush();
 }
 
@@ -432,6 +572,32 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[tokio::test]
+    async fn routing_cache_hit_needs_no_live_request() {
+        let directory = tempdir().expect("temporary directory");
+        let paths = ProjectPaths::at(directory.path().to_path_buf());
+        fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
+        let config = Config::default();
+        let cached = sample_record().decision;
+        let key = route_cache_key("test task", None, &config, &[]).expect("cache key is created");
+        cache::insert(
+            &paths.cache,
+            key,
+            cached.clone(),
+            config.cache.ttl_seconds,
+            config.cache.max_entries,
+        )
+        .expect("decision is cached");
+
+        let record = routed_record("test task", None, false, &config, &paths)
+            .await
+            .expect("cached routing succeeds");
+
+        assert_eq!(record.decision.source, jevia_core::DecisionSource::Cache);
+        assert_eq!(record.decision.tier, cached.tier);
+        assert_ne!(record.decision.run_id, cached.run_id);
+    }
 
     #[tokio::test]
     async fn successful_harness_process_records_success() {
@@ -617,6 +783,7 @@ mod tests {
                 fallback_applied: false,
                 jev_model: "jev-test".to_owned(),
                 created_at_ms: 1,
+                source: jevia_core::DecisionSource::Live,
             },
             task: Some("test task".to_owned()),
             outcome: Outcome::Unknown,

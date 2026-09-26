@@ -5,8 +5,10 @@ mod jev;
 mod route;
 
 pub use config::{
-    Config, ConfigError, HarnessConfig, HarnessInvocation, JevConfig, PrivacyConfig, RouterConfig,
-    TierConfig, VerificationConfig, VerificationInvocation,
+    CacheConfig, Config, ConfigError, HarnessConfig, HarnessInvocation, JevConfig, PrivacyConfig,
+    RouterConfig, TierConfig, VerificationConfig, VerificationInvocation,
 };
-pub use jev::{JevClient, JevError};
-pub use route::{ExecutionEvidence, Outcome, RouteDecision, RouteRecord, VerificationEvidence};
+pub use jev::{JevClient, JevError, route_cache_key};
+pub use route::{
+    DecisionSource, ExecutionEvidence, Outcome, RouteDecision, RouteRecord, VerificationEvidence,
+};

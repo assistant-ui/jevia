@@ -13,6 +13,11 @@ timeout_ms = 10000
 [privacy]
 store_task_text = true
 
+[cache]
+enabled = true
+ttl_seconds = 900
+max_entries = 256
+
 [tiers.fast]
 description = "Routine, mechanical, or narrowly scoped work with low ambiguity"
 

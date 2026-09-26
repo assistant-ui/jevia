@@ -5,7 +5,8 @@ Jevia separates semantic judgment from deterministic policy and execution.
 ```text
 task
   -> local configuration and recent outcomes
-  -> typed Jev choice over stable capability tiers
+  -> routing-input fingerprint and local cache lookup
+  -> cached decision or typed Jev choice on a cache miss
   -> local confidence policy
   -> route decision
   -> configured harness adapter
@@ -38,6 +39,19 @@ root and mirrors its exit code. An optional shell-free verification process can
 make the final outcome depend on project checks instead of trusting a
 successful harness exit alone.
 
+### Routing cache
+
+The CLI owns a bounded local cache of Jev decision signals. The core crate owns
+the canonical SHA-256 key contract so every input that can affect a decision is
+fingerprinted consistently: task, endpoint, model, policy, tiers, harness
+mapping, and the completed evidence included in the request. Raw task text is
+not persisted in the cache.
+
+Cache hits reuse only the decision signal. Each hit receives a new run ID,
+timestamp, and `source=cache` marker before it becomes a run record. Cache
+read/write failures fail open to a live request; API errors are not inserted.
+Expired entries are never used as an offline fallback.
+
 ### Managed services
 
 Managed classification, synchronization, and analytics will use explicit API
@@ -58,7 +72,11 @@ repository and security boundary; no dashboard code belongs here.
 - A failed harness skips verification and records failure.
 - A configured verifier is authoritative after a successful harness run.
 - A verifier that cannot start leaves the outcome unknown.
-- Completed harness runs retain model, harness, verification, duration, and exit evidence.
+- Completed harness runs retain model, harness, verification, duration, and
+  exit evidence.
+- Cache hits receive fresh run identities and remain distinguishable from live
+  decisions.
+- Only equivalent, unexpired routing inputs may reuse a cached decision.
 
 ## Persistence
 
@@ -72,6 +90,13 @@ file is atomically replaced. Appends are encoded before locking and written as
 one buffer; updates hold the lock across the complete read-modify-replace
 transaction. On Unix, Jevia also synchronizes the parent directory after a
 history mutation.
+
+`.jevia/cache.jsonl` is bounded, ignored local data protected by the stable
+`.jevia/cache.lock` sidecar. Inserts remove expired entries, replace an existing
+fingerprint, evict the oldest entries above the configured limit, then use the
+same synchronized atomic-replacement pattern as history updates. Cache
+corruption is reported without rewriting the file; `jevia cache clear` is the
+explicit recovery operation.
 
 Execution evidence is an optional additive field so existing schema-version-1
 history remains readable. Manual feedback changes the outcome without
