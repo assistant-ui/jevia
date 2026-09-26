@@ -83,7 +83,7 @@ pre {
   position: relative;
   width: var(--frame-width);
   margin-inline: auto;
-  border-inline: 1px solid var(--border);
+  border-inline: 1px dashed var(--border);
 }
 
 .site-header {
@@ -92,7 +92,7 @@ pre {
   align-items: center;
   justify-content: space-between;
   padding-inline: 1rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid transparent;
 }
 
 .site-header::after,
@@ -102,7 +102,7 @@ pre {
   bottom: -1px;
   left: 50%;
   width: 100vw;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px dashed var(--border);
   content: "";
   pointer-events: none;
   transform: translateX(-50%);
@@ -184,7 +184,7 @@ pre {
 }
 
 .hero {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid transparent;
 }
 
 .hero-copy {
@@ -213,7 +213,7 @@ pre {
 }
 
 .quickstart {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px dashed var(--border);
 }
 
 .quickstart-panel {
@@ -230,7 +230,7 @@ pre {
   justify-content: space-between;
   gap: 2rem;
   padding: 0 2.5rem 1rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid transparent;
 }
 
 .section-heading h2 {
@@ -384,7 +384,7 @@ pre {
 .timescale-rail {
   position: absolute;
   border-color: var(--border-strong);
-  border-style: dashed;
+  border-style: solid;
   pointer-events: none;
 }
 
