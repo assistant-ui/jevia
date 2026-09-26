@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jevia.vercel.app/sitemap.xml
