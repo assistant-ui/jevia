@@ -3,6 +3,8 @@
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { isTimelineVisible, slidePosition, wheelTarget } from "../lib/timeline-scroll";
+
 export function ScrollTimescale({ children }: { children: ReactNode }) {
   const sectionRef = useRef<HTMLElement>(null);
   const moveRef = useRef<(direction: number) => void>(() => {});
@@ -16,6 +18,9 @@ export function ScrollTimescale({ children }: { children: ReactNode }) {
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let distance = 0;
+    let targetLeft = viewport.scrollLeft;
+    let frame = 0;
+    let lastTime = 0;
 
     const clamp = (value: number) => Math.min(distance, Math.max(0, value));
     const updateControls = () => {
@@ -26,19 +31,52 @@ export function ScrollTimescale({ children }: { children: ReactNode }) {
       );
     };
 
-    const measure = () => {
-      distance = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-      updateControls();
+    const stopAnimation = () => {
+      window.cancelAnimationFrame(frame);
+      frame = 0;
+      targetLeft = viewport.scrollLeft;
+    };
+
+    const animate = (time: number) => {
+      const next = slidePosition(viewport.scrollLeft, targetLeft, time - lastTime);
+      lastTime = time;
+      viewport.scrollTo({ left: next, behavior: "instant" });
+      if (next === targetLeft) {
+        frame = 0;
+        updateControls();
+      } else {
+        frame = window.requestAnimationFrame(animate);
+      }
     };
 
     const moveTo = (left: number) => {
-      viewport.scrollTo({ left: clamp(left), behavior: "instant" });
+      const next = clamp(left);
+      if (reducedMotion.matches) {
+        stopAnimation();
+        targetLeft = next;
+        viewport.scrollTo({ left: next, behavior: "instant" });
+        updateControls();
+        return;
+      }
+
+      targetLeft = next;
+      if (!frame) {
+        lastTime = performance.now();
+        frame = window.requestAnimationFrame(animate);
+      }
+    };
+
+    const measure = () => {
+      stopAnimation();
+      distance = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      targetLeft = clamp(viewport.scrollLeft);
       updateControls();
     };
 
     moveRef.current = (direction) => {
       const item = track.querySelector<HTMLElement>(".timescale-item");
-      moveTo(viewport.scrollLeft + direction * (item?.offsetWidth ?? 320));
+      const left = frame ? targetLeft : viewport.scrollLeft;
+      moveTo(left + direction * (item?.offsetWidth ?? 320));
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -54,30 +92,35 @@ export function ScrollTimescale({ children }: { children: ReactNode }) {
 
     const onWheel = (event: WheelEvent) => {
       if (
-        reducedMotion.matches ||
         event.defaultPrevented ||
         !event.cancelable ||
         event.ctrlKey ||
         event.metaKey ||
-        event.shiftKey ||
-        Math.abs(event.deltaX) > Math.abs(event.deltaY) ||
-        event.deltaY === 0 ||
         distance <= 0
       ) {
         return;
       }
 
-      const bounds = section.getBoundingClientRect();
-      // Start as soon as the compact section is visible, without moving the page
-      // or adding vertical travel. Short screens keep their normal page scroll.
-      if (bounds.top < -1 || bounds.bottom > window.innerHeight + 1) return;
+      // Native horizontal gestures must be free to take over an in-flight slide.
+      if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+        stopAnimation();
+        return;
+      }
+      if (event.deltaY === 0) return;
+
+      // Measure the actual track, not the section's heading and outer padding.
+      // No sticky spacer or extra vertical travel is needed to enter the timeline.
+      if (!isTimelineVisible(viewport.getBoundingClientRect(), window.innerHeight)) return;
 
       const unit =
         event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
-      const left = viewport.scrollLeft;
-      const next = clamp(left + event.deltaY * unit);
-      // Let the browser handle the gesture normally at either end of the track.
-      if (Math.abs(next - left) < 1) return;
+      const left = frame ? targetLeft : viewport.scrollLeft;
+      const next = wheelTarget(viewport.scrollLeft, left, event.deltaY * unit, distance);
+      // Release normal page scrolling at either end, once the slide has arrived.
+      if (next === left) {
+        if (frame && Math.abs(targetLeft - viewport.scrollLeft) >= 1) event.preventDefault();
+        return;
+      }
 
       event.preventDefault();
       moveTo(next);
@@ -89,13 +132,20 @@ export function ScrollTimescale({ children }: { children: ReactNode }) {
     window.addEventListener("wheel", onWheel, { passive: false });
     viewport.addEventListener("scroll", updateControls, { passive: true });
     viewport.addEventListener("keydown", onKeyDown);
+    viewport.addEventListener("pointerdown", stopAnimation, { passive: true });
+    viewport.addEventListener("focusin", stopAnimation);
+    reducedMotion.addEventListener("change", stopAnimation);
     measure();
 
     return () => {
       observer.disconnect();
+      stopAnimation();
       window.removeEventListener("wheel", onWheel);
       viewport.removeEventListener("scroll", updateControls);
       viewport.removeEventListener("keydown", onKeyDown);
+      viewport.removeEventListener("pointerdown", stopAnimation);
+      viewport.removeEventListener("focusin", stopAnimation);
+      reducedMotion.removeEventListener("change", stopAnimation);
       moveRef.current = () => {};
     };
   }, []);

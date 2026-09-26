@@ -188,7 +188,7 @@ pre {
 .site-nav a {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.4rem;
   transition: color 140ms ease;
 }
 
@@ -544,6 +544,17 @@ pre {
   letter-spacing: -0.02em;
 }
 
+.timescale-step-number {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
 .timescale-content > p {
   min-height: 54px;
   margin: 0.65rem 0 1.1rem;
@@ -662,10 +673,6 @@ pre {
 @media (max-width: 720px) {
   :root {
     --frame-width: calc(100vw - 20px);
-  }
-
-  .site-nav a:first-child {
-    display: none;
   }
 
   .hero-copy {
