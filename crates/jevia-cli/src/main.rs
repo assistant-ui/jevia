@@ -1,11 +1,11 @@
 mod paths;
 mod store;
 
-use std::{env, fs, io::Write, process::ExitCode, str::FromStr};
+use std::{env, fs, io::Write, process::ExitCode, str::FromStr, time::Instant};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
-use jevia_core::{Config, HarnessInvocation, JevClient, Outcome, RouteRecord};
+use jevia_core::{Config, ExecutionEvidence, HarnessInvocation, JevClient, Outcome, RouteRecord};
 use tokio::process::Command as ChildCommand;
 
 use crate::paths::ProjectPaths;
@@ -222,19 +222,27 @@ async fn execute_harness(
     );
     eprintln!("jevia: launching harness `{harness_name}`");
 
+    let started = Instant::now();
     let status = ChildCommand::new(&invocation.program)
         .args(&invocation.args)
         .current_dir(&paths.root)
         .status()
         .await
         .with_context(|| format!("could not launch harness `{harness_name}`"))?;
+    let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let outcome = if status.success() {
         Outcome::Success
     } else {
         Outcome::Failure
     };
-    store::update_outcome(&paths.runs, &record.decision.run_id, outcome)?;
-    eprintln!("jevia: outcome={outcome}");
+    let execution = ExecutionEvidence {
+        harness: harness_name.to_owned(),
+        model: invocation.model.clone(),
+        duration_ms,
+        exit_code: status.code(),
+    };
+    store::record_execution(&paths.runs, &record.decision.run_id, outcome, execution)?;
+    eprintln!("jevia: outcome={outcome} duration_ms={duration_ms}");
 
     Ok(status
         .code()
@@ -267,13 +275,25 @@ fn runs(limit: usize, print_json: bool) -> Result<()> {
         return Ok(());
     }
     for record in records.iter().rev() {
-        println!(
-            "{}  tier={}  confidence={:.2}  outcome={}",
-            record.decision.run_id,
-            record.decision.tier,
-            record.decision.confidence,
-            record.outcome
-        );
+        if let Some(execution) = &record.execution {
+            println!(
+                "{}  tier={}  model={}  confidence={:.2}  outcome={}  duration={}ms",
+                record.decision.run_id,
+                record.decision.tier,
+                execution.model,
+                record.decision.confidence,
+                record.outcome,
+                execution.duration_ms
+            );
+        } else {
+            println!(
+                "{}  tier={}  confidence={:.2}  outcome={}",
+                record.decision.run_id,
+                record.decision.tier,
+                record.decision.confidence,
+                record.outcome
+            );
+        }
     }
     Ok(())
 }
@@ -342,6 +362,7 @@ mod tests {
         let invocation = HarnessInvocation {
             program: "rustc".to_owned(),
             args: vec!["--version".to_owned()],
+            model: "provider/test".to_owned(),
         };
 
         execute_harness(&paths, "test", &invocation, &record)
@@ -350,6 +371,13 @@ mod tests {
 
         let records = store::load(&paths.runs).expect("records load");
         assert_eq!(records[0].outcome, Outcome::Success);
+        let execution = records[0]
+            .execution
+            .as_ref()
+            .expect("execution evidence is recorded");
+        assert_eq!(execution.harness, "test");
+        assert_eq!(execution.model, "provider/test");
+        assert_eq!(execution.exit_code, Some(0));
     }
 
     #[tokio::test]
@@ -362,6 +390,7 @@ mod tests {
         let invocation = HarnessInvocation {
             program: "rustc".to_owned(),
             args: vec!["--definitely-not-a-real-rustc-option".to_owned()],
+            model: "provider/test".to_owned(),
         };
 
         execute_harness(&paths, "test", &invocation, &record)
@@ -370,6 +399,13 @@ mod tests {
 
         let records = store::load(&paths.runs).expect("records load");
         assert_eq!(records[0].outcome, Outcome::Failure);
+        let execution = records[0]
+            .execution
+            .as_ref()
+            .expect("execution evidence is recorded");
+        assert_eq!(execution.harness, "test");
+        assert_eq!(execution.model, "provider/test");
+        assert_ne!(execution.exit_code, Some(0));
     }
 
     fn sample_record() -> RouteRecord {
@@ -387,6 +423,7 @@ mod tests {
             },
             task: Some("test task".to_owned()),
             outcome: Outcome::Unknown,
+            execution: None,
         }
     }
 }

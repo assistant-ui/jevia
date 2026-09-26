@@ -53,9 +53,14 @@ repository and security boundary; no dashboard code belongs here.
 - Harness templates must map every configured tier to a model.
 - Harness arguments are executed directly without shell interpolation.
 - A harness that cannot start leaves its routing outcome unknown.
+- Completed harness runs retain the concrete model, duration, and exit code.
 
 ## Persistence
 
 `.jevia/config.toml` is reviewable project policy. `.jevia/runs.jsonl` is
 local operational data. Feedback updates are written to a temporary file,
 flushed, synchronized, and renamed over the previous history.
+
+Execution evidence is an optional additive field so existing schema-version-1
+history remains readable. Manual feedback changes the outcome without
+inventing harness metadata.

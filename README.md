@@ -98,6 +98,11 @@ executable directly, and mirrors its exit code. A zero exit records success; a
 non-zero exit records failure. If the process cannot start, the run remains
 unknown so an environment problem does not incorrectly train the router.
 
+Completed harness runs also record the concrete model, harness name, duration,
+and process exit code. This evidence appears in <code>jevia runs --json</code>
+and is supplied with relevant outcomes on later routing requests, so model
+changes do not erase which implementation actually produced a result.
+
 ## Local data
 
 Project configuration lives in `.jevia/config.toml` and is intended to be

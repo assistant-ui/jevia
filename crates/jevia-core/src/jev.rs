@@ -105,6 +105,7 @@ fn build_request<'a>(
                 "tier": record.decision.tier,
                 "confidence": record.decision.confidence,
                 "outcome": record.outcome,
+                "execution": record.execution,
             })
         })
         .collect();
@@ -235,16 +236,25 @@ impl From<StatusCode> for JevError {
 
 #[cfg(test)]
 mod tests {
+    use crate::ExecutionEvidence;
+
     use super::*;
 
     #[test]
     fn request_includes_only_recent_completed_outcomes() {
         let mut config = Config::default();
         config.router.history_limit = 1;
+        let mut completed = record("last", "strong", Outcome::Failure);
+        completed.execution = Some(ExecutionEvidence {
+            harness: "agent".to_owned(),
+            model: "provider/frontier".to_owned(),
+            duration_ms: 42,
+            exit_code: Some(1),
+        });
         let history = vec![
             record("first", "fast", Outcome::Success),
             record("pending", "balanced", Outcome::Unknown),
-            record("last", "strong", Outcome::Failure),
+            completed,
         ];
 
         let request = build_request("current", &config, &history);
@@ -255,6 +265,10 @@ mod tests {
         assert_eq!(outcomes.len(), 1);
         assert_eq!(outcomes[0]["task"], "last");
         assert_eq!(outcomes[0]["outcome"], "failure");
+        assert_eq!(outcomes[0]["execution"]["harness"], "agent");
+        assert_eq!(outcomes[0]["execution"]["model"], "provider/frontier");
+        assert_eq!(outcomes[0]["execution"]["duration_ms"], 42);
+        assert_eq!(outcomes[0]["execution"]["exit_code"], 1);
     }
 
     #[test]
@@ -315,6 +329,7 @@ mod tests {
             },
             task: Some(task.to_owned()),
             outcome,
+            execution: None,
         }
     }
 }
