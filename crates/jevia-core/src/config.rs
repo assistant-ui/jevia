@@ -193,6 +193,16 @@ pub struct HarnessConfig {
     pub command: String,
     pub args: Vec<String>,
     pub models: BTreeMap<String, String>,
+    #[serde(default)]
+    pub verification: Option<VerificationConfig>,
+}
+
+/// Optional process that verifies a successful harness run.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationConfig {
+    pub command: String,
+    pub args: Vec<String>,
 }
 
 impl HarnessConfig {
@@ -224,17 +234,7 @@ impl HarnessConfig {
             });
         }
         for argument in &self.args {
-            let remainder = argument
-                .replace("{task}", "")
-                .replace("{model}", "")
-                .replace("{tier}", "")
-                .replace("{run_id}", "");
-            if remainder.contains('{') || remainder.contains('}') {
-                return Err(ConfigError::UnknownHarnessPlaceholder {
-                    harness: name.to_owned(),
-                    argument: argument.clone(),
-                });
-            }
+            validate_template(argument, name)?;
         }
         for tier in tier_names {
             match self.models.get(tier) {
@@ -245,6 +245,14 @@ impl HarnessConfig {
                         tier: tier.clone(),
                     });
                 }
+            }
+        }
+        if let Some(verification) = &self.verification {
+            if verification.command.trim().is_empty() {
+                return Err(ConfigError::EmptyVerificationCommand(name.to_owned()));
+            }
+            for argument in &verification.args {
+                validate_template(argument, name)?;
             }
         }
         Ok(())
@@ -273,13 +281,42 @@ impl HarnessConfig {
             .map(|argument| render_argument(argument, harness_name, task, model, tier, run_id))
             .collect::<Result<_, _>>()?;
         args.extend_from_slice(extra_args);
+        let verification = match &self.verification {
+            Some(verification) => Some(VerificationInvocation {
+                program: verification.command.clone(),
+                args: verification
+                    .args
+                    .iter()
+                    .map(|argument| {
+                        render_argument(argument, harness_name, task, model, tier, run_id)
+                    })
+                    .collect::<Result<_, _>>()?,
+            }),
+            None => None,
+        };
 
         Ok(HarnessInvocation {
             program: self.command.clone(),
             args,
             model: model.clone(),
+            verification,
         })
     }
+}
+
+fn validate_template(argument: &str, harness_name: &str) -> Result<(), ConfigError> {
+    let remainder = argument
+        .replace("{task}", "")
+        .replace("{model}", "")
+        .replace("{tier}", "")
+        .replace("{run_id}", "");
+    if remainder.contains('{') || remainder.contains('}') {
+        return Err(ConfigError::UnknownHarnessPlaceholder {
+            harness: harness_name.to_owned(),
+            argument: argument.to_owned(),
+        });
+    }
+    Ok(())
 }
 
 fn render_argument(
@@ -343,6 +380,14 @@ pub struct HarnessInvocation {
     pub args: Vec<String>,
     /// Concrete model selected for this harness execution.
     pub model: String,
+    pub verification: Option<VerificationInvocation>,
+}
+
+/// A shell-free verification process rendered from a harness template.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerificationInvocation {
+    pub program: String,
+    pub args: Vec<String>,
 }
 
 #[derive(Debug, Error)]
@@ -373,6 +418,8 @@ pub enum ConfigError {
     EmptyHarnessName,
     #[error("harness `{0}` command cannot be empty")]
     EmptyHarnessCommand(String),
+    #[error("harness `{0}` verification command cannot be empty")]
+    EmptyVerificationCommand(String),
     #[error("harness `{harness}` args must contain {placeholder}")]
     MissingHarnessPlaceholder {
         harness: String,
@@ -432,6 +479,14 @@ mod tests {
             models: [("balanced".to_owned(), "provider/model".to_owned())]
                 .into_iter()
                 .collect(),
+            verification: Some(VerificationConfig {
+                command: "cargo".to_owned(),
+                args: vec![
+                    "test".to_owned(),
+                    "--package={tier}".to_owned(),
+                    "--trace={run_id}".to_owned(),
+                ],
+            }),
         };
         let extra = vec!["--verbose".to_owned()];
 
@@ -457,6 +512,17 @@ mod tests {
                 "--verbose",
             ]
         );
+        assert_eq!(
+            invocation.verification,
+            Some(VerificationInvocation {
+                program: "cargo".to_owned(),
+                args: vec![
+                    "test".to_owned(),
+                    "--package=balanced".to_owned(),
+                    "--trace=run-1".to_owned(),
+                ],
+            })
+        );
     }
 
     #[test]
@@ -474,6 +540,7 @@ mod tests {
                 models: [("fast".to_owned(), "small".to_owned())]
                     .into_iter()
                     .collect(),
+                verification: None,
             },
         );
 
@@ -492,10 +559,64 @@ mod tests {
             models: [("balanced".to_owned(), "provider/model".to_owned())]
                 .into_iter()
                 .collect(),
+            verification: None,
         };
 
         assert!(matches!(
             harness.invocation("agent", "balanced", "task", "run-1", &[]),
+            Err(ConfigError::UnknownHarnessPlaceholder { harness, argument })
+                if harness == "agent" && argument == "{unknown}"
+        ));
+    }
+
+    #[test]
+    fn config_rejects_an_empty_verification_command() {
+        let mut config = Config::default();
+        config.harnesses.insert(
+            "agent".to_owned(),
+            HarnessConfig {
+                command: "agent".to_owned(),
+                args: vec!["{model}".to_owned(), "{task}".to_owned()],
+                models: config
+                    .tiers
+                    .keys()
+                    .map(|tier| (tier.clone(), format!("provider/{tier}")))
+                    .collect(),
+                verification: Some(VerificationConfig {
+                    command: " ".to_owned(),
+                    args: vec![],
+                }),
+            },
+        );
+
+        assert!(matches!(
+            config.validate(),
+            Err(ConfigError::EmptyVerificationCommand(harness)) if harness == "agent"
+        ));
+    }
+
+    #[test]
+    fn config_rejects_unknown_verification_placeholders() {
+        let mut config = Config::default();
+        config.harnesses.insert(
+            "agent".to_owned(),
+            HarnessConfig {
+                command: "agent".to_owned(),
+                args: vec!["{model}".to_owned(), "{task}".to_owned()],
+                models: config
+                    .tiers
+                    .keys()
+                    .map(|tier| (tier.clone(), format!("provider/{tier}")))
+                    .collect(),
+                verification: Some(VerificationConfig {
+                    command: "cargo".to_owned(),
+                    args: vec!["test".to_owned(), "{unknown}".to_owned()],
+                }),
+            },
+        );
+
+        assert!(matches!(
+            config.validate(),
             Err(ConfigError::UnknownHarnessPlaceholder { harness, argument })
                 if harness == "agent" && argument == "{unknown}"
         ));

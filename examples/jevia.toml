@@ -30,3 +30,7 @@ args = ["run", "--model", "{model}", "{task}"]
 fast = "provider/small"
 balanced = "provider/standard"
 strong = "provider/frontier"
+
+[harnesses.agent.verification]
+command = "cargo"
+args = ["test", "--workspace", "--all-features"]

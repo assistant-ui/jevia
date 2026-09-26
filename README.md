@@ -73,6 +73,10 @@ args = ["run", "--model", "{model}", "{task}"]
 fast = "provider/small"
 balanced = "provider/standard"
 strong = "provider/frontier"
+
+[harnesses.agent.verification]
+command = "cargo"
+args = ["test", "--workspace", "--all-features"]
 ~~~
 
 A complete ready-to-copy configuration is available at
@@ -94,14 +98,21 @@ jevia run agent "update the parser" -- --verbose
 Templates support <code>{task}</code>, <code>{model}</code>,
 <code>{tier}</code>, and <code>{run_id}</code>. Jevia requires the task and
 model placeholders, rejects unknown placeholders, launches the configured
-executable directly, and mirrors its exit code. A zero exit records success; a
-non-zero exit records failure. If the process cannot start, the run remains
-unknown so an environment problem does not incorrectly train the router.
+executable directly, and mirrors its exit code. A non-zero harness exit records
+failure and skips verification. Without a configured verifier, a zero harness
+exit records success for backward compatibility.
+
+When <code>verification</code> is configured, Jevia runs it only after the
+harness succeeds and uses its exit status as the final outcome. A verifier that
+cannot start leaves the outcome unknown, preventing an environment problem
+from incorrectly training the router. Verification arguments support the same
+placeholders and are also launched directly without shell interpretation.
 
 Completed harness runs also record the concrete model, harness name, duration,
-and process exit code. This evidence appears in <code>jevia runs --json</code>
-and is supplied with relevant outcomes on later routing requests, so model
-changes do not erase which implementation actually produced a result.
+process exit code, and verification evidence. This data appears in
+<code>jevia runs --json</code> and is supplied with relevant outcomes on later
+routing requests, so model changes do not erase which implementation actually
+produced a verified result.
 
 ## Local data
 

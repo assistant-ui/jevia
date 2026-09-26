@@ -61,6 +61,19 @@ pub struct ExecutionEvidence {
     pub duration_ms: u64,
     /// Absent when the operating system terminates the process without an exit code.
     pub exit_code: Option<i32>,
+    /// Present when a configured verifier ran after the harness succeeded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<VerificationEvidence>,
+}
+
+/// Observable facts from a configured post-run verifier.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerificationEvidence {
+    pub command: String,
+    pub launched: bool,
+    pub duration_ms: u64,
+    /// Absent when the process could not start or terminated without an exit code.
+    pub exit_code: Option<i32>,
 }
 
 /// Persisted local record used by the outcome feedback loop.
@@ -113,5 +126,38 @@ mod tests {
 
         assert_eq!(record.outcome, Outcome::Success);
         assert_eq!(record.execution, None);
+    }
+
+    #[test]
+    fn execution_evidence_without_verification_remains_readable() {
+        let input = r#"{
+            "schema_version": 1,
+            "run_id": "run-1",
+            "tier": "balanced",
+            "suggested_tier": "balanced",
+            "confidence": 0.8,
+            "probabilities": {},
+            "fallback_applied": false,
+            "jev_model": "jev-test",
+            "created_at_ms": 1,
+            "task": "test task",
+            "outcome": "success",
+            "execution": {
+                "harness": "agent",
+                "model": "provider/model",
+                "duration_ms": 42,
+                "exit_code": 0
+            }
+        }"#;
+
+        let record: RouteRecord = serde_json::from_str(input).expect("existing record decodes");
+
+        assert_eq!(
+            record
+                .execution
+                .expect("execution evidence exists")
+                .verification,
+            None
+        );
     }
 }

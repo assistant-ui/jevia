@@ -236,7 +236,7 @@ impl From<StatusCode> for JevError {
 
 #[cfg(test)]
 mod tests {
-    use crate::ExecutionEvidence;
+    use crate::{ExecutionEvidence, VerificationEvidence};
 
     use super::*;
 
@@ -250,6 +250,12 @@ mod tests {
             model: "provider/frontier".to_owned(),
             duration_ms: 42,
             exit_code: Some(1),
+            verification: Some(VerificationEvidence {
+                command: "cargo".to_owned(),
+                launched: true,
+                duration_ms: 21,
+                exit_code: Some(1),
+            }),
         });
         let history = vec![
             record("first", "fast", Outcome::Success),
@@ -269,6 +275,9 @@ mod tests {
         assert_eq!(outcomes[0]["execution"]["model"], "provider/frontier");
         assert_eq!(outcomes[0]["execution"]["duration_ms"], 42);
         assert_eq!(outcomes[0]["execution"]["exit_code"], 1);
+        assert_eq!(outcomes[0]["execution"]["verification"]["command"], "cargo");
+        assert_eq!(outcomes[0]["execution"]["verification"]["exit_code"], 1);
+        assert_eq!(outcomes[0]["execution"]["verification"]["launched"], true);
     }
 
     #[test]
