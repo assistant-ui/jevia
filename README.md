@@ -24,10 +24,13 @@ The application owns the policy. Jev supplies a structured decision signal.
 
 ## Quick start
 
-Requires Rust 1.92 or newer and Cargo.
+Use the copyable `/install.sh` command on the
+[Jevia landing page](https://jevia.vercel.app). It downloads a
+checksum-verified binary for macOS or Linux on Intel or ARM; Rust and Cargo are
+not required.
 
 ```bash
-cargo install jevia --version 0.1.0 --locked
+curl -fsSL https://jevia.vercel.app/install.sh | sh
 jevia --version
 jevia init
 export TYPESAFE_API_KEY="your-key"
@@ -208,10 +211,10 @@ pnpm dev
 
 The site serves `/install.sh` and uses the current page's origin in its copyable
 install command: localhost during development and the deployed domain in
-production. The script builds the CLI from this repository with locked
-dependencies; Rust 1.92+ and Cargo must already be installed. It does not install
-Rust or modify shell configuration. Run `pnpm test` in `website` to check the
-installer without installing anything.
+production. The script downloads the pinned GitHub release binary, verifies its
+SHA-256 checksum, and installs it to `~/.local/bin` by default. It does not need
+Rust or Cargo and does not modify shell configuration. Run `pnpm test` in
+`website` to check the installer without installing anything.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution and commit
 conventions and [docs/architecture.md](docs/architecture.md) for component

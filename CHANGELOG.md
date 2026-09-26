@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Install checksum-verified prebuilt binaries from the landing page without
+  requiring Rust or Cargo.
+
 ## 0.1.0
 
 First experimental crates.io release of `jevia` and `jevia-core`.
