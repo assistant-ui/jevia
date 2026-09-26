@@ -24,12 +24,13 @@ The application owns the policy. Jev supplies a structured decision signal.
 
 ## Quick start
 
-Use the copyable `/install.sh` command on the deployed Jevia landing page. It
-downloads a checksum-verified binary for macOS or Linux on Intel or ARM; Rust
-and Cargo are not required.
+Use the copyable `/install.sh` command on the
+[Jevia landing page](https://jevia.vercel.app). It downloads a
+checksum-verified binary for macOS or Linux on Intel or ARM; Rust and Cargo are
+not required.
 
 ```bash
-curl -fsSL https://your-jevia-domain.example/install.sh | sh
+curl -fsSL https://jevia.vercel.app/install.sh | sh
 jevia --version
 jevia init
 export TYPESAFE_API_KEY="your-key"
