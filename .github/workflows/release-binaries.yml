@@ -1,0 +1,100 @@
+name: Release binaries
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build, such as v0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-binaries-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+            install_musl: true
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-musl
+            install_musl: true
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            install_musl: false
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            install_musl: false
+    runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+          targets: ${{ matrix.target }}
+      - name: Install musl toolchain
+        if: matrix.install_musl
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+      - name: Confirm tag matches package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_version="${RELEASE_TAG#v}"
+          package_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "jevia") | .version')"
+          test "$package_version" = "$expected_version"
+      - name: Build release binary
+        run: cargo build --locked --release --package jevia --target ${{ matrix.target }}
+      - name: Prepare release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="jevia-${RELEASE_TAG}-${{ matrix.target }}"
+          cp "target/${{ matrix.target }}/release/jevia" "$asset"
+          chmod 755 "$asset"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$asset" > "$asset.sha256"
+          else
+            shasum -a 256 "$asset" > "$asset.sha256"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jevia-${{ matrix.target }}
+          path: |
+            jevia-${{ env.RELEASE_TAG }}-${{ matrix.target }}
+            jevia-${{ env.RELEASE_TAG }}-${{ matrix.target }}.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Upload release assets
+    needs: build
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create or update GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
