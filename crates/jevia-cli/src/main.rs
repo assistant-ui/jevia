@@ -5,7 +5,10 @@ use std::{env, fs, io::Write, process::ExitCode, str::FromStr, time::Instant};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
-use jevia_core::{Config, ExecutionEvidence, HarnessInvocation, JevClient, Outcome, RouteRecord};
+use jevia_core::{
+    Config, ExecutionEvidence, HarnessInvocation, JevClient, Outcome, RouteRecord,
+    VerificationEvidence,
+};
 use tokio::process::Command as ChildCommand;
 
 use crate::paths::ProjectPaths;
@@ -230,24 +233,90 @@ async fn execute_harness(
         .await
         .with_context(|| format!("could not launch harness `{harness_name}`"))?;
     let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-    let outcome = if status.success() {
-        Outcome::Success
-    } else {
-        Outcome::Failure
-    };
-    let execution = ExecutionEvidence {
+    let mut execution = ExecutionEvidence {
         harness: harness_name.to_owned(),
         model: invocation.model.clone(),
         duration_ms,
         exit_code: status.code(),
+        verification: None,
+    };
+    if !status.success() {
+        store::record_execution(
+            &paths.runs,
+            &record.decision.run_id,
+            Outcome::Failure,
+            execution,
+        )?;
+        eprintln!("jevia: outcome=failure duration_ms={duration_ms}");
+        return Ok(child_exit_code(&status));
+    }
+
+    let Some(verification) = &invocation.verification else {
+        store::record_execution(
+            &paths.runs,
+            &record.decision.run_id,
+            Outcome::Success,
+            execution,
+        )?;
+        eprintln!("jevia: outcome=success duration_ms={duration_ms}");
+        return Ok(child_exit_code(&status));
+    };
+
+    eprintln!("jevia: verifying harness `{harness_name}`");
+    let verification_started = Instant::now();
+    let verification_status = ChildCommand::new(&verification.program)
+        .args(&verification.args)
+        .current_dir(&paths.root)
+        .status()
+        .await;
+    let verification_status = match verification_status {
+        Ok(status) => status,
+        Err(error) => {
+            let verification_duration_ms =
+                u64::try_from(verification_started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            execution.verification = Some(VerificationEvidence {
+                command: verification.program.clone(),
+                launched: false,
+                duration_ms: verification_duration_ms,
+                exit_code: None,
+            });
+            store::record_execution(
+                &paths.runs,
+                &record.decision.run_id,
+                Outcome::Unknown,
+                execution,
+            )?;
+            return Err(error).with_context(|| {
+                format!("could not launch verification for harness `{harness_name}`")
+            });
+        }
+    };
+    let verification_duration_ms =
+        u64::try_from(verification_started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    execution.verification = Some(VerificationEvidence {
+        command: verification.program.clone(),
+        launched: true,
+        duration_ms: verification_duration_ms,
+        exit_code: verification_status.code(),
+    });
+    let outcome = if verification_status.success() {
+        Outcome::Success
+    } else {
+        Outcome::Failure
     };
     store::record_execution(&paths.runs, &record.decision.run_id, outcome, execution)?;
-    eprintln!("jevia: outcome={outcome} duration_ms={duration_ms}");
+    eprintln!(
+        "jevia: outcome={outcome} duration_ms={duration_ms} verification_duration_ms={verification_duration_ms}"
+    );
 
-    Ok(status
+    Ok(child_exit_code(&verification_status))
+}
+
+fn child_exit_code(status: &std::process::ExitStatus) -> ExitCode {
+    status
         .code()
         .and_then(|code| u8::try_from(code).ok())
-        .map_or(ExitCode::FAILURE, ExitCode::from))
+        .map_or(ExitCode::FAILURE, ExitCode::from)
 }
 
 async fn routed_record(task: &str, config: &Config, paths: &ProjectPaths) -> Result<RouteRecord> {
@@ -276,13 +345,20 @@ fn runs(limit: usize, print_json: bool) -> Result<()> {
     }
     for record in records.iter().rev() {
         if let Some(execution) = &record.execution {
+            let verification = match &execution.verification {
+                Some(verification) if !verification.launched => "unknown",
+                Some(verification) if verification.exit_code == Some(0) => "pass",
+                Some(_) => "fail",
+                None => "none",
+            };
             println!(
-                "{}  tier={}  model={}  confidence={:.2}  outcome={}  duration={}ms",
+                "{}  tier={}  model={}  confidence={:.2}  outcome={}  verification={}  duration={}ms",
                 record.decision.run_id,
                 record.decision.tier,
                 execution.model,
                 record.decision.confidence,
                 record.outcome,
+                verification,
                 execution.duration_ms
             );
         } else {
@@ -352,7 +428,7 @@ fn print_record(record: &RouteRecord) {
 mod tests {
     use std::collections::BTreeMap;
 
-    use jevia_core::{HarnessInvocation, RouteDecision};
+    use jevia_core::{HarnessInvocation, RouteDecision, VerificationInvocation};
     use tempfile::tempdir;
 
     use super::*;
@@ -368,6 +444,7 @@ mod tests {
             program: "rustc".to_owned(),
             args: vec!["--version".to_owned()],
             model: "provider/test".to_owned(),
+            verification: None,
         };
 
         execute_harness(&paths, "test", &invocation, &record)
@@ -396,6 +473,10 @@ mod tests {
             program: "rustc".to_owned(),
             args: vec!["--definitely-not-a-real-rustc-option".to_owned()],
             model: "provider/test".to_owned(),
+            verification: Some(VerificationInvocation {
+                program: "rustc".to_owned(),
+                args: vec!["--version".to_owned()],
+            }),
         };
 
         execute_harness(&paths, "test", &invocation, &record)
@@ -411,6 +492,117 @@ mod tests {
         assert_eq!(execution.harness, "test");
         assert_eq!(execution.model, "provider/test");
         assert_ne!(execution.exit_code, Some(0));
+        assert_eq!(execution.verification, None);
+    }
+
+    #[tokio::test]
+    async fn successful_verification_records_success() {
+        let directory = tempdir().expect("temporary directory");
+        let paths = ProjectPaths::at(directory.path().to_path_buf());
+        fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
+        let record = sample_record();
+        store::append(&paths.runs, &record).expect("record is appended");
+        let invocation = verified_invocation(vec!["--version".to_owned()]);
+
+        execute_harness(&paths, "test", &invocation, &record)
+            .await
+            .expect("harness and verification succeed");
+
+        let records = store::load(&paths.runs).expect("records load");
+        assert_eq!(records[0].outcome, Outcome::Success);
+        let verification = records[0]
+            .execution
+            .as_ref()
+            .and_then(|execution| execution.verification.as_ref())
+            .expect("verification evidence is recorded");
+        assert_eq!(verification.command, "rustc");
+        assert!(verification.launched);
+        assert_eq!(verification.exit_code, Some(0));
+    }
+
+    #[tokio::test]
+    async fn failed_verification_overrides_a_successful_harness() {
+        let directory = tempdir().expect("temporary directory");
+        let paths = ProjectPaths::at(directory.path().to_path_buf());
+        fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
+        let record = sample_record();
+        store::append(&paths.runs, &record).expect("record is appended");
+        let invocation =
+            verified_invocation(vec!["--definitely-not-a-real-rustc-option".to_owned()]);
+
+        execute_harness(&paths, "test", &invocation, &record)
+            .await
+            .expect("verification failure is a recorded outcome");
+
+        let records = store::load(&paths.runs).expect("records load");
+        assert_eq!(records[0].outcome, Outcome::Failure);
+        let execution = records[0]
+            .execution
+            .as_ref()
+            .expect("execution evidence is recorded");
+        assert_eq!(execution.exit_code, Some(0));
+        assert_ne!(
+            execution
+                .verification
+                .as_ref()
+                .expect("verification evidence is recorded")
+                .exit_code,
+            Some(0)
+        );
+    }
+
+    #[tokio::test]
+    async fn verifier_launch_failure_keeps_the_outcome_unknown() {
+        let directory = tempdir().expect("temporary directory");
+        let paths = ProjectPaths::at(directory.path().to_path_buf());
+        fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
+        let record = sample_record();
+        store::append(&paths.runs, &record).expect("record is appended");
+        let invocation = HarnessInvocation {
+            program: "rustc".to_owned(),
+            args: vec!["--version".to_owned()],
+            model: "provider/test".to_owned(),
+            verification: Some(VerificationInvocation {
+                program: "jevia-command-that-does-not-exist".to_owned(),
+                args: vec![],
+            }),
+        };
+
+        let error = execute_harness(&paths, "test", &invocation, &record)
+            .await
+            .expect_err("missing verifier is reported");
+
+        assert!(
+            error
+                .to_string()
+                .contains("could not launch verification for harness `test`")
+        );
+        let records = store::load(&paths.runs).expect("records load");
+        assert_eq!(records[0].outcome, Outcome::Unknown);
+        let execution = records[0]
+            .execution
+            .as_ref()
+            .expect("harness evidence is retained");
+        assert_eq!(execution.exit_code, Some(0));
+        let verification = execution
+            .verification
+            .as_ref()
+            .expect("verification attempt is retained");
+        assert_eq!(verification.command, "jevia-command-that-does-not-exist");
+        assert!(!verification.launched);
+        assert_eq!(verification.exit_code, None);
+    }
+
+    fn verified_invocation(verification_args: Vec<String>) -> HarnessInvocation {
+        HarnessInvocation {
+            program: "rustc".to_owned(),
+            args: vec!["--version".to_owned()],
+            model: "provider/test".to_owned(),
+            verification: Some(VerificationInvocation {
+                program: "rustc".to_owned(),
+                args: verification_args,
+            }),
+        }
     }
 
     fn sample_record() -> RouteRecord {

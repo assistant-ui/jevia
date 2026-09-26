@@ -238,6 +238,7 @@ mod tests {
             model: "provider/model".to_owned(),
             duration_ms: 42,
             exit_code: Some(0),
+            verification: None,
         };
 
         let updated = record_execution(&path, "run-1", Outcome::Success, execution.clone())

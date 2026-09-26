@@ -9,6 +9,7 @@ task
   -> local confidence policy
   -> route decision
   -> configured harness adapter
+  -> optional post-run verifier
   -> observed outcome
   -> local outcome history
 ```
@@ -33,8 +34,9 @@ Adapters translate a selected capability tier into a harness-specific model
 and argument list. Tier definitions remain stable when individual model
 catalogs change. Templates are rendered into a process and argument vector;
 they are never passed through a shell. Jevia launches the child in the project
-root, mirrors its exit code, and records success or failure from the resulting
-process status.
+root and mirrors its exit code. An optional shell-free verification process can
+make the final outcome depend on project checks instead of trusting a
+successful harness exit alone.
 
 ### Managed services
 
@@ -53,7 +55,10 @@ repository and security boundary; no dashboard code belongs here.
 - Harness templates must map every configured tier to a model.
 - Harness arguments are executed directly without shell interpolation.
 - A harness that cannot start leaves its routing outcome unknown.
-- Completed harness runs retain the concrete model, duration, and exit code.
+- A failed harness skips verification and records failure.
+- A configured verifier is authoritative after a successful harness run.
+- A verifier that cannot start leaves the outcome unknown.
+- Completed harness runs retain model, harness, verification, duration, and exit evidence.
 
 ## Persistence
 
