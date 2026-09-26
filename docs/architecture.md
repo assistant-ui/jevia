@@ -61,6 +61,13 @@ repository and security boundary; no dashboard code belongs here.
 local operational data. Feedback updates are written to a temporary file,
 flushed, synchronized, and renamed over the previous history.
 
+All history reads take a shared lock and all mutations take an exclusive lock
+on `.jevia/runs.lock`. The separate lock file remains stable when the history
+file is atomically replaced. Appends are encoded before locking and written as
+one buffer; updates hold the lock across the complete read-modify-replace
+transaction. On Unix, Jevia also synchronizes the parent directory after a
+history mutation.
+
 Execution evidence is an optional additive field so existing schema-version-1
 history remains readable. Manual feedback changes the outcome without
 inventing harness metadata.
