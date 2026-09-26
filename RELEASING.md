@@ -7,8 +7,9 @@ workspace version and the CLI's `jevia-core` dependency version in sync.
 
 1. Start a `chore/release-<version>` branch from current `main`.
 2. Update the version in the root `Cargo.toml`, the `jevia-core` dependency in
-   `crates/jevia-cli/Cargo.toml`, and the lockfile. Update the pinned installation
-   command in `README.md` and add a changelog entry.
+   `crates/jevia-cli/Cargo.toml`, and the lockfile. Update `JEVIA_VERSION` in
+   `website/public/install.sh`, the pinned installation documentation, and the
+   changelog entry.
 3. Confirm both packaged archives contain their README and MIT license, and no
    credentials or local `.jevia` data:
 
@@ -54,6 +55,11 @@ Check `jevia --version`, `jevia --help`, `jevia init`, `jevia runs --json`, and
 missing API key when none is configured; it should not contact Jev.
 
 Only after registry installation succeeds, create an annotated `v<version>`
-tag on the published commit, push it, and create a GitHub release with the
-changelog entry and the installation command. Do not mark a GitHub release as
-published to crates.io if either crate is missing.
+tag on the published commit and push it. The `Release binaries` workflow builds
+Intel and ARM binaries for macOS and Linux, creates or updates the GitHub
+release, and uploads each binary with its SHA-256 checksum. Do not announce the
+installer until all release assets are present, and do not mark a GitHub release
+as published to crates.io if either crate is missing.
+
+For an existing tag whose release assets need to be rebuilt, run the `Release
+binaries` workflow manually and supply the exact tag, such as `v0.1.0`.

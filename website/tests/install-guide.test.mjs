@@ -21,10 +21,13 @@ test("uses the current origin for localhost and production installers", () => {
 test("includes the complete installation and verification sequence", () => {
   const guide = getInstallGuide("http://localhost:3000");
   assert.ok(guide.startsWith("# Install and verify Jevia\n"));
-  assert.match(guide, /published Jevia 0\.1\.0 release/);
-  assert.match(guide, /crates\.io\/crates\/jevia\/0\.1\.0/);
+  assert.match(guide, /prebuilt binary/);
+  assert.match(guide, /does not require Rust or Cargo/);
+  assert.match(guide, /releases\/tag\/v0\.1\.0/);
+  assert.match(guide, /SHA-256 checksum/);
   const steps = [
-    "rustc --version",
+    "curl --version",
+    "command -v sha256sum",
     "curl -fsSL",
     "jevia --version",
     "jevia init",
