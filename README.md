@@ -96,7 +96,7 @@ args = ["test", "--workspace", "--all-features"]
 ~~~
 
 A complete ready-to-copy configuration is available at
-[examples/jevia.toml](examples/jevia.toml).
+[examples/jevia.toml](https://github.com/assistant-ui/jevia/blob/main/crates/jevia-cli/examples/jevia.toml).
 
 Then route and run a task through that adapter:
 
