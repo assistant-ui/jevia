@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">Jevia</title>
+  <desc id="description">Model routing that learns from verified outcomes.</desc>
+  <rect width="1200" height="630" fill="#0a0a0a"/>
+  <path d="M0 88h1200M0 542h1200M88 0v630M1112 0v630" stroke="#262626"/>
+  <path d="M88 88h1024v454H88z" fill="none" stroke="#333333"/>
+  <g transform="translate(144 144)">
+    <rect width="96" height="96" fill="#f5f5f2"/>
+    <g fill="none" stroke="#0a0a0a" stroke-width="7" stroke-linecap="square">
+      <path d="M20 24h26v34c0 11-6 18-16 18s-15-7-15-16"/>
+      <path d="M58 49c5-8 9-8 15-3s10 5 17-3"/>
+    </g>
+  </g>
+  <text x="272" y="218" fill="#f5f5f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="44" font-weight="650" letter-spacing="-1">Jevia</text>
+  <text x="144" y="372" fill="#f5f5f2" font-family="system-ui, sans-serif" font-size="70" font-weight="650" letter-spacing="-3">Model routing that learns.</text>
+  <text x="144" y="438" fill="#a3a3a3" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="25">Route. Verify. Improve.</text>
+  <circle cx="1062" cy="492" r="6" fill="#f5f5f2"/>
+  <path d="M930 492h102" stroke="#737373" stroke-width="2" stroke-dasharray="7 9"/>
+</svg>
