@@ -84,6 +84,9 @@ enum Command {
         run_id: String,
         /// Observed task result.
         outcome: OutcomeArgument,
+        /// Explanation required when changing a known outcome. Stored locally.
+        #[arg(long)]
+        reason: Option<String>,
         /// Print the updated record as JSON.
         #[arg(long)]
         json: bool,
@@ -203,9 +206,10 @@ async fn run() -> Result<ExitCode> {
         Command::Feedback {
             run_id,
             outcome,
+            reason,
             json,
         } => {
-            feedback(&run_id, outcome.into(), json)?;
+            feedback(&run_id, outcome.into(), reason.as_deref(), json)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Doctor => {
@@ -574,7 +578,15 @@ fn runs(limit: usize, print_json: bool) -> Result<()> {
             .as_ref()
             .map(|life| format!("{:?}", life.state))
             .unwrap_or_else(|| "legacy".to_owned());
-        println!("state={state}");
+        let evidence = record
+            .outcome_evidence
+            .as_ref()
+            .map(|evidence| format!("{:?}", evidence.source))
+            .unwrap_or_else(|| "legacy".to_owned());
+        println!(
+            "state={state} evidence={evidence} learning={}",
+            record.is_learning_evidence()
+        );
         if let Some(execution) = &record.execution {
             let verification = match &execution.verification {
                 Some(verification) if !verification.launched => "unknown",
@@ -635,9 +647,9 @@ fn recover_run(run_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn feedback(run_id: &str, outcome: Outcome, print_json: bool) -> Result<()> {
+fn feedback(run_id: &str, outcome: Outcome, reason: Option<&str>, print_json: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
-    let record = store::update_outcome(&paths.runs, run_id, outcome)?;
+    let record = store::update_outcome(&paths.runs, run_id, outcome, reason)?;
     if print_json {
         println!("{}", serde_json::to_string_pretty(&record)?);
     } else {
@@ -849,6 +861,11 @@ mod tests {
         assert_eq!(execution.harness, "test");
         assert_eq!(execution.model, "provider/test");
         assert_eq!(execution.exit_code, Some(0));
+        assert!(!records[0].is_learning_evidence());
+        assert_eq!(
+            records[0].outcome_evidence.as_ref().unwrap().source,
+            jevia_core::OutcomeSource::ProcessExit
+        );
     }
 
     #[tokio::test]
@@ -933,6 +950,11 @@ mod tests {
         assert_eq!(verification.command, "rustc");
         assert!(verification.launched);
         assert_eq!(verification.exit_code, Some(0));
+        assert!(records[0].is_learning_evidence());
+        assert_eq!(
+            records[0].outcome_evidence.as_ref().unwrap().source,
+            jevia_core::OutcomeSource::Verification
+        );
     }
 
     #[tokio::test]
@@ -1123,6 +1145,8 @@ mod tests {
             outcome: Outcome::Unknown,
             execution: None,
             lifecycle: None,
+            outcome_evidence: None,
+            feedback: Vec::new(),
         }
     }
 }

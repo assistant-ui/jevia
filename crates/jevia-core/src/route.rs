@@ -9,7 +9,30 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Current version of a persisted run record.
-pub const RECORD_SCHEMA_VERSION: u32 = 2;
+pub const RECORD_SCHEMA_VERSION: u32 = 3;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutcomeSource {
+    ProcessExit,
+    Verification,
+    Manual,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutcomeEvidence {
+    pub source: OutcomeSource,
+    pub recorded_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FeedbackEvent {
+    pub previous_outcome: Outcome,
+    pub previous_source: Option<OutcomeSource>,
+    pub outcome: Outcome,
+    pub recorded_at_ms: u64,
+    pub reason: Option<String>,
+}
 
 /// Execution progress is separate from whether the task succeeded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -165,6 +188,10 @@ pub struct RouteRecord {
     /// Absent in legacy schema-version-1 records; never infer execution from it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<RunLifecycle>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome_evidence: Option<OutcomeEvidence>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub feedback: Vec<FeedbackEvent>,
 }
 
 impl RouteRecord {
@@ -176,7 +203,25 @@ impl RouteRecord {
             outcome: Outcome::Unknown,
             execution: None,
             lifecycle: Some(RunLifecycle::default()),
+            outcome_evidence: None,
+            feedback: Vec::new(),
         }
+    }
+
+    /// Process completion alone is not evidence of task correctness. Old records
+    /// are kept readable but must be explicitly confirmed before reuse.
+    pub fn is_learning_evidence(&self) -> bool {
+        self.outcome != Outcome::Unknown
+            && !self
+                .lifecycle
+                .as_ref()
+                .is_some_and(|life| life.state.is_active())
+            && self.outcome_evidence.as_ref().is_some_and(|evidence| {
+                matches!(
+                    evidence.source,
+                    OutcomeSource::Verification | OutcomeSource::Manual
+                )
+            })
     }
 }
 

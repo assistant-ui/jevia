@@ -5,7 +5,10 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use jevia_core::{ExecutionEvidence, Outcome, RECORD_SCHEMA_VERSION, RouteRecord, RunState};
+use jevia_core::{
+    ExecutionEvidence, FeedbackEvent, Outcome, OutcomeEvidence, OutcomeSource,
+    RECORD_SCHEMA_VERSION, RouteRecord, RunState,
+};
 use tempfile::NamedTempFile;
 
 pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
@@ -45,7 +48,7 @@ fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
                 path.display()
             )
         })?;
-        if !matches!(record.schema_version, 1 | RECORD_SCHEMA_VERSION) {
+        if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
             bail!(
                 "unsupported run record schema {} on line {} of {}",
                 record.schema_version,
@@ -77,7 +80,16 @@ pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
     Ok(())
 }
 
-pub fn update_outcome(path: &Path, run_id: &str, outcome: Outcome) -> Result<RouteRecord> {
+pub fn update_outcome(
+    path: &Path,
+    run_id: &str,
+    outcome: Outcome,
+    reason: Option<&str>,
+) -> Result<RouteRecord> {
+    let reason = reason.map(str::trim).filter(|value| !value.is_empty());
+    if reason.is_some_and(|value| value.len() > 4096) {
+        bail!("feedback reason must be at most 4096 bytes");
+    }
     update(path, run_id, |record| {
         if record
             .lifecycle
@@ -86,7 +98,25 @@ pub fn update_outcome(path: &Path, run_id: &str, outcome: Outcome) -> Result<Rou
         {
             bail!("cannot change feedback while a run is active; inspect or recover it first");
         }
+        if record.outcome != Outcome::Unknown && outcome != record.outcome && reason.is_none() {
+            bail!("changing a known outcome requires --reason");
+        }
+        let recorded_at_ms = now_ms();
+        record.feedback.push(FeedbackEvent {
+            previous_outcome: record.outcome,
+            previous_source: record
+                .outcome_evidence
+                .as_ref()
+                .map(|evidence| evidence.source),
+            outcome,
+            recorded_at_ms,
+            reason: reason.map(str::to_owned),
+        });
         record.outcome = outcome;
+        record.outcome_evidence = Some(OutcomeEvidence {
+            source: OutcomeSource::Manual,
+            recorded_at_ms,
+        });
         Ok(())
     })
 }
@@ -108,11 +138,7 @@ pub fn record_state(
     execution: Option<ExecutionEvidence>,
 ) -> Result<RouteRecord> {
     update(path, run_id, |record| {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis();
-        let now = u64::try_from(now).unwrap_or(u64::MAX);
+        let now = now_ms();
         let life = record.lifecycle.get_or_insert_with(Default::default);
         if !matches!(
             life.state,
@@ -135,8 +161,37 @@ pub fn record_state(
         if let Some(execution) = execution {
             record.execution = Some(execution);
         }
+        record.outcome_evidence = if state == RunState::Completed {
+            let verified = record
+                .execution
+                .as_ref()
+                .and_then(|execution| execution.verification.as_ref())
+                .is_some_and(|verification| {
+                    verification.launched && verification.exit_code.is_some()
+                });
+            Some(OutcomeEvidence {
+                source: if verified {
+                    OutcomeSource::Verification
+                } else {
+                    OutcomeSource::ProcessExit
+                },
+                recorded_at_ms: now,
+            })
+        } else {
+            None
+        };
         Ok(())
     })
+}
+
+fn now_ms() -> u64 {
+    u64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX)
 }
 
 fn update(
@@ -265,9 +320,9 @@ mod tests {
         append(&path, &sample_record()).unwrap();
         let running =
             record_state(&path, "run-1", RunState::Running, Outcome::Unknown, None).unwrap();
-        assert_eq!(running.schema_version, 2);
+        assert_eq!(running.schema_version, RECORD_SCHEMA_VERSION);
         assert!(running.lifecycle.unwrap().started_at_ms.is_some());
-        assert!(update_outcome(&path, "run-1", Outcome::Success).is_err());
+        assert!(update_outcome(&path, "run-1", Outcome::Success, None).is_err());
         let recovered = record_state(
             &path,
             "run-1",
@@ -308,7 +363,8 @@ mod tests {
         append(&path, &record).expect("record appends");
         assert_eq!(load(&path).expect("records load"), vec![record.clone()]);
 
-        let updated = update_outcome(&path, "run-1", Outcome::Success).expect("outcome updates");
+        let updated =
+            update_outcome(&path, "run-1", Outcome::Success, None).expect("outcome updates");
         assert_eq!(updated.outcome, Outcome::Success);
         assert_eq!(
             load(&path).expect("records reload")[0].outcome,
@@ -334,6 +390,34 @@ mod tests {
 
         assert_eq!(updated.outcome, Outcome::Success);
         assert_eq!(updated.execution, Some(execution));
+        assert_eq!(
+            updated.outcome_evidence.unwrap().source,
+            OutcomeSource::ProcessExit
+        );
+    }
+
+    #[test]
+    fn feedback_requires_a_reason_for_reversal_and_preserves_audit_history() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("runs.jsonl");
+        append(&path, &sample_record()).unwrap();
+        let first = update_outcome(&path, "run-1", Outcome::Success, None).unwrap();
+        assert!(first.is_learning_evidence());
+        let before = fs::read(&path).unwrap();
+        assert!(update_outcome(&path, "run-1", Outcome::Failure, Some("  ")).is_err());
+        assert_eq!(before, fs::read(&path).unwrap());
+        let changed =
+            update_outcome(&path, "run-1", Outcome::Failure, Some(" tests fail ")).unwrap();
+        assert_eq!(changed.schema_version, RECORD_SCHEMA_VERSION);
+        assert_eq!(changed.feedback.len(), 2);
+        assert_eq!(changed.feedback[0].previous_outcome, Outcome::Unknown);
+        assert_eq!(changed.feedback[1].previous_outcome, Outcome::Success);
+        assert_eq!(
+            changed.feedback[1].previous_source,
+            Some(OutcomeSource::Manual)
+        );
+        assert_eq!(changed.feedback[1].reason.as_deref(), Some("tests fail"));
+        assert_eq!(load(&path).unwrap()[0], changed);
     }
 
     #[test]
@@ -380,7 +464,7 @@ mod tests {
         let update_barrier = Arc::clone(&barrier);
         let updater = thread::spawn(move || {
             update_barrier.wait();
-            update_outcome(&update_path, "run-1", Outcome::Success)
+            update_outcome(&update_path, "run-1", Outcome::Success, None)
                 .expect("concurrent update succeeds");
         });
 
@@ -436,6 +520,8 @@ mod tests {
             outcome: Outcome::Unknown,
             execution: None,
             lifecycle: None,
+            outcome_evidence: None,
+            feedback: Vec::new(),
         }
     }
 }
