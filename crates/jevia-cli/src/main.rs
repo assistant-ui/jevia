@@ -2,6 +2,7 @@ mod cache;
 mod lease;
 mod paths;
 mod processes;
+mod storage;
 mod store;
 
 use std::{env, fs, io::Write, process::ExitCode, str::FromStr, time::Instant};
@@ -14,6 +15,7 @@ use jevia_core::{
 };
 
 use crate::paths::ProjectPaths;
+use crate::storage::Storage;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -67,7 +69,7 @@ enum Command {
         #[arg(last = true)]
         args: Vec<String>,
     },
-    /// Show recent local routing records.
+    /// Show recent records from the configured history backend.
     Runs {
         #[command(subcommand)]
         action: Option<RunsAction>,
@@ -84,21 +86,46 @@ enum Command {
         run_id: String,
         /// Observed task result.
         outcome: OutcomeArgument,
-        /// Explanation required when changing a known outcome. Stored locally.
+        /// Explanation required when changing a known outcome. Stored in history.
         #[arg(long)]
         reason: Option<String>,
         /// Print the updated record as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Validate the local installation without making an API request.
+    /// Validate config and configured storage without making a Jev request.
     Doctor,
-    /// Validate the local installation and make a live routing request.
+    /// Validate configured storage and make a live routing request.
     Check,
     /// Inspect or clear the local routing-decision cache.
     Cache {
         #[command(subcommand)]
         action: CacheAction,
+    },
+    /// Initialize, check, import, or export the configured history backend.
+    Storage {
+        #[command(subcommand)]
+        action: StorageAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum StorageAction {
+    /// Explicitly create the database schema and project (does not import history).
+    Init,
+    /// Check schema and read/write access without requiring a Jev API key.
+    Check,
+    /// Preview importing JSONL into the configured database; source is never changed.
+    ImportJsonl {
+        #[arg(long, default_value = ".jevia/runs.jsonl")]
+        from: std::path::PathBuf,
+        #[arg(long)]
+        apply: bool,
+    },
+    /// Export a consistent history snapshot; never overwrite an existing file.
+    Export {
+        #[arg(long)]
+        output: std::path::PathBuf,
     },
 }
 
@@ -107,7 +134,12 @@ enum RunsAction {
     /// Inspect one complete run record, including its execution lifecycle.
     Show { run_id: String },
     /// Mark an execution whose Jevia supervisor exited as interrupted. Never reruns it.
-    Recover { run_id: String },
+    Recover {
+        run_id: String,
+        /// For PostgreSQL: confirm the original supervisor and its processes stopped.
+        #[arg(long)]
+        confirm_stopped: bool,
+    },
     /// Preview repair of an incomplete final JSON line or missing final newline.
     Repair {
         /// Back up the original bytes, then atomically apply the repair.
@@ -212,9 +244,12 @@ async fn run() -> Result<ExitCode> {
             json,
         } => {
             match action {
-                None => runs(limit, json)?,
-                Some(RunsAction::Show { run_id }) => show_run(&run_id)?,
-                Some(RunsAction::Recover { run_id }) => recover_run(&run_id)?,
+                None => runs(limit, json).await?,
+                Some(RunsAction::Show { run_id }) => show_run(&run_id).await?,
+                Some(RunsAction::Recover {
+                    run_id,
+                    confirm_stopped,
+                }) => recover_run(&run_id, confirm_stopped).await?,
                 Some(RunsAction::Repair { apply }) => {
                     maintain_history(store::Maintenance::Repair, apply, json)?
                 }
@@ -230,11 +265,11 @@ async fn run() -> Result<ExitCode> {
             reason,
             json,
         } => {
-            feedback(&run_id, outcome.into(), reason.as_deref(), json)?;
+            feedback(&run_id, outcome.into(), reason.as_deref(), json).await?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Doctor => {
-            doctor()?;
+            doctor().await?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Check => {
@@ -243,6 +278,10 @@ async fn run() -> Result<ExitCode> {
         }
         Command::Cache { action } => {
             cache_command(action)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Storage { action } => {
+            storage_command(action).await?;
             Ok(ExitCode::SUCCESS)
         }
     }
@@ -273,8 +312,9 @@ fn init(force: bool) -> Result<()> {
 async fn route(task: &str, print_json: bool, no_cache: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
-    let record = routed_record(task, None, no_cache, &config, &paths).await?;
-    store::append(&paths.runs, &record)?;
+    let storage = Storage::open(&config, &paths, false).await?;
+    let record = routed_record_in(task, None, no_cache, &config, &paths, &storage).await?;
+    storage.append(&record).await?;
 
     if print_json {
         println!("{}", serde_json::to_string_pretty(&record)?);
@@ -309,7 +349,16 @@ async fn run_harness(
             }
         )
     })?;
-    let record = routed_record(task, Some(harness_name), no_cache, &config, &paths).await?;
+    let storage = Storage::open(&config, &paths, false).await?;
+    let record = routed_record_in(
+        task,
+        Some(harness_name),
+        no_cache,
+        &config,
+        &paths,
+        &storage,
+    )
+    .await?;
     let invocation = harness.invocation(
         harness_name,
         &record.decision.tier,
@@ -317,9 +366,17 @@ async fn run_harness(
         &record.decision.run_id,
         extra_args,
     )?;
-    store::append(&paths.runs, &record)?;
+    storage.append(&record).await?;
 
-    execute_harness_with_options(&paths, harness_name, &invocation, &record, options).await
+    execute_stored_harness(
+        &paths,
+        harness_name,
+        &invocation,
+        &record,
+        options,
+        &storage,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -339,6 +396,7 @@ async fn execute_harness(
     .await
 }
 
+#[cfg(test)]
 async fn execute_harness_with_options(
     paths: &ProjectPaths,
     harness_name: &str,
@@ -346,8 +404,19 @@ async fn execute_harness_with_options(
     record: &RouteRecord,
     options: RunOptions,
 ) -> Result<ExitCode> {
-    let _lease = lease::try_acquire(&paths.directory.join("run-leases"), &record.decision.run_id)?
-        .context("run already has an active Jevia supervisor")?;
+    let storage = Storage::open(&Config::default(), paths, false).await?;
+    execute_stored_harness(paths, harness_name, invocation, record, options, &storage).await
+}
+
+async fn execute_stored_harness(
+    paths: &ProjectPaths,
+    harness_name: &str,
+    invocation: &HarnessInvocation,
+    record: &RouteRecord,
+    options: RunOptions,
+    storage: &Storage,
+) -> Result<ExitCode> {
+    let _lease = storage.execution_guard(&record.decision.run_id).await?;
     let mut runner = processes::Runner::new(options.non_interactive)?;
     eprintln!(
         "jevia: run={} tier={} suggested={} confidence={:.2} fallback={}",
@@ -366,13 +435,14 @@ async fn execute_harness_with_options(
         exit_code: None,
         verification: None,
     };
-    store::record_state(
-        &paths.runs,
-        &record.decision.run_id,
-        RunState::Running,
-        Outcome::Unknown,
-        Some(execution.clone()),
-    )?;
+    storage
+        .state(
+            &record.decision.run_id,
+            RunState::Running,
+            Outcome::Unknown,
+            Some(execution.clone()),
+        )
+        .await?;
     let started = Instant::now();
     let status = runner
         .run(
@@ -387,18 +457,19 @@ async fn execute_harness_with_options(
         Ok(processes::ProcessResult::Stopped { state, .. }) => {
             execution.duration_ms =
                 u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-            return record_stopped(paths, record, execution, state);
+            return record_stopped(storage, record, execution, state).await;
         }
         Err(error) => {
             execution.duration_ms =
                 u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-            store::record_state(
-                &paths.runs,
-                &record.decision.run_id,
-                RunState::LaunchFailed,
-                Outcome::Unknown,
-                Some(execution),
-            )?;
+            storage
+                .state(
+                    &record.decision.run_id,
+                    RunState::LaunchFailed,
+                    Outcome::Unknown,
+                    Some(execution),
+                )
+                .await?;
             return Err(error)
                 .with_context(|| format!("could not launch harness `{harness_name}`"));
         }
@@ -407,35 +478,40 @@ async fn execute_harness_with_options(
     execution.duration_ms = duration_ms;
     execution.exit_code = status.code();
     if !status.success() {
-        store::record_execution(
-            &paths.runs,
-            &record.decision.run_id,
-            Outcome::Failure,
-            execution,
-        )?;
+        storage
+            .state(
+                &record.decision.run_id,
+                RunState::Completed,
+                Outcome::Failure,
+                Some(execution),
+            )
+            .await?;
         eprintln!("jevia: outcome=failure duration_ms={duration_ms}");
         return Ok(child_exit_code(&status));
     }
 
     let Some(verification) = &invocation.verification else {
-        store::record_execution(
-            &paths.runs,
-            &record.decision.run_id,
-            Outcome::Success,
-            execution,
-        )?;
+        storage
+            .state(
+                &record.decision.run_id,
+                RunState::Completed,
+                Outcome::Success,
+                Some(execution),
+            )
+            .await?;
         eprintln!("jevia: outcome=success duration_ms={duration_ms}");
         return Ok(child_exit_code(&status));
     };
 
     eprintln!("jevia: verifying harness `{harness_name}`");
-    store::record_state(
-        &paths.runs,
-        &record.decision.run_id,
-        RunState::Verifying,
-        Outcome::Unknown,
-        Some(execution.clone()),
-    )?;
+    storage
+        .state(
+            &record.decision.run_id,
+            RunState::Verifying,
+            Outcome::Unknown,
+            Some(execution.clone()),
+        )
+        .await?;
     let verification_started = Instant::now();
     let verification_status = runner
         .run(
@@ -457,7 +533,7 @@ async fn execute_harness_with_options(
                     .unwrap_or(u64::MAX),
                 exit_code: None,
             });
-            return record_stopped(paths, record, execution, state);
+            return record_stopped(storage, record, execution, state).await;
         }
         Err(error) => {
             let verification_duration_ms =
@@ -468,13 +544,14 @@ async fn execute_harness_with_options(
                 duration_ms: verification_duration_ms,
                 exit_code: None,
             });
-            store::record_state(
-                &paths.runs,
-                &record.decision.run_id,
-                RunState::LaunchFailed,
-                Outcome::Unknown,
-                Some(execution),
-            )?;
+            storage
+                .state(
+                    &record.decision.run_id,
+                    RunState::LaunchFailed,
+                    Outcome::Unknown,
+                    Some(execution),
+                )
+                .await?;
             return Err(error).with_context(|| {
                 format!("could not launch verification for harness `{harness_name}`")
             });
@@ -493,7 +570,14 @@ async fn execute_harness_with_options(
     } else {
         Outcome::Failure
     };
-    store::record_execution(&paths.runs, &record.decision.run_id, outcome, execution)?;
+    storage
+        .state(
+            &record.decision.run_id,
+            RunState::Completed,
+            outcome,
+            Some(execution),
+        )
+        .await?;
     eprintln!(
         "jevia: outcome={outcome} duration_ms={duration_ms} verification_duration_ms={verification_duration_ms}"
     );
@@ -501,19 +585,20 @@ async fn execute_harness_with_options(
     Ok(child_exit_code(&verification_status))
 }
 
-fn record_stopped(
-    paths: &ProjectPaths,
+async fn record_stopped(
+    storage: &Storage,
     record: &RouteRecord,
     execution: ExecutionEvidence,
     state: RunState,
 ) -> Result<ExitCode> {
-    store::record_state(
-        &paths.runs,
-        &record.decision.run_id,
-        state,
-        Outcome::Unknown,
-        Some(execution),
-    )?;
+    storage
+        .state(
+            &record.decision.run_id,
+            state,
+            Outcome::Unknown,
+            Some(execution),
+        )
+        .await?;
     eprintln!("jevia: state={state:?} outcome=unknown; work was not rerun");
     Ok(ExitCode::from(match state {
         RunState::Cancelled => 130,
@@ -529,6 +614,7 @@ fn child_exit_code(status: &std::process::ExitStatus) -> ExitCode {
         .map_or(ExitCode::FAILURE, ExitCode::from)
 }
 
+#[cfg(test)]
 async fn routed_record(
     task: &str,
     harness_name: Option<&str>,
@@ -536,13 +622,25 @@ async fn routed_record(
     config: &Config,
     paths: &ProjectPaths,
 ) -> Result<RouteRecord> {
+    let storage = Storage::open(config, paths, false).await?;
+    routed_record_in(task, harness_name, no_cache, config, paths, &storage).await
+}
+
+async fn routed_record_in(
+    task: &str,
+    harness_name: Option<&str>,
+    no_cache: bool,
+    config: &Config,
+    paths: &ProjectPaths,
+    storage: &Storage,
+) -> Result<RouteRecord> {
     let wait_started = Instant::now();
     let wait_budget =
         std::time::Duration::from_millis(config.jev.timeout_ms.saturating_add(1_000).min(30_000));
     // The lease remains held through the HTTP request and cache insertion, never
     // while holding a global history/cache lock. Reload evidence after each wait.
     let (history, cache_key, _request_lease) = loop {
-        let history = store::load(&paths.runs)?;
+        let history = storage.recent(config.router.history_limit, true).await?;
         if !config.cache.enabled || no_cache {
             break (history, None, None);
         }
@@ -573,7 +671,7 @@ async fn routed_record(
         // Sidecars stay stable without growing once per distinct task forever.
         match lease::try_acquire(&paths.directory.join("cache-leases"), &key[..2]) {
             Ok(Some(guard)) => {
-                let latest = store::load(&paths.runs)?;
+                let latest = storage.recent(config.router.history_limit, true).await?;
                 let latest_key = route_cache_key(task, harness_name, config, &latest)?;
                 if latest_key != key {
                     continue;
@@ -622,6 +720,11 @@ async fn routed_record(
 
 fn maintain_history(operation: store::Maintenance, apply: bool, print_json: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
+    if !load_config(&paths)?.storage.is_jsonl() {
+        bail!(
+            "runs repair/archive are JSONL-only; use `jevia storage export` for database snapshots"
+        );
+    }
     if apply {
         ensure_local_ignore(&paths.directory.join(".gitignore"))?;
     }
@@ -653,18 +756,17 @@ fn maintain_history(operation: store::Maintenance, apply: bool, print_json: bool
     Ok(())
 }
 
-fn runs(limit: usize, print_json: bool) -> Result<()> {
+async fn runs(limit: usize, print_json: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
-    let records = store::load(&paths.runs)?;
-    let start = records.len().saturating_sub(limit);
-    let records = &records[start..];
+    let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
+    let records = storage.recent(limit, false).await?;
 
     if print_json {
-        println!("{}", serde_json::to_string_pretty(records)?);
+        println!("{}", serde_json::to_string_pretty(&records)?);
         return Ok(());
     }
     if records.is_empty() {
-        println!("No local runs recorded.");
+        println!("No runs recorded.");
         return Ok(());
     }
     for record in records.iter().rev() {
@@ -714,27 +816,18 @@ fn runs(limit: usize, print_json: bool) -> Result<()> {
     Ok(())
 }
 
-fn show_run(run_id: &str) -> Result<()> {
+async fn show_run(run_id: &str) -> Result<()> {
     let paths = ProjectPaths::discover()?;
-    let record = store::load(&paths.runs)?
-        .into_iter()
-        .find(|r| r.decision.run_id == run_id)
-        .context("run id was not found in local history")?;
+    let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
+    let record = storage.get(run_id).await?;
     println!("{}", serde_json::to_string_pretty(&record)?);
     Ok(())
 }
 
-fn recover_run(run_id: &str) -> Result<()> {
+async fn recover_run(run_id: &str, confirm_stopped: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
-    let _lease = lease::try_acquire(&paths.directory.join("run-leases"), run_id)?
-        .context("run still has an active Jevia supervisor; recovery refused")?;
-    let record = store::record_state(
-        &paths.runs,
-        run_id,
-        RunState::Interrupted,
-        Outcome::Unknown,
-        None,
-    )?;
+    let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
+    let record = storage.recover(run_id, confirm_stopped).await?;
     println!("{}", serde_json::to_string_pretty(&record)?);
     eprintln!(
         "jevia: marked interrupted; no processes were rerun or stopped. Inspect the workspace and any surviving agent before retrying."
@@ -742,9 +835,15 @@ fn recover_run(run_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn feedback(run_id: &str, outcome: Outcome, reason: Option<&str>, print_json: bool) -> Result<()> {
+async fn feedback(
+    run_id: &str,
+    outcome: Outcome,
+    reason: Option<&str>,
+    print_json: bool,
+) -> Result<()> {
     let paths = ProjectPaths::discover()?;
-    let record = store::update_outcome(&paths.runs, run_id, outcome, reason)?;
+    let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
+    let record = storage.outcome(run_id, outcome, reason).await?;
     if print_json {
         println!("{}", serde_json::to_string_pretty(&record)?);
     } else {
@@ -753,14 +852,14 @@ fn feedback(run_id: &str, outcome: Outcome, reason: Option<&str>, print_json: bo
     Ok(())
 }
 
-fn doctor() -> Result<()> {
-    let _config = local_diagnostics()?;
+async fn doctor() -> Result<()> {
+    let _config = local_diagnostics().await?;
     required_api_key("doctor")?;
     Ok(())
 }
 
 async fn check() -> Result<()> {
-    let config = local_diagnostics()?;
+    let config = local_diagnostics().await?;
     let api_key = required_api_key("check")?;
     let client = JevClient::new(api_key, &config.jev)?;
     let decision = client
@@ -780,20 +879,17 @@ async fn check() -> Result<()> {
     Ok(())
 }
 
-fn local_diagnostics() -> Result<Config> {
+async fn local_diagnostics() -> Result<Config> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
-    let history = store::load(&paths.runs)?;
+    let storage = Storage::open(&config, &paths, false).await?;
+    let count = storage.check().await?;
     let cache_stats = cache::stats(&paths.cache)
         .context("routing cache is invalid; run `jevia cache clear` to reset it")?;
     println!("config: ok ({})", paths.config.display());
     println!("tiers: ok ({})", config.tiers.len());
     println!("harnesses: ok ({})", config.harnesses.len());
-    println!(
-        "local store: ok ({} records at {})",
-        history.len(),
-        paths.runs.display()
-    );
+    println!("store: ok ({count} records, backend={})", storage.name());
     println!(
         "routing cache: ok ({} total, {} active, {} expired at {})",
         cache_stats.total,
@@ -803,6 +899,42 @@ fn local_diagnostics() -> Result<Config> {
     );
 
     Ok(config)
+}
+
+async fn storage_command(action: StorageAction) -> Result<()> {
+    let paths = ProjectPaths::discover()?;
+    let config = load_config(&paths)?;
+    let storage = Storage::open(&config, &paths, matches!(action, StorageAction::Init)).await?;
+    match action {
+        StorageAction::Init => {
+            ensure_local_ignore(&paths.directory.join(".gitignore"))?;
+            println!(
+                "Storage initialized ({}). Existing JSONL history was not imported or modified.",
+                storage.name()
+            );
+        }
+        StorageAction::Check => println!(
+            "storage: ok (backend={}, records={})",
+            storage.name(),
+            storage.check().await?
+        ),
+        StorageAction::ImportJsonl { from, apply } => {
+            let (imported, skipped) = storage.import_jsonl(paths.root.join(from), apply).await?;
+            println!(
+                "{}: {imported} records {}, {skipped} identical records skipped. Source unchanged.",
+                if apply { "Applied" } else { "Preview" },
+                if apply { "imported" } else { "to import" }
+            );
+            if !apply {
+                println!("Stop source writers, then repeat with --apply to import atomically.");
+            }
+        }
+        StorageAction::Export { output } => {
+            let count = storage.export(&paths.root.join(output)).await?;
+            println!("Exported {count} records. Protect the snapshot: it may contain task text.");
+        }
+    }
+    Ok(())
 }
 
 fn required_api_key(command: &str) -> Result<String> {
@@ -844,7 +976,11 @@ fn cache_command(action: CacheAction) -> Result<()> {
 }
 
 fn ensure_local_ignore(path: &std::path::Path) -> Result<()> {
-    const RULES: [&str; 9] = [
+    const RULES: [&str; 13] = [
+        "*.db",
+        "*.db-wal",
+        "*.db-shm",
+        "*.run-locks/",
         "run-leases/",
         "cache-leases/",
         "history-backups/",

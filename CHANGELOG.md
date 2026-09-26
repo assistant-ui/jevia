@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Add opt-in SQLite and PostgreSQL history backends while preserving JSONL as
+  the default, with indexed evidence queries and transactional feedback/lifecycle
+  updates. Decision caching stays local and respects shared evidence changes.
+- Add explicit storage initialization/checks, preview-first atomic JSONL imports,
+  and non-overwriting JSONL exports. Existing history is never moved implicitly.
+- Require verified TLS for remote PostgreSQL, redact driver errors, and use
+  project-scoped history plus session execution guards and fenced recovery.
+  PostgreSQL recovery requires explicit confirmation that remote work stopped.
+- Add PostgreSQL-backed CI and end-to-end storage/cache/lifecycle coverage.
+
+### Compatibility
+
+Existing configs still default to JSONL. SQL database schema 1 stores history
+record schemas 1–3; no history format version is changed. Older CLI versions
+cannot read the new `[storage]` configuration: do not downgrade against a SQL
+project by silently switching it back to an outdated JSONL history. Rust callers
+constructing `Config` directly must supply `storage` or use `..Config::default()`.
+The workspace is staged as `0.2.0-dev.1` so packaging resolves the matching new
+core API instead of crates.io's existing 0.1.1. This is not a published release;
+the website installer remains pinned to released 0.1.1.
+SQLx 0.8.6 preserves the project's Rust 1.92 minimum; SQLx 0.9 requires Rust 1.94.
+
 ## 0.1.1
 
 - Track run lifecycle separately from task outcome, inspect complete records with

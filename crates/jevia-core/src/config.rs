@@ -14,6 +14,8 @@ pub struct Config {
     pub router: RouterConfig,
     pub jev: JevConfig,
     pub privacy: PrivacyConfig,
+    #[serde(default, skip_serializing_if = "StorageConfig::is_jsonl")]
+    pub storage: StorageConfig,
     #[serde(default)]
     pub cache: CacheConfig,
     pub tiers: BTreeMap<String, TierConfig>,
@@ -40,6 +42,7 @@ impl Config {
         if self.version != CONFIG_VERSION {
             return Err(ConfigError::UnsupportedVersion(self.version));
         }
+        self.storage.validate()?;
         if !(0.0..=1.0).contains(&self.router.confidence_floor) {
             return Err(ConfigError::InvalidConfidenceFloor(
                 self.router.confidence_floor,
@@ -125,9 +128,73 @@ impl Default for Config {
             router: RouterConfig::default(),
             jev: JevConfig::default(),
             privacy: PrivacyConfig::default(),
+            storage: StorageConfig::default(),
             cache: CacheConfig::default(),
             tiers,
             harnesses: BTreeMap::new(),
+        }
+    }
+}
+
+/// Opt-in persistence. Credentials are only resolved by the CLI at runtime.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "backend", rename_all = "snake_case", deny_unknown_fields)]
+pub enum StorageConfig {
+    #[default]
+    Jsonl,
+    Sqlite {
+        url: String,
+    },
+    Postgres {
+        url_env: String,
+        project: String,
+        /// Development only: permit plaintext connections to a loopback host.
+        #[serde(default)]
+        allow_insecure_localhost: bool,
+    },
+}
+
+impl StorageConfig {
+    pub fn is_jsonl(&self) -> bool {
+        matches!(self, Self::Jsonl)
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        match self {
+            Self::Jsonl => Ok(()),
+            Self::Sqlite { url } => {
+                let path = url.strip_prefix("sqlite://").filter(|s| !s.is_empty());
+                if path.is_none_or(|s| s.contains(['?', '#', '\0']) || s.contains(":memory:")) {
+                    return Err(ConfigError::InvalidStorage(
+                        "SQLite requires a persistent sqlite:// file URL without query parameters",
+                    ));
+                }
+                Ok(())
+            }
+            Self::Postgres {
+                url_env, project, ..
+            } => {
+                if url_env.is_empty()
+                    || !url_env.bytes().enumerate().all(|(i, c)| {
+                        c == b'_' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit())
+                    })
+                {
+                    return Err(ConfigError::InvalidStorage(
+                        "url_env must name an environment variable, not contain a connection string",
+                    ));
+                }
+                if project.is_empty()
+                    || project.len() > 128
+                    || !project
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c))
+                {
+                    return Err(ConfigError::InvalidStorage(
+                        "project must contain 1–128 letters, digits, dots, hyphens, or underscores",
+                    ));
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -176,11 +243,11 @@ impl Default for JevConfig {
     }
 }
 
-/// Local persistence controls.
+/// Persistence controls for every history backend.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PrivacyConfig {
-    /// Persist raw task text in the local run history.
+    /// Persist raw task text in the configured run history.
     pub store_task_text: bool,
 }
 
@@ -429,6 +496,8 @@ pub struct VerificationInvocation {
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
+    #[error("invalid storage configuration: {0}")]
+    InvalidStorage(&'static str),
     #[error("could not parse configuration: {0}")]
     Parse(#[from] toml::de::Error),
     #[error("could not serialize configuration: {0}")]
@@ -479,6 +548,33 @@ pub enum ConfigError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn storage_is_opt_in_and_round_trips_without_credentials() {
+        let old = Config::default().to_toml().unwrap();
+        assert!(!old.contains("[storage]"));
+        assert!(Config::from_toml(&old).unwrap().storage.is_jsonl());
+        for section in [
+            "\n[storage]\nbackend = 'sqlite'\nurl = 'sqlite://.jevia/jevia.db'\n",
+            "\n[storage]\nbackend = 'postgres'\nurl_env = 'JEVIA_DATABASE_URL'\nproject = 'my-project'\n",
+        ] {
+            let parsed = Config::from_toml(&format!("{old}{section}")).unwrap();
+            assert_eq!(
+                Config::from_toml(&parsed.to_toml().unwrap()).unwrap(),
+                parsed
+            );
+        }
+        for section in [
+            "\n[storage]\nbackend = 'mysql'\n",
+            "\n[storage]\nbackend = 'sqlite'\nurl = 'sqlite::memory:'\n",
+            "\n[storage]\nbackend = 'sqlite'\nurl = 'sqlite://file?mode=memory'\n",
+            "\n[storage]\nbackend = 'postgres'\nurl = 'postgres://user:password@localhost/db'\nproject = 'test'\n",
+            "\n[storage]\nbackend = 'postgres'\nurl_env = 'postgres://user:password@localhost/db'\nproject = 'test'\n",
+            "\n[storage]\nbackend = 'postgres'\nurl_env = 'JEVIA_DATABASE_URL'\nproject = ''\n",
+        ] {
+            assert!(Config::from_toml(&format!("{old}{section}")).is_err());
+        }
+    }
 
     #[test]
     fn default_config_round_trips() {
