@@ -7,6 +7,7 @@
   --border-strong: #444;
   --surface: #0c0c0c;
   --frame-width: min(1024px, calc(100vw - 32px));
+  --content-gutter: 2.5rem;
   color-scheme: dark;
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
@@ -201,7 +202,7 @@ pre {
 }
 
 .hero-copy {
-  padding: 4rem 2.5rem;
+  padding: 4rem var(--content-gutter);
 }
 
 .hero h1 {
@@ -247,7 +248,7 @@ pre {
   align-items: flex-end;
   justify-content: space-between;
   gap: 2rem;
-  padding: 0 2.5rem 1rem;
+  padding: 0 var(--content-gutter) 1rem;
   border-bottom: 1px solid transparent;
 }
 
@@ -323,7 +324,7 @@ pre {
 }
 
 .timescale-root.setup-timescale[data-orientation="horizontal"] .timescale-viewport {
-  padding-inline: 64px;
+  padding-inline: var(--content-gutter);
   mask-image: none;
   touch-action: pan-x pan-y;
 }
@@ -688,10 +689,11 @@ pre {
 @media (max-width: 720px) {
   :root {
     --frame-width: calc(100vw - 20px);
+    --content-gutter: 1.25rem;
   }
 
   .hero-copy {
-    padding: 2.75rem 1.25rem;
+    padding: 2.75rem var(--content-gutter);
   }
 
   .hero h1 {
@@ -700,15 +702,10 @@ pre {
 
   .section-heading {
     align-items: flex-start;
-    padding-inline: 1.25rem;
   }
 
   .setup-timescale {
     --timescale-fade: 48px;
-  }
-
-  .timescale-root.setup-timescale[data-orientation="horizontal"] .timescale-viewport {
-    padding-inline: 32px;
   }
 
   .setup-timescale[data-orientation="horizontal"] .timescale-item:has(.timescale-content) {
