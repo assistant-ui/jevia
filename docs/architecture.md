@@ -113,6 +113,13 @@ same synchronized atomic-replacement pattern as history updates. Cache
 corruption is reported without rewriting the file; `jevia cache clear` is the
 explicit recovery operation.
 
+On a cache miss, a bounded set of 256 stable OS-lock stripes coordinates live
+requests across processes. A lease covers the live request and cache insertion,
+not global history/cache locks. Waiters reload evidence and recheck the cache;
+changed evidence selects a new fingerprint. Waits are bounded (Jev timeout plus
+one second, capped at 30 seconds), then fail open to live routing. API failures
+and process exits release the lease, and `--no-cache` bypasses coordination.
+
 Schema-version-1 and -2 history remains readable. New or mutated records use
 version 3 to protect lifecycle and outcome provenance from older writers. A per-run OS file lease is
 held from before the running transition until the terminal record is saved.
