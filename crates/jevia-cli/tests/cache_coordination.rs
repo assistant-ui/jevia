@@ -84,6 +84,9 @@ impl Drop for Server {
 }
 
 fn respond(mut stream: TcpStream, fail: bool) {
+    // Accepted sockets can inherit the listener's non-blocking mode on macOS
+    // and Windows. Worker threads use blocking reads with a bounded timeout.
+    stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
