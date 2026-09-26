@@ -153,13 +153,13 @@ pre {
 
 .wordmark-mark {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 22px;
   place-items: center;
-  border: 1px solid var(--border-strong);
+  border: 1px solid rgb(250 250 250 / 0.09);
   color: var(--foreground);
   font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   font-weight: 650;
 }
 
@@ -268,8 +268,36 @@ pre {
 }
 
 .setup-timescale {
-  --timescale-fade: 40px;
+  --timescale-fade: 96px;
   margin-top: 1.75rem;
+  isolation: isolate;
+}
+
+.setup-timescale::before,
+.setup-timescale::after {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  bottom: 0;
+  width: var(--timescale-fade);
+  background: linear-gradient(
+    to right,
+    var(--background),
+    rgb(9 9 9 / 0.9) 18%,
+    rgb(9 9 9 / 0.45) 45%,
+    rgb(9 9 9 / 0) 100%
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.setup-timescale::before {
+  left: 0;
+}
+
+.setup-timescale::after {
+  right: 0;
+  transform: scaleX(-1);
 }
 
 .setup-timescale.timescale-root {
@@ -277,14 +305,8 @@ pre {
 }
 
 .timescale-root.setup-timescale[data-orientation="horizontal"] .timescale-viewport {
-  padding-inline: 40px;
-  mask-image: linear-gradient(
-    to right,
-    transparent,
-    black var(--timescale-fade),
-    black calc(100% - var(--timescale-fade)),
-    transparent
-  );
+  padding-inline: 64px;
+  mask-image: none;
   touch-action: pan-x pan-y;
 }
 
@@ -622,13 +644,16 @@ pre {
     padding-inline: 1.25rem;
   }
 
+  .setup-timescale {
+    --timescale-fade: 48px;
+  }
+
   .timescale-root.setup-timescale[data-orientation="horizontal"] .timescale-viewport {
-    --timescale-fade: 20px;
-    padding-inline: 20px;
+    padding-inline: 32px;
   }
 
   .setup-timescale[data-orientation="horizontal"] .timescale-item:has(.timescale-content) {
-    width: min(320px, calc(100vw - 60px));
+    width: min(320px, calc(100vw - 86px));
   }
 
   .copy-button span {

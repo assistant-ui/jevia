@@ -58,7 +58,7 @@ export default function HomePage() {
       <header className="site-header page-frame">
         <a className="wordmark" href="#top" aria-label="Jevia home">
           <span className="wordmark-mark" aria-hidden="true">
-            J
+            J~
           </span>
           <span>Jevia</span>
         </a>
