@@ -6,7 +6,7 @@ mod route;
 
 pub use config::{
     CacheConfig, Config, ConfigError, HarnessConfig, HarnessInvocation, JevConfig, PrivacyConfig,
-    RouterConfig, TierConfig, VerificationConfig, VerificationInvocation,
+    RouterConfig, StorageConfig, TierConfig, VerificationConfig, VerificationInvocation,
 };
 pub use jev::{JevClient, JevError, route_cache_key};
 pub use route::{

@@ -16,7 +16,7 @@ Jevia closes that loop:
 1. describe stable capability tiers rather than hard-coding model names;
 2. ask Jev which tier should handle the current task;
 3. fall back to a configured safe tier when confidence is low;
-4. record the routing decision locally;
+4. record the routing decision in the configured history store;
 5. attach success or failure after the task finishes;
 6. include recent outcomes as evidence in future routing decisions.
 
@@ -39,7 +39,8 @@ jevia route "investigate an intermittent distributed-lock failure"
 ```
 
 `jevia check` makes one live Jev request and requires a valid API key. Use
-`jevia doctor` for local checks without an API request.
+`jevia doctor` for configuration/storage checks without a Jev API request.
+PostgreSQL storage checks do connect to the configured database.
 
 To try unreleased development changes instead:
 
@@ -68,10 +69,14 @@ jevia runs --json
 | `jevia init` | Create `.jevia/config.toml` and local store rules. |
 | `jevia route <task>` | Ask Jev for a tier and record the decision. |
 | <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch a configured harness, and record its exit outcome. |
-| `jevia runs` | Inspect recent local routing records. |
+| `jevia runs` | Inspect recent records in the configured backend. |
 | `jevia feedback <id> <outcome>` | Mark a run as `success`, `failure`, or `unknown`. |
-| `jevia doctor` | Validate configuration, credentials, and local storage. |
-| `jevia check` | Validate local state and complete a live Jev routing round trip without storing a run. |
+| `jevia doctor` | Validate configuration, credentials, and configured storage. |
+| `jevia storage init` | Explicitly initialize an opt-in database schema and project. |
+| `jevia storage check` | Check storage without needing a Jev API key. |
+| `jevia storage import-jsonl [--from <file>] [--apply]` | Preview/import local history into a database without changing the source. |
+| `jevia storage export --output <file>` | Export history to a new JSONL snapshot; never overwrite a file. |
+| `jevia check` | Validate configured storage and complete a live Jev routing round trip without storing a run. |
 | `jevia cache status` | Inspect routing-cache settings and entry counts. |
 | `jevia cache clear` | Remove cached decisions without touching run history. |
 
@@ -196,9 +201,9 @@ jevia runs show <run-id>
 
 Changing an already-known outcome requires a nonempty `--reason`. Every feedback
 operation retains the prior outcome/source, timestamp, and optional reason in a
-local audit trail; original execution evidence is preserved. Reasons are limited
+audit trail in the selected backend; original execution evidence is preserved. Reasons are limited
 to 4096 bytes and are never sent to Jev. Setting the outcome to `unknown` removes
-it from learning evidence. These local records are not a tamper-proof audit log.
+it from learning evidence. These records are not a tamper-proof audit log.
 
 ## Routing cache
 
@@ -243,7 +248,109 @@ Waiting is bounded to the configured Jev timeout plus one second (at most 30
 seconds). On expiry or a coordination error, routing proceeds live; duplicate
 requests are possible in that fallback. `--no-cache` skips coordination too.
 
-## Local data
+## Storage
+
+JSONL remains the default. SQLite and PostgreSQL are opt-in alternatives; changing
+the backend does **not** synchronize or automatically move existing history.
+The normal `route`, `run`, `runs`, `feedback`, `doctor`, and `check` commands use
+the selected backend. These options are unreleased and are not in v0.1.1.
+
+### SQLite: local database, no server
+
+Add to `.jevia/config.toml`:
+
+```toml
+[storage]
+backend = "sqlite"
+url = "sqlite://.jevia/jevia.db"
+```
+
+Then explicitly initialize and optionally import your old JSONL history:
+
+```sh
+jevia storage init
+jevia storage check
+jevia storage import-jsonl
+jevia storage import-jsonl --apply
+jevia runs
+```
+
+Relative file paths are resolved from the project root, not the current working
+directory. SQLite is bundled into the binary. It uses WAL, full synchronous writes,
+a five-second busy timeout, and private file permissions on Unix for new databases.
+Use a local disk, not a shared/network filesystem. Default `.db` files, WAL/SHM
+sidecars, and run locks under `.jevia` are ignored after `init`/`storage init`.
+For custom paths/extensions, protect the directory and add your own ignore rules;
+on Windows, protect the directory with the appropriate filesystem ACLs.
+
+### PostgreSQL: bring your own database
+
+Provision a dedicated PostgreSQL database and put its connection URL in your
+secret manager or environment as `JEVIA_DATABASE_URL`. Do not put passwords in
+the project config or CLI arguments.
+
+```toml
+[storage]
+backend = "postgres"
+url_env = "JEVIA_DATABASE_URL"
+project = "my-project"
+```
+
+Run `jevia storage init` once with schema-creation permissions, then
+`jevia storage check`. Normal operation needs read/write access to the
+`jevia_projects` and `jevia_runs` tables and read access to `jevia_schema`,
+not permission to create databases. Remote connections require certificate and
+hostname verification (`sslmode=verify-full`); `sslrootcert`, `sslcert`, `sslkey`,
+and `application_name` URL options are supported. Only local development can opt
+into plaintext using `allow_insecure_localhost = true` and a loopback host.
+
+Use a **direct or session-pooled connection**, not a transaction-mode pooler:
+execution guards use PostgreSQL session advisory locks. Each CLI invocation uses
+a small pool; running a harness also holds a dedicated guard connection.
+
+Use the same `project` value across trusted workspaces to share evidence. This
+namespace is **not authorization or tenant isolation**: anyone with access to the
+database tables can access other projects. Separate database roles/databases or a
+future authenticated managed API are needed for mutually untrusted users.
+
+### Guarantees and current limits
+
+- Database writes are transactional. Feedback history and its current outcome
+  change together; short project-scoped write locks prevent lost updates.
+- Recent history and eligible evidence use indexed, bounded queries in append
+  order. Complete versioned records preserve execution and feedback provenance.
+- `storage check` verifies schema and CRUD permissions with a rolled-back probe;
+  it does not insert fake evidence. `doctor`/`check` include this check. It is not
+  a complete database integrity scan; SQLite/PostgreSQL maintenance remains the
+  operator's responsibility.
+- Database/record schema versions are checked; unknown versions are rejected.
+  Driver errors are redacted and database operations have five-second timeouts.
+  An outage never silently switches history back to local JSONL.
+- Imports preview by default and commit all-or-nothing with `--apply`. Identical
+  run IDs are skipped; conflicting records, duplicate source IDs, active runs,
+  or malformed/unsupported records abort the import. Stop source writers first.
+  Keep the unchanged source as your backup; no automatic bidirectional sync or
+  background replication is provided.
+- `jevia storage export --output .jevia/snapshot.jsonl` writes a new private
+  snapshot. Protect and ignore exports; they may contain task text. Exports
+  normalize records rather than preserving original JSON whitespace.
+- The decision cache and cache-miss coordination remain local. Every routing
+  attempt fetches current eligible evidence before computing its cache key, so
+  new shared outcomes invalidate affected decisions. Cross-machine request
+  deduplication and offline write queues are not included.
+- SQLite run locks sit beside the canonical database path. PostgreSQL guards
+  block recovery while the supervisor's database session is alive. Because a
+  lost session does not prove its subprocess stopped, PostgreSQL recovery also
+  requires `jevia runs recover <id> --confirm-stopped` after inspecting and
+  stopping the original supervisor and any surviving processes. Recovery is
+  terminal and fences late writes from that supervisor; it never reruns work.
+  There is no automatic lease expiration or remote process termination.
+- `runs repair` and `runs archive` remain JSONL-only and refuse database mode.
+  Use explicit exports and your database's backup/retention tooling instead.
+- Managed hosting, managed credentials, and a dashboard are not part of this
+  integration. Data is stored locally or in the user's own database.
+
+### Default JSONL data
 
 Project configuration lives in `.jevia/config.toml` and is intended to be
 reviewed and committed. Run history lives in `.jevia/runs.jsonl` and is ignored
@@ -255,11 +362,11 @@ another's evidence.
 Routing decisions live in the ignored `.jevia/cache.jsonl` file and use the
 same locking and atomic-replacement guarantees through `.jevia/cache.lock`.
 
-By default Jevia stores task text locally so it can supply useful examples to
+By default Jevia stores task text in the selected backend so it can supply useful examples to
 future decisions. Set `store_task_text = false` under `[privacy]` to retain only
 routing metadata.
 
-`jevia doctor` validates the complete history and reports malformed records
+In JSONL mode, `jevia doctor` validates the complete history and reports malformed records
 without deleting or rewriting them.
 
 ### History maintenance
@@ -299,7 +406,7 @@ replacing it with an older backup would otherwise discard newer runs.
 
 - `crates/jevia-core` contains configuration, typed API contracts, policy, and
   outcome records.
-- `crates/jevia-cli` contains filesystem persistence and terminal commands.
+- `crates/jevia-cli` contains JSONL/SQLite/PostgreSQL persistence and terminal commands.
 - `website` contains the Farm.js product site and getting-started guide.
 
 Dashboard code does not belong in this repository. The managed dashboard is a

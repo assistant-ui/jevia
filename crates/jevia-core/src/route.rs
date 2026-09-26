@@ -173,7 +173,7 @@ pub struct VerificationEvidence {
     pub exit_code: Option<i32>,
 }
 
-/// Persisted local record used by the outcome feedback loop.
+/// Persisted record used by the outcome feedback loop.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RouteRecord {
     pub schema_version: u32,

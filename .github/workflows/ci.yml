@@ -61,6 +61,49 @@ jobs:
       - name: Verify publishable packages
         run: cargo publish --workspace --dry-run --locked --registry crates-io
 
+  postgres:
+    name: PostgreSQL storage
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: jevia_test
+          POSTGRES_PASSWORD: jevia_test
+          POSTGRES_DB: jevia_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jevia_test -d jevia_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      JEVIA_TEST_POSTGRES_URL: postgres://jevia_test:jevia_test@127.0.0.1:5432/jevia_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Test PostgreSQL contracts and complete CLI flow
+        run: cargo test --locked -p jevia postgres -- --ignored
+
+  musl:
+    name: Linux musl storage build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - name: Install musl C toolchain for bundled SQLite
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+      - name: Build Linux distribution target
+        run: cargo build --locked --package jevia --target x86_64-unknown-linux-musl
+
   portability:
     name: Portability (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

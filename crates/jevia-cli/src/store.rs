@@ -89,41 +89,50 @@ pub fn update_outcome(
     outcome: Outcome,
     reason: Option<&str>,
 ) -> Result<RouteRecord> {
+    update(path, run_id, |record| {
+        apply_outcome(record, outcome, reason)
+    })
+}
+
+pub(super) fn apply_outcome(
+    record: &mut RouteRecord,
+    outcome: Outcome,
+    reason: Option<&str>,
+) -> Result<()> {
     let reason = reason.map(str::trim).filter(|value| !value.is_empty());
     if reason.is_some_and(|value| value.len() > 4096) {
         bail!("feedback reason must be at most 4096 bytes");
     }
-    update(path, run_id, |record| {
-        if record
-            .lifecycle
+    if record
+        .lifecycle
+        .as_ref()
+        .is_some_and(|life| life.state.is_active())
+    {
+        bail!("cannot change feedback while a run is active; inspect or recover it first");
+    }
+    if record.outcome != Outcome::Unknown && outcome != record.outcome && reason.is_none() {
+        bail!("changing a known outcome requires --reason");
+    }
+    let recorded_at_ms = now_ms();
+    record.feedback.push(FeedbackEvent {
+        previous_outcome: record.outcome,
+        previous_source: record
+            .outcome_evidence
             .as_ref()
-            .is_some_and(|life| life.state.is_active())
-        {
-            bail!("cannot change feedback while a run is active; inspect or recover it first");
-        }
-        if record.outcome != Outcome::Unknown && outcome != record.outcome && reason.is_none() {
-            bail!("changing a known outcome requires --reason");
-        }
-        let recorded_at_ms = now_ms();
-        record.feedback.push(FeedbackEvent {
-            previous_outcome: record.outcome,
-            previous_source: record
-                .outcome_evidence
-                .as_ref()
-                .map(|evidence| evidence.source),
-            outcome,
-            recorded_at_ms,
-            reason: reason.map(str::to_owned),
-        });
-        record.outcome = outcome;
-        record.outcome_evidence = Some(OutcomeEvidence {
-            source: OutcomeSource::Manual,
-            recorded_at_ms,
-        });
-        Ok(())
-    })
+            .map(|evidence| evidence.source),
+        outcome,
+        recorded_at_ms,
+        reason: reason.map(str::to_owned),
+    });
+    record.outcome = outcome;
+    record.outcome_evidence = Some(OutcomeEvidence {
+        source: OutcomeSource::Manual,
+        recorded_at_ms,
+    });
+    Ok(())
 }
 
+#[cfg(test)]
 pub fn record_execution(
     path: &Path,
     run_id: &str,
@@ -141,50 +150,57 @@ pub fn record_state(
     execution: Option<ExecutionEvidence>,
 ) -> Result<RouteRecord> {
     update(path, run_id, |record| {
-        let now = now_ms();
-        let life = record.lifecycle.get_or_insert_with(Default::default);
-        if !matches!(
-            life.state,
-            RunState::Routed | RunState::Running | RunState::Verifying
-        ) {
-            bail!("run is already terminal; execution is never automatically retried");
-        }
-        if state == RunState::Running && life.state != RunState::Routed {
-            bail!("run has already started");
-        }
-        if state == RunState::Interrupted && !life.state.is_active() {
-            bail!("only an active execution can be recovered");
-        }
-        life.started_at_ms.get_or_insert(now);
-        life.state = state;
-        if !state.is_active() {
-            life.finished_at_ms = Some(now);
-        }
-        record.outcome = outcome;
-        if let Some(execution) = execution {
-            record.execution = Some(execution);
-        }
-        record.outcome_evidence = if state == RunState::Completed {
-            let verified = record
-                .execution
-                .as_ref()
-                .and_then(|execution| execution.verification.as_ref())
-                .is_some_and(|verification| {
-                    verification.launched && verification.exit_code.is_some()
-                });
-            Some(OutcomeEvidence {
-                source: if verified {
-                    OutcomeSource::Verification
-                } else {
-                    OutcomeSource::ProcessExit
-                },
-                recorded_at_ms: now,
-            })
-        } else {
-            None
-        };
-        Ok(())
+        apply_state(record, state, outcome, execution)
     })
+}
+
+pub(super) fn apply_state(
+    record: &mut RouteRecord,
+    state: RunState,
+    outcome: Outcome,
+    execution: Option<ExecutionEvidence>,
+) -> Result<()> {
+    let now = now_ms();
+    let life = record.lifecycle.get_or_insert_with(Default::default);
+    if !matches!(
+        life.state,
+        RunState::Routed | RunState::Running | RunState::Verifying
+    ) {
+        bail!("run is already terminal; execution is never automatically retried");
+    }
+    if state == RunState::Running && life.state != RunState::Routed {
+        bail!("run has already started");
+    }
+    if state == RunState::Interrupted && !life.state.is_active() {
+        bail!("only an active execution can be recovered");
+    }
+    life.started_at_ms.get_or_insert(now);
+    life.state = state;
+    if !state.is_active() {
+        life.finished_at_ms = Some(now);
+    }
+    record.outcome = outcome;
+    if let Some(execution) = execution {
+        record.execution = Some(execution);
+    }
+    record.outcome_evidence = if state == RunState::Completed {
+        let verified = record
+            .execution
+            .as_ref()
+            .and_then(|execution| execution.verification.as_ref())
+            .is_some_and(|verification| verification.launched && verification.exit_code.is_some());
+        Some(OutcomeEvidence {
+            source: if verified {
+                OutcomeSource::Verification
+            } else {
+                OutcomeSource::ProcessExit
+            },
+            recorded_at_ms: now,
+        })
+    } else {
+        None
+    };
+    Ok(())
 }
 
 fn now_ms() -> u64 {
