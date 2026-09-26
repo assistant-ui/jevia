@@ -71,7 +71,15 @@ impl Server {
 impl Drop for Server {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
-        self.thread.take().unwrap().join().unwrap();
+        if let Err(error) = self.thread.take().unwrap().join() {
+            // Preserve the original assertion failure instead of aborting from
+            // a second panic while unwinding (especially on Windows).
+            if thread::panicking() {
+                eprintln!("mock server also failed: {error:?}");
+            } else {
+                std::panic::resume_unwind(error);
+            }
+        }
     }
 }
 
@@ -114,6 +122,9 @@ fn route(root: &Path, no_cache: bool) -> Child {
     command
         .current_dir(root)
         .env("TYPESAFE_API_KEY", "test-key")
+        // These tests launch several independent runtimes concurrently. Avoid
+        // multiplying the CI host's CPU count into hundreds of worker threads.
+        .env("TOKIO_WORKER_THREADS", "2")
         .args(["route", "same task", "--json"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
