@@ -6,6 +6,7 @@
   --border: #252525;
   --border-strong: #444;
   --surface: #0c0c0c;
+  --footer-rule-offset: 80px;
   --frame-width: min(1024px, calc(100vw - 32px));
   --content-gutter: 2.5rem;
   color-scheme: dark;
@@ -78,7 +79,10 @@ pre {
 
 .site-shell {
   position: relative;
+  display: flex;
   min-height: 100vh;
+  min-height: 100svh;
+  flex-direction: column;
 }
 
 .site-shell::before {
@@ -621,6 +625,59 @@ pre {
   color: #919191;
 }
 
+.harness-name-slot {
+  position: relative;
+  display: inline-block;
+  width: 6ch;
+  height: 1.4em;
+  overflow: hidden;
+  vertical-align: -0.3em;
+}
+
+.harness-name {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--foreground);
+  will-change: transform, opacity;
+}
+
+.harness-name-enter {
+  animation: harness-name-enter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.harness-name-exit {
+  animation: harness-name-exit 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.harness-name-slot[data-cycle="0"] .harness-name-enter {
+  animation: none;
+}
+
+@keyframes harness-name-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-110%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes harness-name-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(110%);
+  }
+}
+
 .command-actions {
   display: flex;
   align-items: center;
@@ -686,14 +743,43 @@ pre {
   display: none;
 }
 
+.site-footer {
+  position: relative;
+  min-height: var(--footer-rule-offset);
+  flex: 0 0 var(--footer-rule-offset);
+  margin-top: auto;
+  border-top: 1px solid transparent;
+}
+
+.site-footer::before {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  width: 100vw;
+  border-top: 1px dashed var(--border);
+  content: "";
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.footer-junctions {
+  top: -5px;
+  bottom: auto;
+}
+
 @media (max-width: 720px) {
   :root {
     --frame-width: calc(100vw - 20px);
     --content-gutter: 1.25rem;
+    --footer-rule-offset: 64px;
   }
 
   .hero-copy {
     padding: 2.75rem var(--content-gutter);
+  }
+
+  .quickstart-panel {
+    padding-block: 1.5rem;
   }
 
   .hero h1 {
@@ -740,6 +826,43 @@ pre {
     gap: 0.25rem;
     padding-inline: 0.375rem;
   }
+
+}
+
+@media (min-width: 721px) and (max-height: 800px) {
+  .hero-copy {
+    padding-block: 2.25rem;
+  }
+
+  .quickstart-panel {
+    padding-block: 1.125rem;
+  }
+
+  .setup-timescale {
+    margin-top: 1rem;
+  }
+}
+
+@media (max-width: 720px) and (max-height: 720px) {
+  :root {
+    --footer-rule-offset: 56px;
+  }
+
+  .hero-copy {
+    padding-block: 1.25rem;
+  }
+
+  .hero-command {
+    margin-top: 0.5rem;
+  }
+
+  .quickstart-panel {
+    padding-block: 0.5rem;
+  }
+
+  .setup-timescale {
+    margin-top: 0.75rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -748,5 +871,14 @@ pre {
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .harness-name-enter,
+  .harness-name-exit {
+    animation: none;
+  }
+
+  .harness-name-exit {
+    display: none;
   }
 }
