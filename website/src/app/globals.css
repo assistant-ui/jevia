@@ -744,8 +744,8 @@ pre {
 
 .site-footer {
   position: relative;
-  min-height: 7px;
-  flex: 0 0 7px;
+  min-height: 28px;
+  flex: 0 0 28px;
   margin-top: auto;
   border-top: 1px solid transparent;
 }
@@ -843,7 +843,7 @@ pre {
 
 @media (max-width: 720px) and (max-height: 720px) {
   .hero-copy {
-    padding-block: 1.75rem;
+    padding-block: 1.5rem;
   }
 
   .hero-command {
@@ -851,11 +851,11 @@ pre {
   }
 
   .quickstart-panel {
-    padding-block: 1rem;
+    padding-block: 0.75rem;
   }
 
   .setup-timescale {
-    margin-top: 1.25rem;
+    margin-top: 1rem;
   }
 }
 
