@@ -139,7 +139,6 @@ export default function HomePage() {
       <footer className="site-footer page-frame" aria-labelledby="node-api-title">
         <div className="node-api-rail">
           <div className="node-api-copy">
-            <span className="node-api-kicker">Programmatic</span>
             <div>
               <h2 id="node-api-title">Typed Node.js API</h2>
               <p>Route any harness from code and report verified outcomes.</p>

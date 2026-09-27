@@ -772,21 +772,7 @@ pre {
 }
 
 .node-api-copy {
-  display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 0.85rem;
-}
-
-.node-api-kicker {
-  flex: 0 0 auto;
-  padding-right: 0.85rem;
-  border-right: 1px solid var(--border);
-  color: var(--muted-foreground);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.6rem;
-  letter-spacing: 0.055em;
-  text-transform: uppercase;
 }
 
 .node-api-copy h2,
@@ -900,11 +886,6 @@ pre {
     padding-inline: 0.75rem;
   }
 
-  .node-api-copy {
-    gap: 0;
-  }
-
-  .node-api-kicker,
   .node-api-copy p,
   .node-api-link {
     display: none;
