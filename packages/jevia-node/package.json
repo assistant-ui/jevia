@@ -1,0 +1,54 @@
+{
+  "name": "jevia",
+  "version": "0.1.0",
+  "description": "Typed Node.js client for the Jevia CLI",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "type-check": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm build && node --test test/*.test.mjs",
+    "prepack": "pnpm build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/assistant-ui/jevia.git",
+    "directory": "packages/jevia-node"
+  },
+  "homepage": "https://github.com/assistant-ui/jevia#nodejs-api",
+  "bugs": {
+    "url": "https://github.com/assistant-ui/jevia/issues"
+  },
+  "keywords": [
+    "ai",
+    "coding-agents",
+    "jev",
+    "llm",
+    "model-routing"
+  ],
+  "license": "MIT",
+  "author": "assistant-ui",
+  "packageManager": "pnpm@10.9.0",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
+  }
+}

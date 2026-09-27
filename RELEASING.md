@@ -69,3 +69,29 @@ at assets that do not exist yet. Smoke-test the installer in an isolated directo
 
 For an existing tag whose release assets need to be rebuilt, run the `Release
 binaries` workflow manually and supply the exact tag, such as `v0.1.0`.
+
+## Node.js package
+
+The `packages/jevia-node` package is versioned and published separately from the
+Rust workspace. Before publishing, confirm that the unscoped `jevia` name is
+still available or owned by the project, then run:
+
+```bash
+cd packages/jevia-node
+pnpm install --frozen-lockfile
+pnpm audit
+pnpm type-check
+pnpm test
+npm publish --dry-run
+```
+
+Publish from a clean commit with an npm account authorized for the package:
+
+```bash
+npm publish --access public
+npm view jevia version dist.tarball
+```
+
+The npm package intentionally does not bundle or download the Rust executable.
+Verify its README points to the released CLI installer and test the published
+client against that CLI version before announcing it.
