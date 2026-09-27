@@ -92,14 +92,22 @@ export default function DocsPage() {
       <SiteHeader current="docs" />
 
       <div className="docs-frame page-frame">
-        <span className="frame-junctions docs-frame-junctions" aria-hidden="true" />
+        <header className="docs-page-bar">
+          <a className="docs-sidebar-title" href="#overview">
+            <span aria-hidden="true">01</span>
+            API reference
+          </a>
+          <div className="docs-page-bar-main">
+            <h1>Jevia for Node.js.</h1>
+            <DocsPageActions />
+          </div>
+          <span className="frame-junctions docs-frame-junctions" aria-hidden="true" />
+        </header>
 
         <DocsSidebar />
 
         <article className="docs-content">
           <header className="docs-hero" id="overview">
-            <DocsPageActions />
-            <h1>Jevia for Node.js.</h1>
             <p>
               Route tasks, inspect run records, and report verified outcomes from
               Node.js while keeping Jevia&apos;s local policy, storage, and learning

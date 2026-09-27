@@ -21,7 +21,13 @@ export function DocsSidebar() {
 
     function updateActiveSection() {
       frame = 0;
-      const offset = window.innerWidth <= 800 ? 150 : 96;
+      const pageBarBottom =
+        document.querySelector(".docs-page-bar")?.getBoundingClientRect().bottom ?? 126;
+      const mobileNavigationHeight =
+        window.innerWidth <= 800
+          ? (document.querySelector(".docs-sidebar")?.getBoundingClientRect().height ?? 0)
+          : 0;
+      const offset = pageBarBottom + mobileNavigationHeight + 20;
       let nextId: SectionId = LINKS[0][0];
       const atPageEnd =
         Math.ceil(window.scrollY + window.innerHeight) >=
@@ -77,13 +83,7 @@ export function DocsSidebar() {
   return (
     <aside className="docs-sidebar" aria-label="Documentation navigation">
       <div className="docs-sidebar-inner">
-        <a className="docs-sidebar-title" href="#overview">
-          <span aria-hidden="true">01</span>
-          API reference
-        </a>
-
         <div className="docs-nav-group">
-          <p>Node API</p>
           <nav aria-label="Node API sections">
             {LINKS.map(([id, label]) => (
               <a
