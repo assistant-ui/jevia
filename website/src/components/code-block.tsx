@@ -12,37 +12,37 @@ interface CodeBlockProps {
 
 const CODE_THEME: PrismTheme = {
   plain: {
-    color: "#d4d4d4",
+    color: "#b8b8b8",
     backgroundColor: "transparent",
   },
   styles: [
     {
       types: ["comment", "prolog", "doctype", "cdata"],
-      style: { color: "#666666", fontStyle: "italic" },
+      style: { color: "#666666", fontStyle: "italic", opacity: 0.8 },
     },
     {
       types: ["keyword", "atrule"],
-      style: { color: "#c7a0dc" },
+      style: { color: "#f2f2f2", fontWeight: "500" },
     },
     {
       types: ["string", "char", "attr-value", "regex"],
-      style: { color: "#a8c98c" },
+      style: { color: "#d4d4d4" },
     },
     {
       types: ["function", "method", "property-access"],
-      style: { color: "#d9c98e" },
+      style: { color: "#e2e2e2" },
     },
     {
       types: ["class-name", "builtin", "constant"],
-      style: { color: "#8cbecf" },
+      style: { color: "#c4c4c4" },
     },
     {
       types: ["number", "boolean"],
-      style: { color: "#b6a7f2" },
+      style: { color: "#ababab" },
     },
     {
       types: ["operator", "punctuation"],
-      style: { color: "#929292" },
+      style: { color: "#919191", opacity: 0.78 },
     },
   ],
 };
