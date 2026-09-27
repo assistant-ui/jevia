@@ -175,7 +175,7 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
     Ok(report)
 }
 
-fn archivable(record: &RouteRecord) -> bool {
+pub(crate) fn archivable(record: &RouteRecord) -> bool {
     match &record.lifecycle {
         Some(life) => !life.state.is_active() && life.state != RunState::Routed,
         None => record.outcome != Outcome::Unknown,

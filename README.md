@@ -446,7 +446,8 @@ change the destination; setup cannot detect which database it previously named.
 ### Guarantees and current limits
 
 - Database writes are transactional. Feedback history and its current outcome
-  change together; short project-scoped write locks prevent lost updates.
+  change together; project-scoped write locks prevent lost updates. Retention
+  holds the same lock while saving recovery files; schedule it during a quiet period.
 - Recent history and eligible evidence use indexed, bounded queries in append
   order. Complete versioned records preserve execution and feedback provenance.
 - `storage check` verifies schema and CRUD permissions with a rolled-back probe;
@@ -475,8 +476,9 @@ change the destination; setup cannot detect which database it previously named.
   stopping the original supervisor and any surviving processes. Recovery is
   terminal and fences late writes from that supervisor; it never reruns work.
   There is no automatic lease expiration or remote process termination.
-- `runs repair` and `runs archive` remain JSONL-only and refuse database mode.
-  Use explicit exports and your database's backup/retention tooling instead.
+- `runs archive` supports all three backends with preview-first, backup-first
+  retention (see below). `runs repair` remains JSONL-only: database integrity
+  repair and physical backups require database-native tooling.
 - Managed hosting, managed credentials, and a dashboard are not part of this
   integration. Data is stored locally or in the user's own database.
 
@@ -511,26 +513,74 @@ jevia runs archive --keep 1000
 jevia runs archive --keep 1000 --apply
 ```
 
-Repair handles an incomplete, unterminated final JSON line after an interrupted
-write, or a valid final record missing its newline. It refuses malformed middle
+Repair is JSONL-only. It handles an incomplete, unterminated final JSON line after
+an interrupted write, or a valid final record missing its newline. It refuses malformed middle
 lines, complete invalid records, unsupported schemas, and duplicate IDs. It does
 not guess at missing fields or rewrite individual outcomes.
 
-Archival keeps the most recently **appended** `--keep` terminal records (minimum
-one), plus every active, routed/pending, or legacy-unknown record. Older terminal
-records move to a separate JSONL archive; original record bytes and additive
-metadata are preserved. Archived records no longer appear in `runs`, accept
-feedback, or inform routing. Choose retention to preserve the evidence you need;
-this is explicit maintenance, not automatic pruning.
+Archival works with JSONL, SQLite, and PostgreSQL. It keeps the most recently
+**appended** `--keep` eligible terminal records (minimum one), plus every active,
+routed/pending, or legacy-unknown record. SQL also retains any record with an
+execution owner, even if its recorded lifecycle appears terminal. This command
+does not recover runs, stop processes, or infer that old work has finished.
 
-Before applying either operation, Jevia saves the exact original file in
-`.jevia/history-backups/`. Archival also writes `.jevia/history-archives/` before
-atomically replacing active history. The history lock covers the entire operation
-and the plan is recomputed on apply. Both directories are ignored local data;
-files use private permissions on Unix and may contain sensitive prompts. Backups
-and archives are never automatically removed, so total disk use can increase.
-If restoring manually, first stop all Jevia writers and save the current history;
-replacing it with an older backup would otherwise discard newer runs.
+Older eligible records move to a separate JSONL archive. They no longer appear in
+`runs` or `stats`, accept feedback, or inform routing. Routing fetches current
+evidence before cache lookup, so removing relevant evidence changes the cache key;
+archival itself does not clear or rewrite the local decision cache. Choose a
+retention window large enough for the evidence you need. This is explicit
+maintenance, not automatic pruning.
+
+All backends save recovery files under the invoking project's
+`.jevia/history-backups/` and `.jevia/history-archives/` **on the CLI machine**,
+including when PostgreSQL is remote. Apply recomputes its plan under the history
+lock. Preview (and a no-op apply) removes no records and creates no recovery files.
+
+- **JSONL:** repair and archival back up the exact original file before atomic
+  replacement. Archived record bytes, including additive metadata, are preserved.
+- **SQL:** archival holds the selected project's write lock, validates all records
+  in bounded pages, and saves a full project-record snapshot plus an archive of
+  the selected rows before any deletion. A private temporary journal bounds
+  memory while deletion batches commit in one transaction. Saved JSON preserves
+  additive fields but flattens physical line breaks into JSONL; it is not an
+  exact-byte or physical database backup. SQL project/ordinal/owner metadata and
+  other projects are not included. There is no database schema change.
+
+SQL rejects malformed/unsupported records and mismatched indexed IDs, rechecks
+the snapshot against its plan, and conditions deletions on the saved row values.
+Jevia writers serialize with retention; long operations
+can make other commands hit their database timeout. Coordinate external SQL
+writers too, since they may bypass Jevia's project lock. A snapshot failure
+prevents deletion. A deletion failure rolls back all batches and leaves any
+finalized recovery files. If a connection fails while committing, the result may
+be ambiguous: inspect active history and the reported files before retrying or
+restoring. Never assume a failed response means nothing committed.
+
+These directories are ignored local data and may contain sensitive prompts.
+New snapshot files/directories use private permissions on Unix; on Windows,
+protect the project directory with appropriate filesystem ACLs. Jevia syncs files
+before deleting, and also syncs snapshot directories on Unix. Backups and archives
+are never overwritten or automatically removed. Total disk use can increase;
+SQL archival does not vacuum or compact the database.
+
+For SQL restoration, first stop writers, export the current state to a new file,
+and review the chosen archive before explicitly importing it:
+
+```sh
+jevia storage export --output .jevia/before-restore.jsonl
+# Replace sql-runs-UUID.jsonl with the archive path printed by `runs archive`.
+jevia storage import-jsonl --from .jevia/history-archives/sql-runs-UUID.jsonl
+jevia storage import-jsonl --from .jevia/history-archives/sql-runs-UUID.jsonl --apply
+```
+
+Import keeps run IDs, outcomes, and known provenance, skips identical records,
+and aborts on conflicts. It **appends restored records as newest**, not at their
+original SQL positions, which can change the routing evidence window. Unknown
+additive JSON fields remain in the archive but are not retained by typed import.
+A full pre-archive snapshot can contain active records and is not suitable for
+blind import. For JSONL restoration, stop writers and save current history before
+manual replacement; an older backup would otherwise discard newer runs. SQL
+snapshots do not replace a database-native disaster-recovery backup strategy.
 
 ## Repository structure
 
