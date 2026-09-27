@@ -153,26 +153,42 @@ impl Storage {
     }
 
     pub async fn import_jsonl(&self, source: PathBuf, apply: bool) -> Result<(usize, usize)> {
-        let Self::Database(db) = self else {
+        if matches!(self, Self::Jsonl(_)) {
             bail!("import-jsonl requires a configured SQLite or PostgreSQL destination");
-        };
+        }
         if !source.is_file() {
             bail!("import source is not a file");
         }
         let records = store::load(&source)?;
-        let mut ids = HashSet::new();
-        for record in &records {
-            if !ids.insert(&record.decision.run_id) {
-                bail!("duplicate run id in import; no records imported");
-            }
-            if record
-                .lifecycle
-                .as_ref()
-                .is_some_and(|l| l.state.is_active())
-            {
-                bail!("source contains active runs; stop and recover them before importing");
-            }
-        }
-        db.import(&records, apply).await
+        self.import_records(&records, apply).await
     }
+
+    pub async fn import_records(
+        &self,
+        records: &[RouteRecord],
+        apply: bool,
+    ) -> Result<(usize, usize)> {
+        let Self::Database(db) = self else {
+            bail!("import-jsonl requires a configured SQLite or PostgreSQL destination");
+        };
+        validate_import(records)?;
+        db.import(records, apply).await
+    }
+}
+
+pub fn validate_import(records: &[RouteRecord]) -> Result<()> {
+    let mut ids = HashSet::new();
+    for record in records {
+        if !ids.insert(&record.decision.run_id) {
+            bail!("duplicate run id in import; no records imported");
+        }
+        if record
+            .lifecycle
+            .as_ref()
+            .is_some_and(|l| l.state.is_active())
+        {
+            bail!("source contains active runs; stop and recover them before importing");
+        }
+    }
+    Ok(())
 }

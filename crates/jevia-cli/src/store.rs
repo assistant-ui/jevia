@@ -55,7 +55,7 @@ pub fn recent(path: &Path, limit: usize, evidence_only: bool) -> Result<Vec<Rout
     Ok(records.into_iter().collect())
 }
 
-fn read_records(path: &Path, mut visit: impl FnMut(RouteRecord)) -> Result<()> {
+fn read_records(path: &Path, visit: impl FnMut(RouteRecord)) -> Result<()> {
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -65,7 +65,22 @@ fn read_records(path: &Path, mut visit: impl FnMut(RouteRecord)) -> Result<()> {
         }
     };
 
-    for (index, line) in BufReader::new(file).lines().enumerate() {
+    read_records_from(BufReader::new(file), path, visit)
+}
+
+/// Parse already-captured bytes without opening a file or creating a sidecar lock.
+pub fn parse_snapshot(path: &Path, bytes: &[u8]) -> Result<Vec<RouteRecord>> {
+    let mut records = Vec::new();
+    read_records_from(bytes, path, |record| records.push(record))?;
+    Ok(records)
+}
+
+fn read_records_from(
+    reader: impl BufRead,
+    path: &Path,
+    mut visit: impl FnMut(RouteRecord),
+) -> Result<()> {
+    for (index, line) in reader.lines().enumerate() {
         let line = line.with_context(|| {
             format!("could not read line {} from {}", index + 1, path.display())
         })?;
