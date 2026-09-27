@@ -9,7 +9,19 @@ use std::{
 };
 use toml_edit::DocumentMut;
 
-pub(crate) fn config_lock(paths: &ProjectPaths) -> Result<fs::File> {
+#[derive(Debug)]
+pub(crate) struct ConfigLock(fs::File);
+
+impl Drop for ConfigLock {
+    fn drop(&mut self) {
+        // Closing only our descriptor can leave a Unix flock held by a duplicate
+        // inherited during a concurrent fork. Release our ownership explicitly;
+        // closing the file remains the fallback if unlocking fails.
+        let _ = self.0.unlock();
+    }
+}
+
+pub(crate) fn config_lock(paths: &ProjectPaths) -> Result<ConfigLock> {
     let mut options = fs::OpenOptions::new();
     options.create(true).read(true).write(true);
     #[cfg(unix)]
@@ -19,7 +31,7 @@ pub(crate) fn config_lock(paths: &ProjectPaths) -> Result<fs::File> {
     }
     let lock = options.open(paths.directory.join("config.lock"))?;
     match lock.try_lock() {
-        Ok(()) => Ok(lock),
+        Ok(()) => Ok(ConfigLock(lock)),
         Err(fs::TryLockError::WouldBlock) => {
             bail!("another configuration setup is running; retry after it finishes")
         }
@@ -134,4 +146,27 @@ fn sync_directory(path: &Path) -> Result<()> {
     #[cfg(not(unix))]
     let _ = path;
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_lock_releases_even_while_a_duplicate_descriptor_is_open() {
+        let directory = tempfile::tempdir().unwrap();
+        let paths = ProjectPaths::at(directory.path().to_owned());
+        fs::create_dir(&paths.directory).unwrap();
+        let lock = config_lock(&paths).unwrap();
+        // A concurrent fork can temporarily retain the same open-file description
+        // until exec closes it. Model that lifetime without a timing-dependent fork.
+        let duplicate = lock.0.try_clone().unwrap();
+        assert!(config_lock(&paths).is_err());
+        drop(lock);
+        let next = config_lock(&paths).expect("setup must release its lock explicitly");
+        drop(duplicate);
+        assert!(config_lock(&paths).is_err());
+        drop(next);
+        assert!(config_lock(&paths).is_ok());
+    }
 }

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Explicitly release configuration setup locks on drop so duplicated Unix file
+  descriptors cannot retain a completed setup's lock.
 - Add read-only `harness check <name> [--json]` for project/template/model-mapping
   validation and local agent/verifier executable-candidate checks. Return versioned,
   redacted diagnostics with meaningful failure codes and verifier/Windows warnings.
