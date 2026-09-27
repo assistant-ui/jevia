@@ -21,6 +21,14 @@ impl Snapshot {
         // Unnamed files are removed on close, including abnormal process exit.
         // On Unix they are unlinked/private (0600); on Windows use protected temp ACLs.
         let mut file = tempfile::tempfile().context("could not create private import snapshot")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // Linux O_TMPFILE may inherit a broader mode than the named-file
+            // fallback. Restrict the handle before writing any private records.
+            file.set_permissions(std::fs::Permissions::from_mode(0o600))
+                .context("could not restrict import snapshot permissions")?;
+        }
         store::with_import_reader(source, |reader| {
             let mut validator = Validator::default();
             let mut writer = BufWriter::new(&mut file);
