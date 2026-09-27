@@ -54,10 +54,10 @@ const SETUP_STEPS = [
   {
     number: "06",
     label: "Launch",
-    title: "Open your harness",
+    title: "Open any harness",
     description:
-      "Replace agent with any harness name in .jevia/config.toml. Jevia launches it with the selected model and records the outcome.",
-    command: 'jevia run agent "fix the flaky integration test"',
+      "Run a configured Codex, Claude Code, OpenCode, Gemini CLI, or any other command-line agent. Jevia selects its model and records the outcome.",
+    command: 'jevia run codex "fix the flaky integration test"',
   },
 ];
 
