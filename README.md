@@ -42,6 +42,12 @@ jevia route "investigate an intermittent distributed-lock failure"
 `jevia doctor` for configuration/storage checks without a Jev API request.
 PostgreSQL storage checks do connect to the configured database.
 
+To install the exact crates.io release with Rust 1.92 or newer:
+
+```bash
+cargo install jevia --version 0.1.2 --locked
+```
+
 To try unreleased development changes instead:
 
 ```bash
@@ -99,7 +105,7 @@ jevia stats --json
 Jev, launching a harness, changing outcomes, or reading the decision-cache file.
 It needs no Jev API key; PostgreSQL still requires its configured database
 connection. Initialize an opted-in database with `jevia storage init` first.
-This command is unreleased and is not available in v0.1.1.
+This command requires v0.1.2 or newer.
 
 The default window is the **latest 1,000 records in append order**, not a date
 range or an all-time total. `--limit` accepts 1–100,000. The report says when older
@@ -393,7 +399,7 @@ requests are possible in that fallback. `--no-cache` skips coordination too.
 JSONL remains the default. SQLite and PostgreSQL are opt-in alternatives; changing
 the backend does **not** synchronize or automatically move existing history.
 The normal `route`, `run`, `runs`, `feedback`, `doctor`, and `check` commands use
-the selected backend. These options are unreleased and are not in v0.1.1.
+the selected backend. These options require v0.1.2 or newer.
 
 ### SQLite: local database, no server
 
