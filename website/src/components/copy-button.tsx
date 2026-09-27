@@ -7,6 +7,7 @@ interface CopyButtonProps {
   value: string;
   label: string;
   format?: "command" | "markdown";
+  kind?: "command" | "code";
   disabled?: boolean;
 }
 
@@ -14,6 +15,7 @@ export function CopyButton({
   value,
   label,
   format = "command",
+  kind = "command",
   disabled = false,
 }: CopyButtonProps) {
   const [state, setState] = useState<"idle" | "copied" | "error">("idle");
@@ -41,7 +43,8 @@ export function CopyButton({
         : format === "markdown"
           ? "COPY .MD"
           : "COPY";
-  const description = format === "markdown" ? `${label} as Markdown` : `${label} command`;
+  const description =
+    format === "markdown" ? `${label} as Markdown` : `${label} ${kind}`;
 
   return (
     <>
