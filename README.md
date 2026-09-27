@@ -480,6 +480,20 @@ change the destination; setup cannot detect which database it previously named.
   or malformed/unsupported records abort the import. Stop source writers first.
   Keep the unchanged source as your backup; no automatic bidirectional sync or
   background replication is provided.
+- `storage import-jsonl` validates and streams the source into a private unnamed
+  temporary file before taking a database write lock. It holds the source's shared
+  JSONL lock during capture, then imports only the captured records in one database
+  transaction. Later changes to the source are not included; preview and apply
+  capture independently. Both modes need temporary disk space for the normalized
+  history in the OS temporary directory (use protected directory ACLs on Windows).
+  Memory grows with the run-ID set plus the largest record, not all task bodies;
+  the ID set is released before database writes. Snapshot failures prevent writes;
+  later read errors or conflicts roll back all inserts and their ordering counter.
+  The temporary file is removed on close/process exit, not kept as a backup.
+  Imports still normalize known fields and omit unknown additive fields. Large
+  imports hold the project write lock until commit/rollback (SQLite serializes
+  all database writers); this is not a resumable or chunk-committed import. Guided
+  `storage setup --import-jsonl` still captures its migration source in memory.
 - `jevia storage export --output .jevia/snapshot.jsonl` writes a new private
   snapshot in append order. It streams one JSONL record or a bounded SQL page at
   a time, rather than loading the entire history. JSONL holds its shared history

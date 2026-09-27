@@ -2,14 +2,17 @@
 //! SQL keeps the complete versioned record; indexed columns are derived, never authority.
 
 mod database;
+mod import;
 #[cfg(test)]
 mod tests;
+
+pub use import::validate_import;
 
 use crate::{lease, paths::ProjectPaths, store};
 use anyhow::{Context, Result, bail};
 use database::Database;
 use jevia_core::{Config, ExecutionEvidence, Outcome, RouteRecord, RunState, StorageConfig};
-use std::{collections::HashSet, fs::File, path::PathBuf};
+use std::{fs::File, path::PathBuf};
 
 pub enum Storage {
     Jsonl(ProjectPaths),
@@ -196,14 +199,11 @@ impl Storage {
     }
 
     pub async fn import_jsonl(&self, source: PathBuf, apply: bool) -> Result<(usize, usize)> {
-        if matches!(self, Self::Jsonl(_)) {
+        let Self::Database(db) = self else {
             bail!("import-jsonl requires a configured SQLite or PostgreSQL destination");
-        }
-        if !source.is_file() {
-            bail!("import source is not a file");
-        }
-        let records = store::load(&source)?;
-        self.import_records(&records, apply).await
+        };
+        let snapshot = import::Snapshot::capture(&source)?;
+        db.import(snapshot.records(), apply).await
     }
 
     pub async fn import_records(
@@ -215,23 +215,6 @@ impl Storage {
             bail!("import-jsonl requires a configured SQLite or PostgreSQL destination");
         };
         validate_import(records)?;
-        db.import(records, apply).await
+        db.import(records.iter().cloned().map(Ok), apply).await
     }
-}
-
-pub fn validate_import(records: &[RouteRecord]) -> Result<()> {
-    let mut ids = HashSet::new();
-    for record in records {
-        if !ids.insert(&record.decision.run_id) {
-            bail!("duplicate run id in import; no records imported");
-        }
-        if record
-            .lifecycle
-            .as_ref()
-            .is_some_and(|l| l.state.is_active())
-        {
-            bail!("source contains active runs; stop and recover them before importing");
-        }
-    }
-    Ok(())
 }
