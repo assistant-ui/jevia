@@ -3,6 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 
 import { CodeBlock } from "../../components/code-block";
 import { CommandBlock } from "../../components/command-block";
+import { DocsPageActions } from "../../components/docs-page-actions";
 import { DocsSidebar } from "../../components/docs-sidebar";
 import { SiteHeader } from "../../components/site-header";
 
@@ -97,6 +98,7 @@ export default function DocsPage() {
 
         <article className="docs-content">
           <header className="docs-hero" id="overview">
+            <DocsPageActions />
             <h1>Jevia for Node.js.</h1>
             <p>
               Route tasks, inspect run records, and report verified outcomes from

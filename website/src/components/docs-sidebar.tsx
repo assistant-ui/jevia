@@ -23,11 +23,18 @@ export function DocsSidebar() {
       frame = 0;
       const offset = window.innerWidth <= 800 ? 150 : 96;
       let nextId: SectionId = LINKS[0][0];
+      const atPageEnd =
+        Math.ceil(window.scrollY + window.innerHeight) >=
+        document.documentElement.scrollHeight - 1;
 
-      for (const [id] of LINKS) {
-        const section = document.getElementById(id);
-        if (section && section.getBoundingClientRect().top <= offset) {
-          nextId = id;
+      if (atPageEnd) {
+        nextId = LINKS[LINKS.length - 1][0];
+      } else {
+        for (const [id] of LINKS) {
+          const section = document.getElementById(id);
+          if (section && section.getBoundingClientRect().top <= offset) {
+            nextId = id;
+          }
         }
       }
 
@@ -54,11 +61,17 @@ export function DocsSidebar() {
   }, []);
 
   useEffect(() => {
-    document
-      .querySelector<HTMLAnchorElement>(
-        '.docs-nav-group a[href="#' + activeId + '"]',
-      )
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (window.innerWidth > 800) return;
+
+    const anchor = document.querySelector<HTMLAnchorElement>(
+      '.docs-nav-group a[href="#' + activeId + '"]',
+    );
+    const navigation = anchor?.closest<HTMLElement>(".docs-nav-group");
+    if (!anchor || !navigation) return;
+
+    const left =
+      anchor.offsetLeft - navigation.clientWidth / 2 + anchor.offsetWidth / 2;
+    navigation.scrollTo({ left, behavior: "auto" });
   }, [activeId]);
 
   return (

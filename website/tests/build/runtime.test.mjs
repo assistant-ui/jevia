@@ -42,8 +42,26 @@ test("prerendering emits the Node.js API documentation", async () => {
   assert.match(html, /JeviaCommandError/);
   assert.match(html, /token keyword/);
   assert.match(html, /aria-label="Documentation navigation"/);
+  assert.match(html, /href="\/docs\.md"/);
+  assert.match(html, /VIEW \.MD/i);
+  assert.match(html, /COPY \.MD/i);
   assert.match(html, /<title>Node\.js API documentation — Jevia<\/title>/);
   assert.match(html, /rel="canonical" href="https:\/\/jevia\.vercel\.app\/docs"/);
+});
+
+test("the packaged runtime serves the Markdown documentation", async () => {
+  const response = await runtime.fetch(
+    new Request("https://jevia.test/docs.md", {
+      headers: { accept: "text/markdown" },
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /text\/markdown/);
+  const markdown = await response.text();
+  assert.match(markdown, /^# Jevia for Node\.js$/m);
+  assert.match(markdown, /^## Client methods$/m);
+  assert.match(markdown, /import \{ JeviaClient \} from "jevia";/);
+  assert.doesNotMatch(markdown, /View \.mdCOPY \.MD/);
 });
 
 test("the build includes crawler discovery and social image assets", async () => {
