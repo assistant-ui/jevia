@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.2 — 2026-09-27
+
 - Explicitly release configuration setup locks on drop so duplicated Unix file
   descriptors cannot retain a completed setup's lock.
 - Add read-only `harness check <name> [--json]` for project/template/model-mapping
@@ -62,10 +64,14 @@ record schemas 1–3; no history format version is changed. Older CLI versions
 cannot read the new `[storage]` configuration: do not downgrade against a SQL
 project by silently switching it back to an outdated JSONL history. Rust callers
 constructing `Config` directly must supply `storage` or use `..Config::default()`.
-The workspace is staged as `0.2.0-dev.1` so packaging resolves the matching new
-core API instead of crates.io's existing 0.1.1. This is not a published release;
-the website installer remains pinned to released 0.1.1.
-SQLx 0.8.6 preserves the project's Rust 1.92 minimum; SQLx 0.9 requires Rust 1.94.
+Despite the patch version, this experimental release includes that Rust source
+API change; it is not source-compatible with every `jevia-core` 0.1.1 caller.
+Review direct struct construction before upgrading the library. Existing CLI
+configs without `[storage]` continue to work without migration. Back up history
+and configuration before opting into SQL or planning a downgrade.
+
+Requires Rust 1.92 or newer when building from source. SQLx remains on 0.8.6
+to preserve that minimum.
 
 ## 0.1.1
 

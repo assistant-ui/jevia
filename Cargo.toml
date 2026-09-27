@@ -3,7 +3,7 @@ members = ["crates/jevia-cli", "crates/jevia-core"]
 resolver = "2"
 
 [workspace.package]
-version = "0.2.0-dev.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.92"
 license = "MIT"
