@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Stream `storage import-jsonl` through a private unnamed snapshot instead of
+  loading every record into memory. Validate before taking the SQL write lock,
+  keep duplicate/active-run checks and atomic preview/apply behavior, redact parse
+  diagnostics, and roll back inserts and ordering counters on late read failures
+  or conflicts. Preserve source files; document temporary-disk and ID-set costs.
 - Add `storage check --deep` for non-mutating logical history validation across
   JSONL, SQLite, and PostgreSQL. Detect invalid schemas/identities, duplicate JSONL
   IDs, SQL learning-index drift, and invalid append ordering/counters. Scan SQL

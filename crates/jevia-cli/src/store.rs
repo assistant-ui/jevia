@@ -81,6 +81,23 @@ pub fn export(path: &Path, mut output: impl Write) -> Result<usize> {
     Ok(count)
 }
 
+/// Read an existing import source while cooperating with Jevia's JSONL writers.
+/// Unlike ordinary history reads, a missing source is never an empty import.
+pub(crate) fn with_import_reader<T>(
+    path: &Path,
+    read: impl FnOnce(BufReader<File>) -> Result<T>,
+) -> Result<T> {
+    if !path.is_file() {
+        bail!("import source is not a file");
+    }
+    let _lock = acquire_lock(path, LockMode::Shared)?;
+    let file = File::open(path).context("could not open import source")?;
+    if !file.metadata()?.is_file() {
+        bail!("import source is not a file");
+    }
+    read(BufReader::new(file))
+}
+
 fn read_records(path: &Path, visit: impl FnMut(RouteRecord) -> Result<()>) -> Result<()> {
     let file = match File::open(path) {
         Ok(file) => file,
