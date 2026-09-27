@@ -3,16 +3,18 @@
 
 use std::{
     fs,
-    io::Write,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Subcommand};
-use jevia_core::{Config, StorageConfig};
+#[cfg(test)]
+use jevia_core::Config;
+use jevia_core::StorageConfig;
 use toml_edit::{DocumentMut, Item, Table, value};
 
 use crate::{
+    config_edit::{ConfigEdit, config_lock},
     paths::ProjectPaths,
     storage::{Storage, validate_import},
     store,
@@ -82,7 +84,7 @@ pub async fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
     } else {
         None
     };
-    let edit = ConfigEdit::prepare(&paths.config, options.backend.config()?)?;
+    let edit = prepare_config(&paths.config, options.backend.config()?)?;
     if !edit.previous.storage.is_jsonl() && edit.previous.storage != edit.next.storage {
         bail!(
             "setup only supports JSONL-to-database configuration or the same existing target; use explicit export/import for SQL-to-SQL moves"
@@ -193,26 +195,6 @@ fn ensure_source_unchanged(
     Ok(())
 }
 
-fn config_lock(paths: &ProjectPaths) -> Result<fs::File> {
-    let mut options = fs::OpenOptions::new();
-    options.create(true).read(true).write(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let lock = options.open(paths.directory.join("config.lock"))?;
-    match lock.try_lock() {
-        Ok(()) => Ok(lock),
-        Err(fs::TryLockError::WouldBlock) => {
-            bail!("another storage setup is running; retry after it finishes")
-        }
-        Err(fs::TryLockError::Error(error)) => {
-            Err(error).context("could not lock configuration for setup")
-        }
-    }
-}
-
 fn protect_sqlite_target(paths: &ProjectPaths, storage: &StorageConfig) -> Result<()> {
     let StorageConfig::Sqlite { url } = storage else {
         return Ok(());
@@ -271,96 +253,14 @@ fn protect_sqlite_target(paths: &ProjectPaths, storage: &StorageConfig) -> Resul
     Ok(())
 }
 
-struct ConfigEdit {
-    path: PathBuf,
-    original: String,
-    rendered: String,
-    permissions: fs::Permissions,
-    previous: Config,
-    next: Config,
-}
-
-impl ConfigEdit {
-    fn prepare(path: &Path, storage: StorageConfig) -> Result<Self> {
-        let metadata = fs::symlink_metadata(path)?;
-        if !metadata.is_file() {
-            bail!("setup requires a regular config.toml, not a symlink");
-        }
-        let original = fs::read_to_string(path)?;
-        let previous = Config::from_toml(&original).map_err(|_| {
-            anyhow!("invalid project configuration; setup refused (contents redacted)")
-        })?;
-        let mut next = previous.clone();
-        next.storage = storage;
-        next.validate()?;
-        let rendered = if previous.storage == next.storage {
-            original.clone()
-        } else {
-            let mut document = original
-                .parse::<DocumentMut>()
-                .map_err(|_| anyhow!("could not edit project configuration (contents redacted)"))?;
+fn prepare_config(path: &Path, storage: StorageConfig) -> Result<ConfigEdit> {
+    ConfigEdit::prepare(path, |next, document| {
+        if next.storage != storage {
+            next.storage = storage;
             document["storage"] = storage_item(&next.storage);
-            document.to_string()
-        };
-        if Config::from_toml(&rendered).ok().as_ref() != Some(&next) {
-            bail!("edited configuration did not preserve project settings; setup refused");
-        }
-        Ok(Self {
-            path: path.to_owned(),
-            original,
-            rendered,
-            permissions: metadata.permissions(),
-            previous,
-            next,
-        })
-    }
-
-    fn ensure_unchanged(&self) -> Result<()> {
-        if !fs::symlink_metadata(&self.path)?.is_file()
-            || fs::read_to_string(&self.path)? != self.original
-        {
-            bail!("configuration changed during setup; refusing to overwrite concurrent edits");
         }
         Ok(())
-    }
-
-    fn backup(&self, paths: &ProjectPaths) -> Result<PathBuf> {
-        let directory = paths.directory.join("config-backups");
-        let mut builder = fs::DirBuilder::new();
-        builder.recursive(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
-        builder.create(&directory)?;
-        let mut snapshot = tempfile::Builder::new()
-            .prefix("config-")
-            .suffix(".toml")
-            .tempfile_in(&directory)?;
-        snapshot.write_all(self.original.as_bytes())?;
-        snapshot.as_file().sync_all()?;
-        let (_, path) = snapshot.keep().map_err(|e| e.error)?;
-        sync_directory(&directory)?;
-        sync_directory(&paths.directory)?;
-        Ok(path)
-    }
-
-    fn commit(&self) -> Result<()> {
-        let directory = self
-            .path
-            .parent()
-            .context("configuration path has no parent")?;
-        let mut temporary = tempfile::NamedTempFile::new_in(directory)?;
-        temporary.write_all(self.rendered.as_bytes())?;
-        temporary
-            .as_file()
-            .set_permissions(self.permissions.clone())?;
-        temporary.as_file().sync_all()?;
-        self.ensure_unchanged()?;
-        temporary.persist(&self.path).map_err(|e| e.error)?;
-        sync_directory(directory)
-    }
+    })
 }
 
 fn storage_item(storage: &StorageConfig) -> Item {
@@ -387,14 +287,6 @@ fn storage_item(storage: &StorageConfig) -> Item {
     Item::Table(table)
 }
 
-fn sync_directory(path: &Path) -> Result<()> {
-    #[cfg(unix)]
-    fs::File::open(path)?.sync_all()?;
-    #[cfg(not(unix))]
-    let _ = path;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -410,7 +302,7 @@ mod tests {
     #[test]
     fn concurrent_config_edits_and_source_changes_are_not_overwritten() {
         let (_dir, paths) = paths();
-        let edit = ConfigEdit::prepare(
+        let edit = prepare_config(
             &paths.config,
             StorageConfig::Sqlite {
                 url: "sqlite://.jevia/test.db".into(),
@@ -445,7 +337,7 @@ mod tests {
                 Config::default().to_toml().unwrap()
             );
             fs::write(&paths.config, &original).unwrap();
-            let edit = ConfigEdit::prepare(
+            let edit = prepare_config(
                 &paths.config,
                 StorageConfig::Sqlite {
                     url: "sqlite://.jevia/test.db".into(),
@@ -456,7 +348,7 @@ mod tests {
             let backup = edit.backup(&paths).unwrap();
             assert_eq!(fs::read_to_string(&backup).unwrap(), original);
             edit.commit().unwrap();
-            let repeated = ConfigEdit::prepare(&paths.config, edit.next.storage.clone()).unwrap();
+            let repeated = prepare_config(&paths.config, edit.next.storage.clone()).unwrap();
             assert_eq!(repeated.rendered, edit.rendered);
         }
         for storage in [
@@ -469,7 +361,7 @@ mod tests {
                 format!("{storage}\n{}", Config::default().to_toml().unwrap()),
             )
             .unwrap();
-            let edit = ConfigEdit::prepare(
+            let edit = prepare_config(
                 &paths.config,
                 StorageConfig::Postgres {
                     url_env: "DATABASE_URL".into(),
@@ -487,7 +379,7 @@ mod tests {
     fn symlinks_hard_links_and_private_backups() {
         use std::os::unix::fs::{PermissionsExt, symlink};
         let (_dir, paths) = paths();
-        let edit = ConfigEdit::prepare(
+        let edit = prepare_config(
             &paths.config,
             StorageConfig::Sqlite {
                 url: "sqlite://.jevia/test.db".into(),
@@ -532,6 +424,6 @@ mod tests {
         fs::rename(&paths.config, paths.directory.join("original.toml")).unwrap();
         symlink(paths.directory.join("original.toml"), &paths.config).unwrap();
         assert!(edit.commit().is_err());
-        assert!(ConfigEdit::prepare(&paths.config, edit.next.storage).is_err());
+        assert!(prepare_config(&paths.config, edit.next.storage).is_err());
     }
 }

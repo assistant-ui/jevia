@@ -1,4 +1,6 @@
 mod cache;
+mod config_edit;
+mod harness;
 mod lease;
 mod paths;
 mod processes;
@@ -37,6 +39,11 @@ enum Command {
         /// Replace an existing config.toml with the default configuration.
         #[arg(long)]
         force: bool,
+    },
+    /// Configure or inspect coding-agent harness adapters without launching them.
+    Harness {
+        #[command(subcommand)]
+        action: harness::Action,
     },
     /// Ask Jev which capability tier should handle a task.
     Route {
@@ -226,6 +233,7 @@ async fn run() -> Result<ExitCode> {
             init(force)?;
             Ok(ExitCode::SUCCESS)
         }
+        Command::Harness { action } => harness::run(&ProjectPaths::discover()?, action),
         Command::Route {
             task,
             json,
