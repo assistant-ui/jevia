@@ -151,19 +151,40 @@ impl Storage {
 
     /// Never overwrite history. An explicit export is also useful as a migration backup.
     pub async fn export(&self, output: &std::path::Path) -> Result<usize> {
-        use std::io::Write;
-        let records = self.recent(usize::MAX, false).await?;
-        let parent = output.parent().context("export path has no parent")?;
-        let mut file = tempfile::NamedTempFile::new_in(parent)?;
-        for record in &records {
-            serde_json::to_writer(&mut file, record)?;
-            file.write_all(b"\n")?;
+        use std::{
+            fs,
+            io::{BufWriter, Write},
+        };
+        // Fail before reading history, including for dangling destination symlinks.
+        // persist_noclobber below still handles a destination created during export.
+        match fs::symlink_metadata(output) {
+            Ok(_) => bail!("could not create export; existing files are never overwritten"),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error).context("could not inspect export destination"),
         }
+        let parent = output.parent().context("export path has no parent")?;
+        let mut file = tempfile::Builder::new()
+            .prefix(".jevia-export-")
+            .suffix(".tmp")
+            .tempfile_in(parent)?;
+        let count = {
+            let mut writer = BufWriter::new(file.as_file_mut());
+            let count = match self {
+                Self::Jsonl(paths) => store::export(&paths.runs, &mut writer)?,
+                Self::Database(db) => db.export(&mut writer).await?,
+            };
+            writer
+                .flush()
+                .context("could not flush export; destination was not created")?;
+            count
+        };
         file.as_file().sync_all()?;
         file.persist_noclobber(output)
             .map_err(|e| e.error)
             .context("could not create export; existing files are never overwritten")?;
-        Ok(records.len())
+        #[cfg(unix)]
+        File::open(parent).and_then(|directory| directory.sync_all()).with_context(|| format!("export was created at {} but its directory could not be synced; inspect the file before retrying", output.display()))?;
+        Ok(count)
     }
 
     pub async fn import_jsonl(&self, source: PathBuf, apply: bool) -> Result<(usize, usize)> {

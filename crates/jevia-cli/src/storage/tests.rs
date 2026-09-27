@@ -39,6 +39,31 @@ fn postgres_config() -> Config {
     }
 }
 
+#[tokio::test]
+#[cfg(unix)]
+async fn export_refuses_symlink_and_hardlink_destinations_without_touching_targets() {
+    use std::os::unix::fs::symlink;
+    let directory = tempfile::tempdir().unwrap();
+    let paths = ProjectPaths::at(directory.path().into());
+    let storage = Storage::open(&Config::default(), &paths, true)
+        .await
+        .unwrap();
+    storage.append(&sample("one")).await.unwrap();
+    let original = std::fs::read(&paths.runs).unwrap();
+    let linked = directory.path().join("linked.jsonl");
+    let hardlinked = directory.path().join("hardlinked.jsonl");
+    let dangling = directory.path().join("dangling.jsonl");
+    let absent = directory.path().join("absent.jsonl");
+    symlink(&paths.runs, &linked).unwrap();
+    std::fs::hard_link(&paths.runs, &hardlinked).unwrap();
+    symlink(&absent, &dangling).unwrap();
+    for path in [&linked, &hardlinked, &dangling, &paths.runs] {
+        assert!(storage.export(path).await.is_err());
+    }
+    assert_eq!(std::fs::read(paths.runs).unwrap(), original);
+    assert!(!absent.exists());
+}
+
 async fn contract(config: Config) {
     let directory = tempfile::tempdir().unwrap();
     let paths = ProjectPaths::at(directory.path().to_owned());

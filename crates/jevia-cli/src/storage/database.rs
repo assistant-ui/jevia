@@ -14,6 +14,7 @@ use super::ExecutionGuard;
 use crate::{lease, paths::ProjectPaths, store};
 
 mod archive;
+mod export;
 
 const SCHEMA_VERSION: i64 = 1;
 const DB_TIMEOUT: Duration = Duration::from_secs(5);

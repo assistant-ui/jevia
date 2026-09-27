@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Stream `storage export` across JSONL, SQLite, and PostgreSQL without loading all
+  history into memory. Use consistent SQL read snapshots with bounded keyset
+  pages, retain JSONL shared locking, and publish only a fully written/synced file
+  without overwriting destinations. Preserve append order and known provenance.
 - Extend preview-first `jevia runs archive --keep N` to SQLite and PostgreSQL.
   Explicit apply saves private local project-record snapshots and archives before
   transactional, bounded-batch deletion. Preserve active, pending, legacy-unknown,

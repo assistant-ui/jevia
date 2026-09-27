@@ -463,8 +463,22 @@ change the destination; setup cannot detect which database it previously named.
   Keep the unchanged source as your backup; no automatic bidirectional sync or
   background replication is provided.
 - `jevia storage export --output .jevia/snapshot.jsonl` writes a new private
-  snapshot. Protect and ignore exports; they may contain task text. Exports
-  normalize records rather than preserving original JSON whitespace.
+  snapshot in append order. It streams one JSONL record or a bounded SQL page at
+  a time, rather than loading the entire history. JSONL holds its shared history
+  lock; SQL uses one consistent read snapshot across all pages (PostgreSQL
+  repeatable-read/read-only, SQLite WAL snapshot) without taking the project write
+  lock. SQL changes committed after the snapshot begins appear in a later export,
+  not partway through this one. Very large records still require memory, and a
+  long SQL snapshot can delay database cleanup/WAL recycling.
+- Export writes to a private temporary file beside the destination, validates all
+  records, flushes/syncs the file, and publishes without overwriting any existing
+  path, including symlinks. Handled read/write failures do not publish a partial
+  destination. The parent directory is synced on Unix; if that final sync fails,
+  the error says the complete file was already created. A process crash can leave
+  a private `.jevia-export-*.tmp` file. Protect and ignore exports and their output
+  directory; they may contain task text. On Windows, use appropriate directory
+  ACLs. Exports normalize known record fields, omit unknown additive fields, and
+  are logical record snapshots, not exact-byte or physical database backups.
 - The decision cache and cache-miss coordination remain local. Every routing
   attempt fetches current eligible evidence before computing its cache key, so
   new shared outcomes invalidate affected decisions. Cross-machine request
