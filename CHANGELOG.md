@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add preview-first `harness setup` with explicit executable/argument templates,
+  complete tier-to-model mappings, and optional verification. Require `--apply`
+  to save and `--replace` to change an existing harness; retain existing verifiers
+  unless explicitly changed/removed. Reuse database setup's config lock, private
+  backups, concurrent-edit checks, and atomic replacement without launching
+  programs or accessing APIs, storage, or credentials.
 - Stream `storage import-jsonl` through a private unnamed snapshot instead of
   loading every record into memory. Validate before taking the SQL write lock,
   keep duplicate/active-run checks and atomic preview/apply behavior, redact parse

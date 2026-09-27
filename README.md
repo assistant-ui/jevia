@@ -67,6 +67,7 @@ jevia runs --json
 | Command | Purpose |
 | --- | --- |
 | `jevia init` | Create `.jevia/config.toml` and local store rules. |
+| `jevia harness setup <name>` | Preview an explicit harness template; back up and save only with `--apply`. |
 | `jevia route <task>` | Ask Jev for a tier and record the decision. |
 | <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch a configured harness, and record its exit outcome. |
 | `jevia runs` | Inspect recent records in the configured backend. |
@@ -141,6 +142,48 @@ a controlled benchmark, or proof that adaptive routing improves results. No
 cost savings are estimated because token/cost telemetry is not recorded.
 
 ## Harness adapters
+
+### Preview-first setup
+
+`jevia init` leaves harness selection to you. Configure your installed agent with
+an explicit argument template and one model mapping for every configured tier:
+
+```sh
+jevia harness setup agent --command my-agent \
+  --arg=run --arg=--model --arg='{model}' --arg='{task}' \
+  --model fast=provider/small \
+  --model balanced=provider/standard \
+  --model strong=provider/frontier \
+  --verify-command cargo --verify-arg=test
+```
+
+This is a generic example, not a provider preset: substitute your agent's actual
+executable, argument syntax, and accessible model IDs. Repeat the same command
+with `--apply` after reviewing its TOML preview. Setup never launches either
+program, calls Jev, opens storage, or checks provider credentials/model access.
+It works offline, including when a configured database is unavailable. There
+is no interactive prompt or automatic agent installation. Quote placeholders as
+shown and use `--arg=--flag` / `--verify-arg=--flag` for leading-hyphen arguments.
+
+- Preview changes no files. Apply shares a configuration lock with database setup,
+  saves a private exact-byte backup in ignored `.jevia/config-backups/`, then
+  atomically replaces the config after checking for concurrent edits. It preserves
+  unrelated settings, harnesses, and comments, and rejects symlink configs. Stop
+  concurrent manual config editing; the lock only coordinates Jevia setup commands.
+- Changing an existing harness also requires `--replace`. Reapplying identical
+  settings does not rewrite the config or make another backup (apply may create
+  the config lock sidecar). The selected harness entry is rewritten when changed.
+- Omitted verifier options preserve an existing verifier. Use `--no-verification`
+  to explicitly remove it; supplying `--verify-command` replaces its whole command
+  and argument list. Without verification, process success alone is not eligible
+  learning evidence. Missing/duplicate/unknown tier mappings and unsupported
+  template placeholders are rejected before config replacement.
+- Commands, arguments, and model IDs appear in previews and committed config.
+  Never put credentials in these flags or templates; let the agent inherit its
+  credentials from the environment. Protect retained config backups, especially
+  with appropriate directory ACLs on Windows. Nothing is shell-expanded by Jevia.
+
+### Manual configuration
 
 Harness adapters are shell-free process templates. Add a harness to
 <code>.jevia/config.toml</code> and map every capability tier to a concrete
