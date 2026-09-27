@@ -20,6 +20,9 @@ test("prerendering emits the homepage and the unchanged installer", async () => 
   assert.match(html, /Check the full path/);
   assert.match(html, /Open any harness/);
   assert.match(html, /Codex, Claude Code, OpenCode, Gemini CLI/);
+  assert.match(html, /Typed Node\.js API/);
+  assert.match(html.replace(/<[^>]+>/g, ""), /npm install jevia/);
+  assert.match(html, /github\.com\/assistant-ui\/jevia#nodejs-api/);
   assert.doesNotMatch(html, /From task to evidence/);
   assert.match(html, /COPY: Launch/);
   assert.match(html, /rel="canonical" href="https:\/\/jevia\.vercel\.app\/"/);

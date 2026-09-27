@@ -136,8 +136,29 @@ export default function HomePage() {
         </TimescaleRoot>
       </ScrollTimescale>
 
-      <footer className="site-footer page-frame" aria-hidden="true">
-        <span className="frame-junctions footer-junctions" />
+      <footer className="site-footer page-frame" aria-labelledby="node-api-title">
+        <div className="node-api-rail">
+          <div className="node-api-copy">
+            <span className="node-api-kicker">Programmatic</span>
+            <div>
+              <h2 id="node-api-title">Typed Node.js API</h2>
+              <p>Route any harness from code and report verified outcomes.</p>
+            </div>
+          </div>
+          <div className="node-api-command">
+            <CommandBlock command="npm install jevia" label="Node.js API" compact minimal />
+          </div>
+          <a
+            className="node-api-link"
+            href="https://github.com/assistant-ui/jevia#nodejs-api"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View API
+            <ArrowUpRight size={13} strokeWidth={1.7} aria-hidden="true" />
+          </a>
+        </div>
+        <span className="frame-junctions footer-junctions" aria-hidden="true" />
       </footer>
     </main>
   );
