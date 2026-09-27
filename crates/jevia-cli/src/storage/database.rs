@@ -13,6 +13,8 @@ use sqlx::{
 use super::ExecutionGuard;
 use crate::{lease, paths::ProjectPaths, store};
 
+mod archive;
+
 const SCHEMA_VERSION: i64 = 1;
 const DB_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -212,8 +214,9 @@ impl Database {
         Ok(())
     }
 
-    /// Serialize short writes per project. Never held across API requests or
-    /// subprocess execution. The first statement obtains SQLite's write lock,
+    /// Serialize writes per project (retention also holds this while saving files).
+    /// Never held across API requests or subprocess execution.
+    /// The first statement obtains SQLite's write lock,
     /// avoiding a deferred read transaction's unsafe upgrade to a write lock.
     async fn write(&self) -> Result<Transaction<'_, Any>> {
         let mut tx = db(self.pool.begin()).await?;

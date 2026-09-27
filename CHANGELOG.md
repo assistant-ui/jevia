@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Extend preview-first `jevia runs archive --keep N` to SQLite and PostgreSQL.
+  Explicit apply saves private local project-record snapshots and archives before
+  transactional, bounded-batch deletion. Preserve active, pending, legacy-unknown,
+  and execution-owned rows; reject invalid or changed records and retain recovery
+  files on failure. Document explicit restoration, cache/stats effects, and limits.
 - Add preview-first `jevia storage setup sqlite|postgres` to configure a database
   without hand-editing TOML. Explicit apply validates/initializes the destination,
   optionally imports JSONL, backs up config, and switches config last while

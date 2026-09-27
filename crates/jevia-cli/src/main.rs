@@ -264,10 +264,10 @@ async fn run() -> Result<ExitCode> {
                     confirm_stopped,
                 }) => recover_run(&run_id, confirm_stopped).await?,
                 Some(RunsAction::Repair { apply }) => {
-                    maintain_history(store::Maintenance::Repair, apply, json)?
+                    maintain_history(store::Maintenance::Repair, apply, json).await?
                 }
                 Some(RunsAction::Archive { keep, apply }) => {
-                    maintain_history(store::Maintenance::Archive { keep }, apply, json)?
+                    maintain_history(store::Maintenance::Archive { keep }, apply, json).await?
                 }
             }
             Ok(ExitCode::SUCCESS)
@@ -742,17 +742,30 @@ async fn routed_record_in(
     Ok(RouteRecord::new(decision, stored_task))
 }
 
-fn maintain_history(operation: store::Maintenance, apply: bool, print_json: bool) -> Result<()> {
+async fn maintain_history(
+    operation: store::Maintenance,
+    apply: bool,
+    print_json: bool,
+) -> Result<()> {
     let paths = ProjectPaths::discover()?;
-    if !load_config(&paths)?.storage.is_jsonl() {
+    let config = load_config(&paths)?;
+    if !config.storage.is_jsonl() && matches!(operation, store::Maintenance::Repair) {
         bail!(
-            "runs repair/archive are JSONL-only; use `jevia storage export` for database snapshots"
+            "runs repair is JSONL-only; database integrity repair requires database-native tooling"
         );
     }
     if apply {
         ensure_local_ignore(&paths.directory.join(".gitignore"))?;
     }
-    let report = store::maintain(&paths.runs, operation, apply)?;
+    let report = match operation {
+        store::Maintenance::Repair => store::maintain(&paths.runs, operation, apply)?,
+        store::Maintenance::Archive { keep } => {
+            Storage::open(&config, &paths, false)
+                .await?
+                .archive(&paths, keep, apply)
+                .await?
+        }
+    };
     if print_json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {

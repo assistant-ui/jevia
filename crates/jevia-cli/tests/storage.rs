@@ -240,6 +240,194 @@ fn postgres_cli_flow_and_shared_evidence_cache_invalidation() {
     flow(true);
 }
 
+fn archive_flow(postgres: bool) {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    command(root).arg("init").assert().success();
+    let server = Server::start();
+    let mut config = Config {
+        storage: if postgres {
+            StorageConfig::Postgres {
+                url_env: "JEVIA_TEST_POSTGRES_URL".into(),
+                project: format!("archive-cli-{}", uuid::Uuid::new_v4()),
+                allow_insecure_localhost: true,
+            }
+        } else {
+            StorageConfig::Sqlite {
+                url: "sqlite://.jevia/archive.db".into(),
+            }
+        },
+        ..Config::default()
+    };
+    config.jev.base_url = server.url.clone();
+    let state = root.join(".jevia");
+    fs::write(state.join("config.toml"), config.to_toml().unwrap()).unwrap();
+    command(root).args(["storage", "init"]).assert().success();
+    let records: Vec<_> = (0..2).map(|index| serde_json::json!({
+        "schema_version": 3, "run_id": format!("archive-{index}"), "tier": "fast", "suggested_tier": "fast",
+        "confidence": 0.9, "probabilities": {}, "fallback_applied": false, "jev_model": "test",
+        "created_at_ms": 2 - index, "task": "private-archive-task", "outcome": "success",
+        "outcome_evidence": {"source": "manual", "recorded_at_ms": 3},
+        "lifecycle": {"state": "completed", "started_at_ms": 1, "finished_at_ms": 2},
+        "feedback": [{"previous_outcome": "unknown", "previous_source": null, "outcome": "success", "recorded_at_ms": 3, "reason": "private-reason"}]
+    })).collect();
+    let source: String = records.iter().map(|record| format!("{record}\n")).collect();
+    fs::write(state.join("runs.jsonl"), source).unwrap();
+    command(root)
+        .args(["storage", "import-jsonl", "--apply"])
+        .assert()
+        .success();
+    // A stale JSONL file must not be read, repaired or used as a SQL fallback.
+    fs::write(state.join("runs.jsonl"), "stale-private-not-json").unwrap();
+    let first = json(root, &["route", "archive task", "--json"]);
+    assert_eq!(first["source"], "live");
+    assert_eq!(
+        json(root, &["route", "archive task", "--json"])["source"],
+        "cache"
+    );
+    let cache = fs::read(state.join("cache.jsonl")).unwrap();
+    let before = json(root, &["stats", "--json"]);
+    assert_eq!(before["totals"]["records"], 4);
+    assert_eq!(before["totals"]["learning_evidence"], 2);
+    let nested = root.join("nested");
+    fs::create_dir(&nested).unwrap();
+    let archive = |apply: bool| -> Value {
+        let mut cli = command(&nested);
+        cli.env_remove("TYPESAFE_API_KEY")
+            .args(["runs", "archive", "--keep", "1", "--json"]);
+        if apply {
+            cli.arg("--apply");
+        }
+        let output = cli.assert().success().get_output().stdout.clone();
+        assert!(!String::from_utf8_lossy(&output).contains("private-"));
+        serde_json::from_slice(&output).unwrap()
+    };
+    let preview = archive(false);
+    assert_eq!(preview["archived_records"], 1);
+    assert_eq!(preview["retained_records"], 3);
+    assert_eq!(preview["applied"], false);
+    assert!(preview["backup"].is_null() && preview["archive"].is_null());
+    assert!(!state.join("history-backups").exists());
+    assert!(!state.join("history-archives").exists());
+    assert_eq!(json(root, &["stats", "--json"]), before);
+    let applied = archive(true);
+    assert_eq!(applied["applied"], true);
+    assert_eq!(applied["archived_records"], 1);
+    assert_eq!(applied["retained_records"], 3);
+    let archive_path = Path::new(applied["archive"].as_str().unwrap());
+    assert_eq!(
+        fs::canonicalize(archive_path.parent().unwrap()).unwrap(),
+        fs::canonicalize(state.join("history-archives")).unwrap()
+    );
+    let saved = fs::read(archive_path).unwrap();
+    let archived: Value = serde_json::from_slice(&saved).unwrap();
+    assert_eq!(archived["run_id"], "archive-0");
+    assert_eq!(archived["feedback"], records[0]["feedback"]);
+    assert_eq!(
+        fs::read_to_string(applied["backup"].as_str().unwrap())
+            .unwrap()
+            .lines()
+            .count(),
+        4
+    );
+    assert_eq!(fs::read(state.join("cache.jsonl")).unwrap(), cache);
+    assert_eq!(
+        fs::read_to_string(state.join("runs.jsonl")).unwrap(),
+        "stale-private-not-json"
+    );
+    assert!(!nested.join(".jevia").exists());
+    let after = json(root, &["stats", "--json"]);
+    assert_eq!(after["totals"]["records"], 3);
+    assert_eq!(after["totals"]["learning_evidence"], 1);
+    assert_eq!(archive(true)["would_change"], false);
+    assert_eq!(
+        fs::read_dir(state.join("history-archives"))
+            .unwrap()
+            .count(),
+        1
+    );
+    command(root)
+        .args(["runs", "archive", "--keep", "0", "--apply"])
+        .assert()
+        .failure();
+    command(root)
+        .args(["runs", "repair", "--apply"])
+        .assert()
+        .failure();
+    command(root)
+        .args(["runs", "show", "archive-0"])
+        .assert()
+        .failure();
+    command(root)
+        .args(["feedback", "archive-0", "failure"])
+        .assert()
+        .failure();
+    // Current SQL evidence is fetched before cache lookup, so the old decision is not reused.
+    assert_eq!(
+        json(root, &["route", "archive task", "--json"])["source"],
+        "live"
+    );
+    let requests = server.requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        requests[0]["state"]["recent_completed_outcomes"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        requests[1]["state"]["recent_completed_outcomes"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    drop(requests);
+    // Restore is explicit, preview-first, and appends old records as new evidence.
+    command(&nested)
+        .env_remove("TYPESAFE_API_KEY")
+        .args(["storage", "import-jsonl", "--from"])
+        .arg(archive_path)
+        .assert()
+        .success();
+    command(root)
+        .args(["runs", "show", "archive-0"])
+        .assert()
+        .failure();
+    for _ in 0..2 {
+        command(&nested)
+            .env_remove("TYPESAFE_API_KEY")
+            .args(["storage", "import-jsonl", "--from"])
+            .arg(archive_path)
+            .arg("--apply")
+            .assert()
+            .success();
+    }
+    let restored = json(root, &["runs", "show", "archive-0", "--json"]);
+    assert_eq!(restored, archived);
+    assert_eq!(
+        json(root, &["runs", "--limit", "1", "--json"])[0]["run_id"],
+        "archive-0"
+    );
+    assert_eq!(fs::read(archive_path).unwrap(), saved);
+    assert_eq!(json(root, &["stats", "--json"])["totals"]["records"], 5);
+    let ignore = fs::read_to_string(state.join(".gitignore")).unwrap();
+    assert!(ignore.lines().any(|line| line == "history-backups/"));
+    assert!(ignore.lines().any(|line| line == "history-archives/"));
+}
+
+#[test]
+fn sqlite_archive_cli_restore_stats_and_evidence_cache_invalidation() {
+    archive_flow(false);
+}
+
+#[test]
+#[ignore = "requires an isolated PostgreSQL database in JEVIA_TEST_POSTGRES_URL"]
+fn postgres_archive_cli_restore_stats_and_evidence_cache_invalidation() {
+    archive_flow(true);
+}
+
 #[test]
 fn invalid_database_url_fails_closed_without_leaking_secrets_or_creating_jsonl() {
     let dir = tempfile::tempdir().unwrap();

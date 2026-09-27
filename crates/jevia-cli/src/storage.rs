@@ -135,6 +135,20 @@ impl Storage {
         }
     }
 
+    pub async fn archive(
+        &self,
+        paths: &ProjectPaths,
+        keep: usize,
+        apply: bool,
+    ) -> Result<store::MaintenanceReport> {
+        match self {
+            Self::Jsonl(paths) => {
+                store::maintain(&paths.runs, store::Maintenance::Archive { keep }, apply)
+            }
+            Self::Database(db) => db.archive(&paths.directory, keep, apply).await,
+        }
+    }
+
     /// Never overwrite history. An explicit export is also useful as a migration backup.
     pub async fn export(&self, output: &std::path::Path) -> Result<usize> {
         use std::io::Write;
