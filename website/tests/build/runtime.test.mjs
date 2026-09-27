@@ -20,8 +20,7 @@ test("prerendering emits the homepage and the unchanged installer", async () => 
   assert.match(html, /Check the full path/);
   assert.match(html, /Open any harness/);
   assert.match(html, /Codex, Claude Code, OpenCode, Gemini CLI/);
-  assert.match(html, /From task to evidence/);
-  assert.match(html, /Verifier-backed results and explicit feedback/);
+  assert.doesNotMatch(html, /From task to evidence/);
   assert.match(html, /COPY: Launch/);
   assert.match(html, /rel="canonical" href="https:\/\/jevia\.vercel\.app\/"/);
   assert.match(html, /property="og:url" content="https:\/\/jevia\.vercel\.app\/"/);
@@ -55,7 +54,6 @@ test("the Nitro runtime renders the homepage through patched H3", { timeout: 500
   assert.match(html, /Get started/);
   assert.match(html, /Check the full path/);
   assert.match(html, /Open any harness/);
-  assert.match(html, /From task to evidence/);
 });
 
 test("unmatched routes return 404 instead of a runtime error", { timeout: 5000 }, async () => {
