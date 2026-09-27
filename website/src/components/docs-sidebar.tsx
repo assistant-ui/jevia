@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from "react";
 
-const LINKS = [
-  ["overview", "Overview"],
-  ["install", "Install"],
-  ["quickstart", "Quickstart"],
-  ["methods", "Methods"],
-  ["adapters", "Harness adapters"],
-  ["errors", "Errors"],
+import { DocsPageActions } from "./docs-page-actions";
+
+const SECTIONS = [
+  { id: "overview", label: "Overview", title: "Get started with Jevia" },
+  { id: "install", label: "Install", title: "Install the Node.js package" },
+  { id: "quickstart", label: "Quickstart", title: "Create a client and route" },
+  { id: "methods", label: "Methods", title: "Client methods" },
+  { id: "adapters", label: "Harness adapters", title: "Open any harness" },
+  { id: "errors", label: "Errors", title: "Cancellation and errors" },
 ] as const;
 
-type SectionId = (typeof LINKS)[number][0];
+type SectionId = (typeof SECTIONS)[number]["id"];
 
 export function DocsSidebar() {
   const [activeId, setActiveId] = useState<SectionId>("overview");
@@ -27,16 +29,16 @@ export function DocsSidebar() {
         window.innerWidth <= 800
           ? (document.querySelector(".docs-sidebar")?.getBoundingClientRect().height ?? 0)
           : 0;
-      const offset = pageBarBottom + mobileNavigationHeight + 20;
-      let nextId: SectionId = LINKS[0][0];
+      const offset = pageBarBottom + mobileNavigationHeight + 21;
+      let nextId: SectionId = SECTIONS[0].id;
       const atPageEnd =
         Math.ceil(window.scrollY + window.innerHeight) >=
         document.documentElement.scrollHeight - 1;
 
       if (atPageEnd) {
-        nextId = LINKS[LINKS.length - 1][0];
+        nextId = SECTIONS[SECTIONS.length - 1].id;
       } else {
-        for (const [id] of LINKS) {
+        for (const { id } of SECTIONS) {
           const section = document.getElementById(id);
           if (section && section.getBoundingClientRect().top <= offset) {
             nextId = id;
@@ -80,30 +82,47 @@ export function DocsSidebar() {
     navigation.scrollTo({ left, behavior: "auto" });
   }, [activeId]);
 
-  return (
-    <aside className="docs-sidebar" aria-label="Documentation navigation">
-      <div className="docs-sidebar-inner">
-        <div className="docs-nav-group">
-          <nav aria-label="Node API sections">
-            {LINKS.map(([id, label]) => (
-              <a
-                key={id}
-                href={"#" + id}
-                aria-current={activeId === id ? "location" : undefined}
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
-        </div>
+  const activeSection =
+    SECTIONS.find((section) => section.id === activeId) ?? SECTIONS[0];
 
-        <div className="docs-sidebar-meta">
-          <span>Package</span>
-          <strong>jevia</strong>
-          <span>Runtime</span>
-          <strong>Node 20+</strong>
+  return (
+    <>
+      <header className="docs-page-bar">
+        <a className="docs-sidebar-title" href="#overview">
+          <span aria-hidden="true">01</span>
+          API reference
+        </a>
+        <div className="docs-page-bar-main">
+          <h1>{activeSection.title}</h1>
+          <DocsPageActions />
         </div>
-      </div>
-    </aside>
+        <span className="frame-junctions docs-frame-junctions" aria-hidden="true" />
+      </header>
+
+      <aside className="docs-sidebar" aria-label="Documentation navigation">
+        <div className="docs-sidebar-inner">
+          <div className="docs-nav-group">
+            <nav aria-label="Node API sections">
+              {SECTIONS.map(({ id, label }) => (
+                <a
+                  key={id}
+                  href={"#" + id}
+                  aria-current={activeId === id ? "location" : undefined}
+                >
+                  {label}
+                </a>
+              ))}
+            </nav>
+          </div>
+
+          <div className="docs-sidebar-meta">
+            <span>Package</span>
+            <strong>jevia</strong>
+            <span>Runtime</span>
+            <strong>Node 20+</strong>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }

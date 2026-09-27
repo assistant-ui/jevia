@@ -3,7 +3,6 @@ import { ArrowUpRight } from "lucide-react";
 
 import { CodeBlock } from "../../components/code-block";
 import { CommandBlock } from "../../components/command-block";
-import { DocsPageActions } from "../../components/docs-page-actions";
 import { DocsSidebar } from "../../components/docs-sidebar";
 import { SiteHeader } from "../../components/site-header";
 
@@ -92,18 +91,6 @@ export default function DocsPage() {
       <SiteHeader current="docs" />
 
       <div className="docs-frame page-frame">
-        <header className="docs-page-bar">
-          <a className="docs-sidebar-title" href="#overview">
-            <span aria-hidden="true">01</span>
-            API reference
-          </a>
-          <div className="docs-page-bar-main">
-            <h1>Jevia for Node.js.</h1>
-            <DocsPageActions />
-          </div>
-          <span className="frame-junctions docs-frame-junctions" aria-hidden="true" />
-        </header>
-
         <DocsSidebar />
 
         <article className="docs-content">

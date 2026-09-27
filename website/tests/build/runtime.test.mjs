@@ -36,7 +36,7 @@ test("prerendering emits the homepage and the unchanged installer", async () => 
 
 test("prerendering emits the Node.js API documentation", async () => {
   const html = await readFile(new URL("static/docs/index.html", output), "utf8");
-  assert.match(html, /Jevia for Node\.js/);
+  assert.match(html, /Get started with Jevia/);
   assert.match(html, /Client methods/);
   assert.match(html, /Harness adapter/);
   assert.match(html, /JeviaCommandError/);
@@ -95,7 +95,7 @@ test("the Nitro runtime renders the documentation route", { timeout: 5000 }, asy
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
   const html = await response.text();
-  assert.match(html, /Jevia for Node\.js/);
+  assert.match(html, /Get started with Jevia/);
   assert.match(html, /Client methods/);
 });
 
