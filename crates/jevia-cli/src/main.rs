@@ -126,8 +126,13 @@ enum StorageAction {
     Setup(setup::Options),
     /// Explicitly create the database schema and project (does not import history).
     Init,
-    /// Check schema and read/write access without requiring a Jev API key.
-    Check,
+    /// Check storage access, or deeply validate history without a write probe.
+    Check {
+        /// Scan all records and SQL routing/order metadata without changing history.
+        /// Does not test write permissions or perform repairs.
+        #[arg(long)]
+        deep: bool,
+    },
     /// Preview importing JSONL into the configured database; source is never changed.
     ImportJsonl {
         #[arg(long, default_value = ".jevia/runs.jsonl")]
@@ -954,11 +959,19 @@ async fn storage_command(action: StorageAction) -> Result<()> {
                 storage.name()
             );
         }
-        StorageAction::Check => println!(
-            "storage: ok (backend={}, records={})",
-            storage.name(),
-            storage.check().await?
-        ),
+        StorageAction::Check { deep } => {
+            let count = if deep {
+                storage.check_deep().await?
+            } else {
+                storage.check().await?
+            };
+            println!(
+                "storage: ok (backend={}, records={}{})",
+                storage.name(),
+                count,
+                if deep { ", check=deep" } else { "" }
+            );
+        }
         StorageAction::ImportJsonl { from, apply } => {
             let (imported, skipped) = storage.import_jsonl(paths.root.join(from), apply).await?;
             println!(

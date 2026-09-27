@@ -76,6 +76,7 @@ jevia runs --json
 | `jevia storage setup <sqlite\|postgres>` | Preview database setup; explicitly apply after validation, backup, and optional JSONL import. |
 | `jevia storage init` | Explicitly initialize an opt-in database schema and project. |
 | `jevia storage check` | Check storage without needing a Jev API key. |
+| `jevia storage check --deep` | Inspect all history records and SQL routing/order metadata without a write probe or repair. |
 | `jevia storage import-jsonl [--from <file>] [--apply]` | Preview/import local history into a database without changing the source. |
 | `jevia storage export --output <file>` | Export history to a new JSONL snapshot; never overwrite a file. |
 | `jevia check` | Validate configured storage and complete a live Jev routing round trip without storing a run. |
@@ -451,9 +452,26 @@ change the destination; setup cannot detect which database it previously named.
 - Recent history and eligible evidence use indexed, bounded queries in append
   order. Complete versioned records preserve execution and feedback provenance.
 - `storage check` verifies schema and CRUD permissions with a rolled-back probe;
-  it does not insert fake evidence. `doctor`/`check` include this check. It is not
-  a complete database integrity scan; SQLite/PostgreSQL maintenance remains the
-  operator's responsibility.
+  it does not insert fake evidence. `doctor`/`check` include this access check.
+  SQL records are not individually decoded by the default access check.
+- `storage check --deep` instead inspects the complete selected history without
+  a write probe, automatic repair, Jev request, or cache access. JSONL validates
+  record schemas and nonempty/unique run IDs under the shared history lock,
+  streaming records while retaining an ID set (memory grows with the IDs).
+  SQL uses 200-row pages in one consistent read snapshot to validate record
+  schemas, indexed run IDs, learning flags against current evidence rules, and
+  positive append ordinals bounded by the project's append counter. Gaps left
+  by retention are valid; the counter need not equal the newest retained ordinal.
+  Only the configured PostgreSQL project is inspected. Ordinary SQL writers can
+  continue, though a long scan may delay database cleanup/WAL recycling.
+- A deep-check failure exits nonzero and identifies the line or append-position
+  where possible, without printing task text, IDs, or database credentials. Keep
+  the current history and backups and investigate locally before making changes;
+  no records or indexes are silently rewritten. Success means the inspected
+  snapshot passed these logical checks, not that write permissions, physical
+  database integrity, or task-outcome correctness were verified. Run the default
+  access check separately when needed; database-native integrity checks and
+  backups remain the operator's responsibility. Missing storage is not initialized.
 - Database/record schema versions are checked; unknown versions are rejected.
   Driver errors are redacted and database operations have five-second timeouts.
   An outage never silently switches history back to local JSONL.

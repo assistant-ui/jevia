@@ -135,6 +135,14 @@ impl Storage {
         }
     }
 
+    /// Inspect logical history integrity without a write probe or automatic repair.
+    pub async fn check_deep(&self) -> Result<usize> {
+        match self {
+            Self::Jsonl(paths) => store::check_deep(&paths.runs),
+            Self::Database(db) => db.check_deep().await,
+        }
+    }
+
     pub async fn archive(
         &self,
         paths: &ProjectPaths,

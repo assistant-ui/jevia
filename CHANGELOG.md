@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add `storage check --deep` for non-mutating logical history validation across
+  JSONL, SQLite, and PostgreSQL. Detect invalid schemas/identities, duplicate JSONL
+  IDs, SQL learning-index drift, and invalid append ordering/counters. Scan SQL
+  in a consistent bounded-page snapshot, redact record contents in diagnostics,
+  and leave existing access checks unchanged. Never repair automatically.
 - Stream `storage export` across JSONL, SQLite, and PostgreSQL without loading all
   history into memory. Use consistent SQL read snapshots with bounded keyset
   pages, retain JSONL shared locking, and publish only a fully written/synced file
