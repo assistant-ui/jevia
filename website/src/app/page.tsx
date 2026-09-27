@@ -3,6 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import { CommandBlock } from "../components/command-block";
 import { HarnessCommand } from "../components/harness-command";
 import { InstallCommand } from "../components/install-command";
+import { LearningLoop } from "../components/learning-loop";
 import { ScrollTimescale } from "../components/scroll-timescale";
 import {
   TimescaleContent,
@@ -135,6 +136,8 @@ export default function HomePage() {
           </TimescaleViewport>
         </TimescaleRoot>
       </ScrollTimescale>
+
+      <LearningLoop />
     </main>
   );
 }
