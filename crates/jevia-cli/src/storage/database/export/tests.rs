@@ -116,7 +116,7 @@ async fn contract(postgres: bool) {
 async fn consistent_snapshot(postgres: bool) {
     let f = Fixture::new(postgres).await;
     f.seed().await;
-    let mut tx = f.db().export_snapshot().await.unwrap();
+    let mut tx = f.db().read_snapshot().await.unwrap();
     let mut page = f.db().export_page(&mut tx, None).await.unwrap();
     assert_eq!(page.len(), PAGE_SIZE as usize);
     let mut cursor = page.last().unwrap().0;
@@ -162,7 +162,7 @@ async fn consistent_snapshot(postgres: bool) {
     );
     assert_eq!(after.last().unwrap(), &record(RECORDS));
     if postgres {
-        let mut read_only = f.db().export_snapshot().await.unwrap();
+        let mut read_only = f.db().read_snapshot().await.unwrap();
         assert!(
             sqlx::query("UPDATE jevia_projects SET next_seq = next_seq WHERE project = $1")
                 .bind(&f.db().project)

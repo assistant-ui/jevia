@@ -12,7 +12,7 @@ const PAGE_SIZE: i64 = 200;
 
 impl Database {
     pub async fn export(&self, mut output: impl Write) -> Result<usize> {
-        let mut tx = self.export_snapshot().await?;
+        let mut tx = self.read_snapshot().await?;
         let mut cursor = None;
         let mut count = 0;
         loop {
@@ -31,20 +31,6 @@ impl Database {
         // the file, and fail closed if the transaction cannot finish cleanly.
         db(tx.rollback()).await?;
         Ok(count)
-    }
-
-    async fn export_snapshot(&self) -> Result<Transaction<'_, Any>> {
-        let mut tx = db(self.pool.begin()).await?;
-        if self.is_postgres() {
-            db(
-                sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
-                    .execute(&mut *tx),
-            )
-            .await?;
-        }
-        // SQLite's deferred transaction pins a WAL snapshot at its first read.
-        // No UPDATE/project write lock: ordinary database writers can continue.
-        Ok(tx)
     }
 
     async fn export_page(

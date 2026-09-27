@@ -12,7 +12,9 @@ use jevia_core::{
 };
 use tempfile::NamedTempFile;
 
+mod check;
 mod maintenance;
+pub use check::check_deep;
 pub(crate) use maintenance::archivable;
 pub use maintenance::{Maintenance, Report as MaintenanceReport, maintain};
 

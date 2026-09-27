@@ -14,6 +14,7 @@ use super::ExecutionGuard;
 use crate::{lease, paths::ProjectPaths, store};
 
 mod archive;
+mod check;
 mod export;
 
 const SCHEMA_VERSION: i64 = 1;
@@ -213,6 +214,21 @@ impl Database {
             bail!("unsupported database schema version; use a compatible Jevia version");
         }
         Ok(())
+    }
+
+    /// A consistent, non-mutating view for paginated export and integrity scans.
+    async fn read_snapshot(&self) -> Result<Transaction<'_, Any>> {
+        let mut tx = db(self.pool.begin()).await?;
+        if self.is_postgres() {
+            db(
+                sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+                    .execute(&mut *tx),
+            )
+            .await?;
+        }
+        // SQLite's deferred transaction pins a WAL snapshot at its first read.
+        // No project write lock: ordinary database writers can continue.
+        Ok(tx)
     }
 
     /// Serialize writes per project (retention also holds this while saving files).
