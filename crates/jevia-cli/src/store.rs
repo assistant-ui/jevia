@@ -30,7 +30,10 @@ pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
 
 fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
     let mut records = Vec::new();
-    read_records(path, |record| records.push(record))?;
+    read_records(path, |record| {
+        records.push(record);
+        Ok(())
+    })?;
     Ok(records)
 }
 
@@ -52,11 +55,31 @@ pub fn recent(path: &Path, limit: usize, evidence_only: bool) -> Result<Vec<Rout
             }
             records.push_back(record);
         }
+        Ok(())
     })?;
     Ok(records.into_iter().collect())
 }
 
-fn read_records(path: &Path, visit: impl FnMut(RouteRecord)) -> Result<()> {
+/// Stream a validated export under the same shared lock used by history readers.
+pub fn export(path: &Path, mut output: impl Write) -> Result<usize> {
+    let parent = path
+        .parent()
+        .context("run history path has no parent directory")?;
+    if !parent.exists() {
+        return Ok(0);
+    }
+    let _lock = acquire_lock(path, LockMode::Shared)?;
+    let mut count = 0;
+    read_records(path, |record| {
+        serde_json::to_writer(&mut output, &record)?;
+        output.write_all(b"\n")?;
+        count += 1;
+        Ok(())
+    })?;
+    Ok(count)
+}
+
+fn read_records(path: &Path, visit: impl FnMut(RouteRecord) -> Result<()>) -> Result<()> {
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -72,14 +95,17 @@ fn read_records(path: &Path, visit: impl FnMut(RouteRecord)) -> Result<()> {
 /// Parse already-captured bytes without opening a file or creating a sidecar lock.
 pub fn parse_snapshot(path: &Path, bytes: &[u8]) -> Result<Vec<RouteRecord>> {
     let mut records = Vec::new();
-    read_records_from(bytes, path, |record| records.push(record))?;
+    read_records_from(bytes, path, |record| {
+        records.push(record);
+        Ok(())
+    })?;
     Ok(records)
 }
 
 fn read_records_from(
     reader: impl BufRead,
     path: &Path,
-    mut visit: impl FnMut(RouteRecord),
+    mut visit: impl FnMut(RouteRecord) -> Result<()>,
 ) -> Result<()> {
     for (index, line) in reader.lines().enumerate() {
         let line = line.with_context(|| {
@@ -103,7 +129,7 @@ fn read_records_from(
                 path.display()
             );
         }
-        visit(record);
+        visit(record)?;
     }
     Ok(())
 }
@@ -375,6 +401,82 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn streaming_export_matches_history_and_stops_on_write_failure() {
+        struct Fails;
+        impl Write for Fails {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("export writer failed"))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("runs.jsonl");
+        let mut out = Vec::new();
+        assert_eq!(export(&path, &mut out).unwrap(), 0);
+        assert!(out.is_empty());
+        let mut expected = Vec::new();
+        let mut original = String::new();
+        for index in 0..405 {
+            let mut record = sample_record();
+            record.schema_version = 1 + index % 3;
+            record.decision.run_id = format!("export-{index}");
+            original.push_str(&serde_json::to_string(&record).unwrap());
+            original.push_str("\n \n");
+            expected.push(record);
+        }
+        fs::write(&path, original.trim_end()).unwrap(); // A valid unterminated final line is readable.
+        assert_eq!(export(&path, &mut out).unwrap(), expected.len());
+        assert_eq!(parse_snapshot(&path, &out).unwrap(), expected);
+        assert_eq!(fs::read_to_string(&path).unwrap(), original.trim_end());
+        let damaged = format!(
+            "{}\n{{malformed-tail",
+            serde_json::to_string(&sample_record()).unwrap()
+        );
+        fs::write(&path, &damaged).unwrap();
+        let error = export(&path, Fails).unwrap_err();
+        assert!(format!("{error:#}").contains("export writer failed")); // Writer runs before parsing the tail.
+        assert!(export(&path, Vec::new()).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), damaged);
+    }
+
+    #[test]
+    fn streaming_export_holds_the_shared_history_lock() {
+        struct LockProbe {
+            path: std::path::PathBuf,
+            checked: bool,
+        }
+        impl Write for LockProbe {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                let lock = private_lock_options().open(self.path.with_extension("lock"))?;
+                assert!(
+                    lock.try_lock().is_err(),
+                    "a writer must not enter while exporting"
+                );
+                self.checked = true;
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("runs.jsonl");
+        append(&path, &sample_record()).unwrap();
+        let mut probe = LockProbe {
+            path: path.clone(),
+            checked: false,
+        };
+        assert_eq!(export(&path, &mut probe).unwrap(), 1);
+        assert!(probe.checked);
+        let lock = private_lock_options()
+            .open(path.with_extension("lock"))
+            .unwrap();
+        lock.try_lock().unwrap();
+    }
 
     #[test]
     fn bounded_recent_matches_full_history_and_filters_before_limiting() {
