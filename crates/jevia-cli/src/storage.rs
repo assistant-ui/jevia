@@ -47,16 +47,7 @@ impl Storage {
     /// Ascending append order, matching the JSONL contract (not wall-clock order).
     pub async fn recent(&self, limit: usize, evidence_only: bool) -> Result<Vec<RouteRecord>> {
         match self {
-            Self::Jsonl(paths) => {
-                let mut records: Vec<_> = store::load(&paths.runs)?
-                    .into_iter()
-                    .rev()
-                    .filter(|r| !evidence_only || r.is_learning_evidence())
-                    .take(limit)
-                    .collect();
-                records.reverse();
-                Ok(records)
-            }
+            Self::Jsonl(paths) => store::recent(&paths.runs, limit, evidence_only),
             Self::Database(db) => db.recent(limit, evidence_only).await,
         }
     }
