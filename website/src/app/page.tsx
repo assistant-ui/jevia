@@ -121,7 +121,7 @@ export default function HomePage() {
         <div className="node-api-rail">
           <div className="node-api-copy">
             <div>
-              <h2 id="node-api-title">Typed Node.js API</h2>
+              <h2 id="node-api-title">Node.js API</h2>
               <p>Route any harness from code and report verified outcomes.</p>
             </div>
           </div>

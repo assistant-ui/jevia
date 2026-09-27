@@ -10,12 +10,12 @@ export const dynamic = "force-static";
 export const metadata: Metadata = {
   title: "Node.js API documentation — Jevia",
   description:
-    "Use Jevia's typed Node.js API to route tasks, inspect run records, and report verified outcomes.",
+    "Use Jevia's Node.js API to route tasks, inspect run records, and report verified outcomes.",
   alternates: { canonical: "/docs" },
   openGraph: {
     title: "Node.js API documentation — Jevia",
     description:
-      "Typed access to Jevia routing, run records, feedback, and harness adapters.",
+      "Access Jevia routing, run records, feedback, and harness adapters from Node.js.",
     url: "/docs",
     type: "website",
   },
@@ -101,7 +101,7 @@ export default function DocsPage() {
               <span>/docs</span>
               <span>Node.js</span>
             </div>
-            <h1>Typed access to Jevia.</h1>
+            <h1>Jevia for Node.js.</h1>
             <p>
               Route tasks, inspect run records, and report verified outcomes from
               Node.js while keeping Jevia&apos;s local policy, storage, and learning

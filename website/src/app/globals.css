@@ -855,15 +855,26 @@ pre {
 }
 
 .docs-sidebar {
+  position: sticky;
+  z-index: 10;
+  top: 62px;
+  align-self: start;
+  height: calc(100svh - 62px);
   min-width: 0;
+  overflow-y: auto;
   border-right: 1px dashed var(--border);
+  background: var(--background);
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.docs-sidebar::-webkit-scrollbar {
+  display: none;
 }
 
 .docs-sidebar-inner {
-  position: sticky;
-  top: 62px;
   display: flex;
-  min-height: calc(100svh - 62px);
+  min-height: 100%;
   flex-direction: column;
   padding: 1.5rem 1rem 1.25rem;
 }
@@ -1097,6 +1108,11 @@ pre {
   white-space: pre;
 }
 
+.docs-code-line {
+  display: block;
+  min-height: 1.7em;
+}
+
 .docs-note {
   display: grid;
   grid-template-columns: 130px minmax(0, 1fr);
@@ -1200,6 +1216,8 @@ pre {
     position: sticky;
     z-index: 40;
     top: 62px;
+    align-self: stretch;
+    height: auto;
     overflow: hidden;
     border-right: 0;
     border-bottom: 1px dashed var(--border);

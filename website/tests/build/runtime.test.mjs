@@ -20,7 +20,7 @@ test("prerendering emits the homepage and the unchanged installer", async () => 
   assert.match(html, /Check the full path/);
   assert.match(html, /Open any harness/);
   assert.match(html, /Codex, Claude Code, OpenCode, Gemini CLI/);
-  assert.match(html, /Typed Node\.js API/);
+  assert.match(html, /Node\.js API/);
   assert.match(html.replace(/<[^>]+>/g, ""), /npm install jevia/);
   assert.match(html, /href="\/docs"/);
   assert.doesNotMatch(html, /From task to evidence/);
@@ -34,12 +34,13 @@ test("prerendering emits the homepage and the unchanged installer", async () => 
   assert.deepEqual(built, source);
 });
 
-test("prerendering emits the typed Node.js API documentation", async () => {
+test("prerendering emits the Node.js API documentation", async () => {
   const html = await readFile(new URL("static/docs/index.html", output), "utf8");
-  assert.match(html, /Typed access to Jevia/);
+  assert.match(html, /Jevia for Node\.js/);
   assert.match(html, /Client methods/);
   assert.match(html, /Harness adapter/);
   assert.match(html, /JeviaCommandError/);
+  assert.match(html, /token keyword/);
   assert.match(html, /aria-label="Documentation navigation"/);
   assert.match(html, /<title>Node\.js API documentation — Jevia<\/title>/);
   assert.match(html, /rel="canonical" href="https:\/\/jevia\.vercel\.app\/docs"/);
@@ -76,7 +77,7 @@ test("the Nitro runtime renders the documentation route", { timeout: 5000 }, asy
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
   const html = await response.text();
-  assert.match(html, /Typed access to Jevia/);
+  assert.match(html, /Jevia for Node\.js/);
   assert.match(html, /Client methods/);
 });
 
