@@ -208,9 +208,24 @@ async fn contract(postgres: bool) {
     assert_eq!(fs::read_dir(archive.parent().unwrap()).unwrap().count(), 1);
     assert!(f.db.archive(&f.paths.directory, 0, true).await.is_err());
     let imported = store::load(&archive).unwrap();
-    assert_eq!(f.db.import(&imported, false).await.unwrap(), (expected, 0));
-    assert_eq!(f.db.import(&imported, true).await.unwrap(), (expected, 0));
-    assert_eq!(f.db.import(&imported, true).await.unwrap(), (0, expected));
+    assert_eq!(
+        f.db.import(imported.iter().cloned().map(Ok), false)
+            .await
+            .unwrap(),
+        (expected, 0)
+    );
+    assert_eq!(
+        f.db.import(imported.iter().cloned().map(Ok), true)
+            .await
+            .unwrap(),
+        (expected, 0)
+    );
+    assert_eq!(
+        f.db.import(imported.iter().cloned().map(Ok), true)
+            .await
+            .unwrap(),
+        (0, expected)
+    );
     assert_eq!(f.db.get("row-0").await.unwrap(), imported[0]);
     assert_eq!(jsonl(&archive), saved); // Import may add a JSONL lock sidecar, not rewrite the archive.
     let mut tx = f.db.write().await.unwrap();

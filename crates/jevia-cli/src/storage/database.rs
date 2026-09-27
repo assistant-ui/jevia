@@ -16,6 +16,8 @@ use crate::{lease, paths::ProjectPaths, store};
 mod archive;
 mod check;
 mod export;
+#[cfg(test)]
+mod import_tests;
 
 const SCHEMA_VERSION: i64 = 1;
 const DB_TIMEOUT: Duration = Duration::from_secs(5);
@@ -422,11 +424,18 @@ impl Database {
         usize::try_from(count).context("invalid record count")
     }
 
-    pub async fn import(&self, records: &[RouteRecord], apply: bool) -> Result<(usize, usize)> {
+    /// Consume a prevalidated snapshot without collecting it into memory. Any
+    /// later snapshot read error rolls back earlier inserts and the sequence.
+    pub async fn import(
+        &self,
+        records: impl IntoIterator<Item = Result<RouteRecord>>,
+        apply: bool,
+    ) -> Result<(usize, usize)> {
         let mut tx = self.write().await?;
         let mut imported = 0;
         let mut skipped = 0;
         for record in records {
+            let record = record?;
             let existing: Option<String> = db(sqlx::query_scalar(
                 "SELECT record FROM jevia_runs WHERE project = $1 AND run_id = $2",
             )
@@ -435,13 +444,13 @@ impl Database {
             .fetch_optional(&mut *tx))
             .await?;
             if let Some(existing) = existing {
-                if decode(&existing)? != *record {
+                if decode(&existing)? != record {
                     bail!("import conflicts with an existing run; no records imported");
                 }
                 skipped += 1;
             } else {
                 if apply {
-                    self.insert(&mut tx, record).await?;
+                    self.insert(&mut tx, &record).await?;
                 }
                 imported += 1;
             }
