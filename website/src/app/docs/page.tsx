@@ -97,10 +97,6 @@ export default function DocsPage() {
 
         <article className="docs-content">
           <header className="docs-hero" id="overview">
-            <div className="docs-kicker">
-              <span>/docs</span>
-              <span>Node.js</span>
-            </div>
             <h1>Jevia for Node.js.</h1>
             <p>
               Route tasks, inspect run records, and report verified outcomes from

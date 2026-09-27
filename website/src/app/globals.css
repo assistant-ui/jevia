@@ -969,26 +969,9 @@ pre {
   padding-block: 4.5rem 4rem;
 }
 
-.docs-kicker {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--muted-foreground);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.63rem;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
-}
-
-.docs-kicker span + span::before {
-  margin-right: 0.5rem;
-  color: var(--border-strong);
-  content: "/";
-}
-
 .docs-hero h1 {
   max-width: 640px;
-  margin: 1.1rem 0 0;
+  margin: 0;
   font-size: clamp(1.9rem, 4vw, 2.65rem);
   font-weight: 500;
   letter-spacing: -0.05em;
