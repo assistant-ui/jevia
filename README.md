@@ -68,6 +68,7 @@ jevia runs --json
 | --- | --- |
 | `jevia init` | Create `.jevia/config.toml` and local store rules. |
 | `jevia harness setup <name>` | Preview an explicit harness template; back up and save only with `--apply`. |
+| `jevia harness check <name> [--json]` | Inspect configuration and local executable candidates without launching programs or calling APIs. |
 | `jevia route <task>` | Ask Jev for a tier and record the decision. |
 | <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch a configured harness, and record its exit outcome. |
 | `jevia runs` | Inspect recent records in the configured backend. |
@@ -182,6 +183,44 @@ shown and use `--arg=--flag` / `--verify-arg=--flag` for leading-hyphen argument
   Never put credentials in these flags or templates; let the agent inherit its
   credentials from the environment. Protect retained config backups, especially
   with appropriate directory ACLs on Windows. Nothing is shell-expanded by Jevia.
+
+### Local preflight
+
+```sh
+jevia harness check agent
+jevia harness check agent --json
+```
+
+Preflight validates the project config and selected adapter, renders its templates
+for every configured tier, rejects NUL arguments, and checks file candidates for
+the agent and optional verifier. It requires no Jev/provider key or database
+connection, does not read history/cache, and creates no files or locks. It never
+executes even a `--version` probe. Missing executables, model mappings, or valid
+templates produce a failing exit status. An absent verifier is a warning, not a
+failure; process success alone still is not learning evidence.
+
+The human report escapes the requested harness name. JSON reports use
+`schema_version: 1`, `harness`, `scope: "static"`, `ok`, `checks` (stable `id`,
+`status`, `code`, and explanatory `message`), and `limitations`. Once a project
+is found, failed checks also produce JSON and exit nonzero. CLI argument errors
+and missing projects retain normal CLI diagnostics. Reports omit configured
+command paths, arguments, model IDs, credentials, and raw parse/driver errors.
+
+Lookup checks explicit paths or the inherited `PATH`; it does not expand shell
+aliases, variables, `~`, or `PATHEXT`. Unix relative paths/PATH entries are checked
+against the project root, with regular-file and execute-bit checks. On Windows,
+bare names may omit `.exe`; non-`.exe` extensions must be explicit. Preflight
+requires absolute explicit paths and absolute PATH entries on Windows, and warns
+that it does not search extra system/application directories. This intentionally
+conservative check is not a complete reproduction of OS executable resolution;
+use an absolute path if lookup is ambiguous. Windows batch wrappers get a warning
+because [Rust launches them through `cmd.exe`](https://doc.rust-lang.org/std/process/index.html#windows-argument-splitting).
+
+An `ok` result means **static checks passed**, not that an agent is authenticated
+or will successfully launch. Binary format, interpreters, mount/ACL restrictions,
+agent-specific flags, provider model access, and task correctness are not tested;
+files and environment may change afterward. Preflight does not change `jevia run`
+or the existing `jevia check` live routing probe.
 
 ### Manual configuration
 
