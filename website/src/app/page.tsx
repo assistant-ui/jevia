@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 
 import { CommandBlock } from "../components/command-block";
+import { HarnessCommand } from "../components/harness-command";
 import { InstallCommand } from "../components/install-command";
 import { ScrollTimescale } from "../components/scroll-timescale";
 import {
@@ -58,6 +59,7 @@ const SETUP_STEPS = [
     description:
       "Run a configured Codex, Claude Code, OpenCode, Gemini CLI, or any other command-line agent. Jevia selects its model and records the outcome.",
     command: 'jevia run codex "fix the flaky integration test"',
+    animatedHarness: true,
   },
 ];
 
@@ -119,7 +121,9 @@ export default function HomePage() {
                     </span>
                     <h3>{step.title}</h3>
                     <p>{step.description}</p>
-                    {step.command === null ? (
+                    {step.animatedHarness ? (
+                      <HarnessCommand />
+                    ) : step.command === null ? (
                       <InstallCommand compact />
                     ) : (
                       <CommandBlock command={step.command} label={step.label} compact minimal />

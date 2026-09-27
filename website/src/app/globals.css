@@ -621,6 +621,59 @@ pre {
   color: #919191;
 }
 
+.harness-name-slot {
+  position: relative;
+  display: inline-block;
+  width: 6ch;
+  height: 1.4em;
+  overflow: hidden;
+  vertical-align: -0.3em;
+}
+
+.harness-name {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--foreground);
+  will-change: transform, opacity;
+}
+
+.harness-name-enter {
+  animation: harness-name-enter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.harness-name-exit {
+  animation: harness-name-exit 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.harness-name-slot[data-cycle="0"] .harness-name-enter {
+  animation: none;
+}
+
+@keyframes harness-name-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-110%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes harness-name-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(110%);
+  }
+}
+
 .command-actions {
   display: flex;
   align-items: center;
@@ -748,5 +801,14 @@ pre {
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .harness-name-enter,
+  .harness-name-exit {
+    animation: none;
+  }
+
+  .harness-name-exit {
+    display: none;
   }
 }
