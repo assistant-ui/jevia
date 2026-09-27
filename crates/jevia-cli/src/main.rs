@@ -2,6 +2,7 @@ mod cache;
 mod lease;
 mod paths;
 mod processes;
+mod setup;
 mod stats;
 mod storage;
 mod store;
@@ -121,6 +122,8 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum StorageAction {
+    /// Preview database setup; --apply validates and saves the new storage config.
+    Setup(setup::Options),
     /// Explicitly create the database schema and project (does not import history).
     Init,
     /// Check schema and read/write access without requiring a Jev API key.
@@ -924,9 +927,13 @@ async fn local_diagnostics() -> Result<Config> {
 
 async fn storage_command(action: StorageAction) -> Result<()> {
     let paths = ProjectPaths::discover()?;
+    if let StorageAction::Setup(options) = action {
+        return setup::run(&paths, options).await;
+    }
     let config = load_config(&paths)?;
     let storage = Storage::open(&config, &paths, matches!(action, StorageAction::Init)).await?;
     match action {
+        StorageAction::Setup(_) => unreachable!("setup is handled before opening current storage"),
         StorageAction::Init => {
             ensure_local_ignore(&paths.directory.join(".gitignore"))?;
             println!(
@@ -997,7 +1004,9 @@ fn cache_command(action: CacheAction) -> Result<()> {
 }
 
 fn ensure_local_ignore(path: &std::path::Path) -> Result<()> {
-    const RULES: [&str; 13] = [
+    const RULES: [&str; 15] = [
+        "config.lock",
+        "config-backups/",
         "*.db",
         "*.db-wal",
         "*.db-shm",

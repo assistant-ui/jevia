@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add preview-first `jevia storage setup sqlite|postgres` to configure a database
+  without hand-editing TOML. Explicit apply validates/initializes the destination,
+  optionally imports JSONL, backs up config, and switches config last while
+  preserving unrelated settings/comments. Require stopped-writer confirmation;
+  retain source history and keep PostgreSQL credentials in environment variables.
 - Add `jevia stats [--limit <records>] [--json]` with totals and per-tier verified
   success rates, separate manual feedback, learning evidence, and recorded cache
   hits across JSONL, SQLite, and PostgreSQL. Report sample limits and undefined

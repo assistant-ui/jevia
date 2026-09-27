@@ -73,6 +73,7 @@ jevia runs --json
 | `jevia stats [--limit <records>] [--json]` | Summarize recent routing decisions, verified outcomes, manual feedback, and cache hits. |
 | `jevia feedback <id> <outcome>` | Mark a run as `success`, `failure`, or `unknown`. |
 | `jevia doctor` | Validate configuration, credentials, and configured storage. |
+| `jevia storage setup <sqlite\|postgres>` | Preview database setup; explicitly apply after validation, backup, and optional JSONL import. |
 | `jevia storage init` | Explicitly initialize an opt-in database schema and project. |
 | `jevia storage check` | Check storage without needing a Jev API key. |
 | `jevia storage import-jsonl [--from <file>] [--apply]` | Preview/import local history into a database without changing the source. |
@@ -313,6 +314,25 @@ the selected backend. These options are unreleased and are not in v0.1.1.
 
 ### SQLite: local database, no server
 
+The guided CLI path avoids editing TOML by hand (run `jevia init` first):
+
+```sh
+jevia storage setup sqlite --import-jsonl
+# Stop all Jevia writers/supervisors using this workspace, then:
+jevia storage setup sqlite --import-jsonl --apply --confirm-stopped
+jevia storage check
+jevia stats
+```
+
+The first command previews without creating files or contacting a database.
+`--path .jevia/custom.db` chooses another local file; paths are resolved from the
+discovered project root even when invoked from a subdirectory. Protect and ignore
+custom paths outside `.jevia` yourself. An empty JSONL project can omit
+`--import-jsonl`; a nonempty one must include it to avoid silently abandoning
+existing evidence. The source JSONL file is never deleted or rewritten.
+
+Or configure manually:
+
 Add to `.jevia/config.toml`:
 
 ```toml
@@ -345,6 +365,21 @@ Provision a dedicated PostgreSQL database and put its connection URL in your
 secret manager or environment as `JEVIA_DATABASE_URL`. Do not put passwords in
 the project config or CLI arguments.
 
+```sh
+jevia storage setup postgres --project my-project --import-jsonl
+# Stop all Jevia writers/supervisors using this workspace, then:
+jevia storage setup postgres --project my-project --import-jsonl --apply --confirm-stopped
+jevia storage check
+```
+
+`--url-env MY_DATABASE_URL` selects a different environment variable **name**, not
+a URL value. Preview does not resolve that variable or test connectivity. On apply,
+the existing TLS and timeout rules apply; `--allow-insecure-localhost` is available
+only for loopback development databases. The command creates the Jevia schema and
+project, not a PostgreSQL server, database, or user.
+
+The equivalent manual configuration is:
+
 ```toml
 [storage]
 backend = "postgres"
@@ -368,6 +403,45 @@ Use the same `project` value across trusted workspaces to share evidence. This
 namespace is **not authorization or tenant isolation**: anyone with access to the
 database tables can access other projects. Separate database roles/databases or a
 future authenticated managed API are needed for mutually untrusted users.
+
+### Setup safety and recovery
+
+`storage setup` is preview-first. Applying requires both `--apply` and
+`--confirm-stopped`: stop all source writers and supervisors, including scheduled
+jobs and other workspaces using the source file. Recover any active run records
+before retrying; this command does not stop processes or recover runs for you.
+
+Apply backs up the exact old config to a new `.jevia/config-backups/config-*.toml`
+file, initializes/checks the destination, imports requested history transactionally,
+then atomically replaces config **last**. Routing, privacy, cache, harness settings,
+and unrelated TOML comments are preserved. Config permissions are retained;
+new backups are private on Unix and added to local ignore rules. Backups are not
+automatically removed. On Windows, protect the directory with appropriate ACLs.
+
+Active, duplicate, malformed, unsupported, or conflicting imported records cause
+failure. Identical destination records are skipped for safe retries. Setup does
+not replace config on connection, schema, permission, or import failure. It
+serializes other setup invocations and checks for changes to the source/config
+before switching, but cannot prevent an editor or already-running supervisor
+from writing: the stop-writers requirement is not optional.
+
+The database and filesystem are **not one atomic transaction**. A failed setup
+can leave an initialized database, a config backup, or (if the final config save
+fails) imported records. Inspect config, keep the original JSONL and backup, and
+retry only after reconciling concurrent changes. A crash after replacement may
+mean config was already switched; verify with `jevia storage check`. Never blindly
+restore old config once new work has written to the database, since histories can
+diverge. No automatic synchronization, rollback deletion, or backend fallback is
+performed.
+
+Once configured, repeat the same setup command **without `--import-jsonl`** to
+initialize/check the same target without rewriting config or adding another backup.
+Old JSONL files may be stale, so importing them from an already-SQL project needs
+the separate explicit `storage import-jsonl` command. Changing between SQL targets
+or back to JSONL is not supported by guided setup; use explicit export/import and
+review the configuration change yourself.
+Changing the value of the PostgreSQL URL environment variable can independently
+change the destination; setup cannot detect which database it previously named.
 
 ### Guarantees and current limits
 
