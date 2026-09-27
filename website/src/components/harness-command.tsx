@@ -4,7 +4,17 @@ import { useEffect, useState } from "react";
 
 import { CopyButton } from "./copy-button";
 
-const HARNESSES = ["codex", "claude"] as const;
+const HARNESSES = [
+  "codex",
+  "claude",
+  "opencode",
+  "gemini",
+  "cursor",
+  "copilot",
+  "aider",
+  "goose",
+  "amp",
+] as const;
 const TASK = "fix the flaky integration test";
 
 interface Rotation {
@@ -37,7 +47,7 @@ export function HarnessCommand() {
           previous: current,
           cycle: cycle + 1,
         }));
-      }, 2800);
+      }, 2400);
     };
 
     start();

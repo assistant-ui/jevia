@@ -653,7 +653,7 @@ pre {
 .harness-name-slot {
   position: relative;
   display: inline-block;
-  width: 6ch;
+  width: 8ch;
   height: 1.4em;
   overflow: hidden;
   vertical-align: -0.3em;

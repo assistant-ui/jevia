@@ -56,7 +56,7 @@ const SETUP_STEPS = [
     label: "Launch",
     title: "Open any harness",
     description:
-      "Run a configured Codex, Claude Code, OpenCode, Gemini CLI, or any other command-line agent. Jevia selects its model and records the outcome.",
+      "Run Codex, Claude Code, OpenCode, Gemini CLI, Cursor Agent, Copilot CLI, Aider, Goose, Amp, or any configured command-line agent.",
     command: 'jevia run codex "fix the flaky integration test"',
     animatedHarness: true,
   },
