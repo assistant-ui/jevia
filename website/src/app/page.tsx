@@ -20,7 +20,7 @@ const SETUP_STEPS = [
     number: "01",
     label: "Install",
     title: "Install the CLI",
-    description: "Install Jevia with the setup script. Requires Rust 1.92+.",
+    description: "Install a verified prebuilt binary. No Rust or Cargo required.",
     command: null,
   },
   {
@@ -47,9 +47,17 @@ const SETUP_STEPS = [
   {
     number: "05",
     label: "Route",
-    title: "Route real work",
+    title: "Preview the route",
     description: "Receive a model tier, confidence, and traceable run ID.",
     command: 'jevia route "fix the flaky integration test"',
+  },
+  {
+    number: "06",
+    label: "Launch",
+    title: "Open your harness",
+    description:
+      "Replace agent with any harness name in .jevia/config.toml. Jevia launches it with the selected model and records the outcome.",
+    command: 'jevia run agent "fix the flaky integration test"',
   },
 ];
 
@@ -97,7 +105,7 @@ export default function HomePage() {
           <TimescaleViewport
             tabIndex={0}
             role="region"
-            aria-label="Jevia setup timeline. Scroll up or down, swipe horizontally, or use the arrow keys to explore five steps."
+            aria-label="Jevia setup timeline. Scroll up or down, swipe horizontally, or use the arrow keys to explore six steps."
           >
             <TimescaleTrack role="list">
               <TimescaleRail />
