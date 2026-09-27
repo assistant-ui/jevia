@@ -6,6 +6,7 @@
   --border: #252525;
   --border-strong: #444;
   --surface: #0c0c0c;
+  --footer-rule-offset: 80px;
   --frame-width: min(1024px, calc(100vw - 32px));
   --content-gutter: 2.5rem;
   color-scheme: dark;
@@ -744,8 +745,8 @@ pre {
 
 .site-footer {
   position: relative;
-  min-height: 48px;
-  flex: 0 0 48px;
+  min-height: var(--footer-rule-offset);
+  flex: 0 0 var(--footer-rule-offset);
   margin-top: auto;
   border-top: 1px solid transparent;
 }
@@ -770,6 +771,7 @@ pre {
   :root {
     --frame-width: calc(100vw - 20px);
     --content-gutter: 1.25rem;
+    --footer-rule-offset: 64px;
   }
 
   .hero-copy {
@@ -833,7 +835,7 @@ pre {
   }
 
   .quickstart-panel {
-    padding-block: 1.25rem;
+    padding-block: 1.125rem;
   }
 
   .setup-timescale {
@@ -842,12 +844,16 @@ pre {
 }
 
 @media (max-width: 720px) and (max-height: 720px) {
+  :root {
+    --footer-rule-offset: 56px;
+  }
+
   .hero-copy {
     padding-block: 1.25rem;
   }
 
   .hero-command {
-    margin-top: 0.75rem;
+    margin-top: 0.5rem;
   }
 
   .quickstart-panel {
@@ -855,7 +861,7 @@ pre {
   }
 
   .setup-timescale {
-    margin-top: 1rem;
+    margin-top: 0.75rem;
   }
 }
 
