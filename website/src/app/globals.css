@@ -850,8 +850,14 @@ pre {
 }
 
 .docs-frame-junctions {
-  top: 12px;
+  position: fixed;
+  z-index: 41;
+  top: calc(62px + 12px);
+  right: auto;
   bottom: auto;
+  left: 50%;
+  width: calc(var(--frame-width) + 8px);
+  transform: translateX(-50%);
 }
 
 .docs-sidebar {
