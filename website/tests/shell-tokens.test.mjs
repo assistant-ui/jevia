@@ -50,6 +50,7 @@ test("preserves whitespace, quotes, and every character of the original command"
     "jevia init",
     "jevia check",
     'jevia route "fix the flaky integration test"',
+    'jevia run codex "fix the flaky integration test"',
     "  jevia\t--json route 'fix the test'  ",
     'export TYPESAFE_API_KEY="your-key"',
     'echo "unterminated',
