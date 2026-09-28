@@ -86,6 +86,26 @@ pre {
   flex-direction: column;
 }
 
+.site-shell:not(.docs-shell) {
+  height: 100vh;
+  height: 100svh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.site-shell:not(.docs-shell) > .site-header,
+.site-shell:not(.docs-shell) > .hero,
+.site-shell:not(.docs-shell) > .site-footer {
+  flex-shrink: 0;
+}
+
+.site-shell:not(.docs-shell) > .quickstart {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
 .site-shell::before {
   position: absolute;
   inset-block: 0;
@@ -1518,6 +1538,64 @@ pre {
   }
 }
 
+@media (min-width: 721px) and (max-height: 700px) {
+  :root {
+    --footer-rule-offset: 64px;
+  }
+
+  .hero-copy {
+    padding-block: 1rem;
+  }
+
+  .hero-command {
+    margin-top: 0.75rem;
+  }
+
+  .quickstart-panel {
+    padding-block: 0.5rem;
+  }
+
+  .setup-timescale {
+    margin-top: 0.5rem;
+  }
+}
+
+@media (min-width: 721px) and (max-height: 620px) {
+  :root {
+    --footer-rule-offset: 56px;
+  }
+
+  .site-shell:not(.docs-shell) > .site-header {
+    min-height: 54px;
+    flex-basis: 54px;
+  }
+
+  .hero-copy {
+    padding-block: 0.625rem;
+  }
+
+  .hero-description {
+    margin-top: 0.5rem;
+    line-height: 1.5;
+  }
+
+  .quickstart-panel {
+    padding-block: 0.25rem;
+  }
+
+  .section-heading {
+    padding-bottom: 0.75rem;
+  }
+
+  .setup-timescale {
+    margin-top: 0.25rem;
+  }
+
+  .timescale-root.setup-timescale[data-orientation="horizontal"] .timescale-content {
+    padding-top: 1.5rem;
+  }
+}
+
 @media (max-width: 720px) and (max-height: 720px) {
   :root {
     --footer-rule-offset: 56px;
@@ -1537,6 +1615,42 @@ pre {
 
   .setup-timescale {
     margin-top: 0.75rem;
+  }
+}
+
+@media (max-width: 720px) and (max-height: 620px) {
+  :root {
+    --footer-rule-offset: 48px;
+  }
+
+  .site-shell:not(.docs-shell) > .site-header {
+    min-height: 54px;
+    flex-basis: 54px;
+  }
+
+  .hero-copy {
+    padding-block: 0.75rem;
+  }
+
+  .hero-description {
+    margin-top: 0.5rem;
+    line-height: 1.5;
+  }
+
+  .quickstart-panel {
+    padding-block: 0.25rem;
+  }
+
+  .section-heading {
+    padding-bottom: 0.5rem;
+  }
+
+  .setup-timescale {
+    margin-top: 0.25rem;
+  }
+
+  .timescale-root.setup-timescale[data-orientation="horizontal"] .timescale-content {
+    padding-top: 1.5rem;
   }
 }
 
