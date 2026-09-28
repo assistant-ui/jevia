@@ -87,6 +87,30 @@ export interface ListRunsOptions extends CommandOptions {
   limit?: number;
 }
 
+export type StorageTarget =
+  | { backend: "sqlite"; path?: string }
+  | {
+      backend: "postgres";
+      project: string;
+      /** Environment variable NAME, never a connection URL. Defaults to JEVIA_DATABASE_URL. */
+      urlEnv?: string;
+      /** Development only: permit plaintext connections to loopback hosts. */
+      allowInsecureLocalhost?: boolean;
+    };
+
+export type StorageSetupOptions = CommandOptions & {
+  /** Explicitly import the current JSONL history, retaining the source file. */
+  importJsonl?: boolean;
+} & (
+  | { apply?: false; confirmStopped?: never }
+  | { apply: true; confirmStopped: true }
+);
+
+export interface StorageCheckOptions extends CommandOptions {
+  /** Scan records without a write probe. Does not repair data or test write access. */
+  deep?: boolean;
+}
+
 export interface JeviaClientOptions {
   /** Jevia executable name or absolute path. Defaults to `jevia`. */
   binary?: string;
@@ -225,6 +249,56 @@ export class JeviaClient {
     );
   }
 
+  /** Preview by default. Requires initialized project config and CLI >= 0.1.2.
+   * Returns a human-readable CLI report, not a stable machine-readable schema.
+   */
+  async setupStorage(target: StorageTarget, options: StorageSetupOptions = {}): Promise<string> {
+    requireOptionalBoolean(options.apply, "apply");
+    requireOptionalBoolean(options.confirmStopped, "confirmStopped");
+    requireOptionalBoolean(options.importJsonl, "importJsonl");
+    if (options.apply === true ? options.confirmStopped !== true : options.confirmStopped !== undefined) {
+      throw new TypeError("applying storage requires apply: true and confirmStopped: true together");
+    }
+    if (!target || typeof target !== "object" || Array.isArray(target)) {
+      throw new TypeError("storage target must specify sqlite or postgres");
+    }
+    const args = ["storage", "setup"];
+    if (target.backend === "sqlite") {
+      requireKeys(target, ["backend", "path"]);
+      args.push("sqlite");
+      if (target.path !== undefined) {
+        requireText(target.path, "path");
+        if (/[?#]/.test(target.path) || target.path.includes(":memory:")) {
+          throw new TypeError("path must name a persistent SQLite file without query or fragment");
+        }
+        args.push(`--path=${target.path}`);
+      }
+    } else if (target.backend === "postgres") {
+      requireKeys(target, ["backend", "project", "urlEnv", "allowInsecureLocalhost"]);
+      if (typeof target.project !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/.test(target.project)) {
+        throw new TypeError("project must contain 1–128 ASCII letters, digits, dots, dashes, or underscores");
+      }
+      const urlEnv = target.urlEnv === undefined ? "JEVIA_DATABASE_URL" : target.urlEnv;
+      if (typeof urlEnv !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(urlEnv)) {
+        throw new TypeError("urlEnv must be an environment variable name, not a database URL");
+      }
+      requireOptionalBoolean(target.allowInsecureLocalhost, "allowInsecureLocalhost");
+      args.push("postgres", `--project=${target.project}`, `--url-env=${urlEnv}`);
+      if (target.allowInsecureLocalhost === true) args.push("--allow-insecure-localhost");
+    } else {
+      throw new TypeError("storage target must specify sqlite or postgres");
+    }
+    if (options.importJsonl === true) args.push("--import-jsonl");
+    if (options.apply === true) args.push("--apply", "--confirm-stopped");
+    return this.execute(args, options.signal);
+  }
+
+  /** Check configured storage without initializing it. Returns a human-readable CLI report. */
+  async checkStorage(options: StorageCheckOptions = {}): Promise<string> {
+    requireOptionalBoolean(options.deep, "deep");
+    return this.execute(["storage", "check", ...(options.deep === true ? ["--deep"] : [])], options.signal);
+  }
+
   private record(output: string): RouteRecord {
     const value = this.json(output);
     if (!isRouteRecord(value)) {
@@ -276,4 +350,14 @@ export class JeviaClient {
 function requireText(value: string, name: string): void {
   if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} cannot be empty`);
   if (value.includes("\0")) throw new TypeError(`${name} cannot contain NUL`);
+}
+
+function requireOptionalBoolean(value: unknown, name: string): void {
+  if (value !== undefined && typeof value !== "boolean") throw new TypeError(`${name} must be a boolean`);
+}
+
+function requireKeys(value: object, allowed: readonly string[]): void {
+  if (Object.keys(value).some((key) => !allowed.includes(key))) {
+    throw new TypeError("unsupported storage target option; pass PostgreSQL credentials through the environment");
+  }
 }

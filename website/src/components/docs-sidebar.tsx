@@ -9,8 +9,9 @@ const SECTIONS = [
   { id: "install", number: "01", label: "Install", title: "Install the Node.js package" },
   { id: "quickstart", number: "02", label: "Quickstart", title: "Create a client and route" },
   { id: "methods", number: "03", label: "Methods", title: "Client methods" },
-  { id: "adapters", number: "04", label: "Harness adapters", title: "Open any harness" },
-  { id: "errors", number: "05", label: "Errors", title: "Cancellation and errors" },
+  { id: "storage", number: "04", label: "Storage", title: "Opt-in storage" },
+  { id: "adapters", number: "05", label: "Harness adapters", title: "Open any harness" },
+  { id: "errors", number: "06", label: "Errors", title: "Cancellation and errors" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];

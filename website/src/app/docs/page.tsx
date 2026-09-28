@@ -50,6 +50,35 @@ const HARNESS_ADAPTER = [
   ");",
 ].join("\n");
 
+const STORAGE_SETUP = [
+  'const target = { backend: "sqlite", path: ".jevia/jevia.db" } as const;',
+  "",
+  "// Preview only: no database connection or file changes.",
+  "console.log(await jevia.setupStorage(target, { importJsonl: true }));",
+  "",
+  "// After review, stop all project writers and supervisors before applying.",
+  "await jevia.setupStorage(target, {",
+  "  apply: true,",
+  "  confirmStopped: true,",
+  "  importJsonl: true,",
+  "});",
+  "console.log(await jevia.checkStorage());",
+  "console.log(await jevia.checkStorage({ deep: true }));",
+].join("\n");
+
+const POSTGRES_SETUP = [
+  "// Set JEVIA_DATABASE_URL in your environment before creating the client.",
+  "// Never pass the URL as an argument or commit it to config.",
+  "const target = {",
+  '  backend: "postgres",',
+  '  project: "my-app",',
+  '  urlEnv: "JEVIA_DATABASE_URL",',
+  "} as const;",
+  "",
+  "console.log(await jevia.setupStorage(target)); // Preview first.",
+  "// Apply with the same explicit confirmation and import options above.",
+].join("\n");
+
 const ERROR_HANDLING = [
   'import { JeviaClient, JeviaCommandError } from "jevia";',
   "",
@@ -82,6 +111,14 @@ const METHODS = [
   {
     signature: "show(runId, options?)",
     description: "Read one complete route record, including lifecycle and outcome evidence.",
+  },
+  {
+    signature: "setupStorage(target, options?)",
+    description: "Unreleased: preview opt-in SQLite or PostgreSQL setup; apply only with confirmation.",
+  },
+  {
+    signature: "checkStorage(options?)",
+    description: "Unreleased: check the selected storage, or deeply validate it without a write probe.",
   },
 ] as const;
 
@@ -155,9 +192,54 @@ export default function DocsPage() {
             </div>
           </section>
 
-          <section className="docs-section" id="adapters" aria-labelledby="adapters-title">
+          <section className="docs-section" id="storage" aria-labelledby="storage-title">
             <div className="docs-section-heading">
               <span>04</span>
+              <div>
+                <h2 id="storage-title">Opt-in storage</h2>
+                <p>Keep JSONL by default. Choose SQLite or PostgreSQL explicitly.</p>
+              </div>
+            </div>
+            <div className="docs-note">
+              <strong>Unreleased Node API</strong>
+              <p>
+                These methods are pending the next npm release and are not in
+                <code> jevia@0.1.0</code>. They require CLI 0.1.2 or newer and an
+                existing <code>jevia init</code> project. Creating a client never
+                connects to a database or changes storage.
+              </p>
+            </div>
+            <CodeBlock code={STORAGE_SETUP} label="SQLite: preview, apply, verify" />
+            <p className="docs-body-copy">
+              Paths are relative to the project root, or absolute. Applying switches
+              the project config last. Nonempty JSONL history requires explicit
+              import; the source file stays intact, with no ongoing sync. Routes,
+              feedback, and run queries then use the configured database.
+            </p>
+            <CodeBlock code={POSTGRES_SETUP} label="PostgreSQL: environment-only credentials" />
+            <p className="docs-body-copy">
+              Provision the database first. <code>urlEnv</code> is an environment
+              variable name, not a URL. PostgreSQL requires verified TLS by default;
+              <code> allowInsecureLocalhost: true</code> is only for loopback development.
+              The project name scopes history, not database permissions.
+            </p>
+            <div className="docs-note">
+              <strong>Explicit operations, inspectable reports</strong>
+              <p>
+                Both methods return human-readable CLI reports, not stable JSON.
+                Normal checks use a rollback-only SQL write probe; deep checks validate
+                records without writing or repairing. Neither initializes missing storage.
+                Use <code>signal</code> for cancellation and raise the client&apos;s
+                <code> timeoutMs</code> for large imports. After failure or cancellation,
+                inspect config and destination before retrying: database changes may remain.
+                This is not SQL-to-SQL migration or a no-storage mode; cache stays local.
+              </p>
+            </div>
+          </section>
+
+          <section className="docs-section" id="adapters" aria-labelledby="adapters-title">
+            <div className="docs-section-heading">
+              <span>05</span>
               <div>
                 <h2 id="adapters-title">Open any harness</h2>
                 <p>Map Jevia&apos;s tier to the model names your chosen harness accepts.</p>
@@ -173,7 +255,7 @@ export default function DocsPage() {
 
           <section className="docs-section" id="errors" aria-labelledby="errors-title">
             <div className="docs-section-heading">
-              <span>05</span>
+              <span>06</span>
               <div>
                 <h2 id="errors-title">Cancellation and errors</h2>
                 <p>Bound each CLI call and keep process failures inspectable.</p>
