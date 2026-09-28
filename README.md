@@ -284,6 +284,41 @@ process exit code, and verification evidence. This data appears in
 routing requests, so model changes do not erase which implementation actually
 produced a verified result.
 
+## Node.js API
+
+Use the typed `jevia` npm package when a Node application or agent framework
+owns harness execution. It calls the CLI's shell-free JSON interface, keeping
+routing policy, storage, caching, and outcome handling in one implementation:
+
+~~~bash
+npm install jevia
+~~~
+
+~~~ts
+import { JeviaClient } from "jevia";
+
+const jevia = new JeviaClient({ cwd: process.cwd() });
+const task = "investigate the failing integration test";
+const route = await jevia.route(task);
+
+const model = {
+  fast: "provider/small",
+  balanced: "provider/standard",
+  strong: "provider/frontier",
+}[route.tier];
+
+const result = await runYourHarness({ task, model, runId: route.run_id });
+const verified = await verifyResult(result);
+await jevia.feedback(route.run_id, verified ? "success" : "failure");
+~~~
+
+The adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor Agent,
+Copilot CLI, Aider, Goose, Amp, or a custom harness. Jevia returns a capability
+tier; the application maps that tier to a harness-specific model. Feedback stays
+explicit—a successful process or function return is not automatically proof of
+task success. The CLI must already be installed and available on `PATH`; npm
+installation does not run a binary downloader.
+
 ## Run lifecycle
 
 Execution progress is separate from task outcome. New records track `routed`,

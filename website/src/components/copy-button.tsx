@@ -3,19 +3,23 @@
 import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 
-interface CopyButtonProps {
-  value: string;
+interface CopyButtonBaseProps {
   label: string;
   format?: "command" | "markdown";
+  kind?: "command" | "code";
   disabled?: boolean;
 }
 
-export function CopyButton({
-  value,
-  label,
-  format = "command",
-  disabled = false,
-}: CopyButtonProps) {
+type CopyButtonProps = CopyButtonBaseProps &
+  ({ value: string; valueUrl?: never } | { value?: never; valueUrl: string });
+
+export function CopyButton(props: CopyButtonProps) {
+  const {
+    label,
+    format = "command",
+    kind = "command",
+    disabled = false,
+  } = props;
   const [state, setState] = useState<"idle" | "copied" | "error">("idle");
 
   useEffect(() => {
@@ -26,7 +30,15 @@ export function CopyButton({
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(value);
+      const copyValue =
+        props.valueUrl !== undefined
+          ? await fetch(props.valueUrl).then((response) => {
+              if (!response.ok) throw new Error("Could not load copy source");
+              return response.text();
+            })
+          : props.value;
+
+      await navigator.clipboard.writeText(copyValue);
       setState("copied");
     } catch {
       setState("error");
@@ -41,7 +53,8 @@ export function CopyButton({
         : format === "markdown"
           ? "COPY .MD"
           : "COPY";
-  const description = format === "markdown" ? `${label} as Markdown` : `${label} command`;
+  const description =
+    format === "markdown" ? `${label} as Markdown` : `${label} ${kind}`;
 
   return (
     <>

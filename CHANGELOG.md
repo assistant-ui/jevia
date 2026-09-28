@@ -17,6 +17,10 @@
   unless explicitly changed/removed. Reuse database setup's config lock, private
   backups, concurrent-edit checks, and atomic replacement without launching
   programs or accessing APIs, storage, or credentials.
+- Add a typed, shell-free `jevia` package for Node.js applications to route
+  tasks, inspect run records, and submit explicit outcome feedback through the
+  CLI JSON contract. Include cancellation, structured errors, tests, packaging
+  checks, CI, and an adapter example for arbitrary coding harnesses.
 - Stream `storage import-jsonl` through a private unnamed snapshot instead of
   loading every record into memory. Validate before taking the SQL write lock,
   keep duplicate/active-run checks and atomic preview/apply behavior, redact parse

@@ -13,3 +13,8 @@ website/.output/
 website/.vercel/
 website/dist/
 website/*.tsbuildinfo
+
+# Node SDK
+packages/jevia-node/node_modules/
+packages/jevia-node/dist/
+packages/jevia-node/*.tsbuildinfo
