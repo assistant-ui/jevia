@@ -953,8 +953,8 @@ pre {
   z-index: -1;
   top: 0;
   left: 0;
-  border-radius: 7px;
-  background: #191919;
+  border-left: 1px solid var(--foreground);
+  background: #0f0f0f;
   opacity: 0;
   pointer-events: none;
   transition:
@@ -983,7 +983,6 @@ pre {
   color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.35;
-  border-radius: 7px;
   transition: color 150ms ease;
 }
 
@@ -1002,12 +1001,13 @@ pre {
 }
 
 .docs-nav-group a[aria-current="location"] {
-  background: #191919;
+  border-left-color: var(--foreground);
+  background: #0f0f0f;
   color: var(--foreground);
-  font-weight: 500;
 }
 
 .docs-nav[data-highlight-ready="true"] a[aria-current="location"] {
+  border-color: transparent;
   background: transparent;
 }
 
@@ -1420,6 +1420,14 @@ pre {
 
   .docs-nav-index {
     min-width: auto;
+  }
+
+  .docs-nav-highlight {
+    border: 1px solid var(--border-strong);
+  }
+
+  .docs-nav-group a[aria-current="location"] {
+    border-color: var(--border-strong);
   }
 
   .docs-content {
