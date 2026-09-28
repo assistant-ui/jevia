@@ -132,12 +132,25 @@ export interface JeviaClientOptions {
   maxBufferBytes?: number;
 }
 
+/** Safe, stable categories; never raw operating-system error strings. */
+export type JeviaCommandErrorKind =
+  | "not_found"
+  | "permission_denied"
+  | "timeout"
+  | "aborted"
+  | "output_limit"
+  | "invalid_options"
+  | "exit"
+  | "signal"
+  | "spawn_failed";
+
 export class JeviaCommandError extends Error {
   #command: readonly string[];
   #stdout: string;
   #stderr: string;
   readonly exitCode: number | null;
   readonly signal: NodeJS.Signals | null;
+  readonly kind: JeviaCommandErrorKind;
 
   constructor(
     command: readonly string[],
@@ -145,11 +158,13 @@ export class JeviaCommandError extends Error {
     stdout: string,
     stderr: string,
   ) {
-    // execFile's message/cause can contain the entire task and captured output.
+    // Process messages/causes can contain the entire task and captured output.
     // Keep raw diagnostics behind explicit getters, out of normal error logging.
-    super(cause.code === "JEVIA_TIMEOUT" ? "Jevia command timed out"
-      : cause.code === "ABORT_ERR" ? "Jevia command aborted" : "Jevia command failed");
+    const kind = commandErrorKind(cause);
+    super(kind === "timeout" ? "Jevia command timed out"
+      : kind === "aborted" ? "Jevia command aborted" : "Jevia command failed");
     this.name = "JeviaCommandError";
+    this.kind = kind;
     this.#command = Object.freeze([...command]);
     this.exitCode = typeof cause.code === "number" && Number.isSafeInteger(cause.code)
       ? cause.code : null;
@@ -168,6 +183,7 @@ export class JeviaCommandError extends Error {
 }
 
 export class JeviaProtocolError extends Error {
+  readonly kind = "protocol" as const;
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "JeviaProtocolError";
@@ -352,6 +368,24 @@ export class JeviaClient {
 function requireText(value: string, name: string): void {
   if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} cannot be empty`);
   if (value.includes("\0")) throw new TypeError(`${name} cannot contain NUL`);
+}
+
+function commandErrorKind(cause: ExecFileException): JeviaCommandErrorKind {
+  switch (cause.code) {
+    // ENOENT can mean a missing executable OR cwd. Do not misdiagnose which one.
+    case "ENOENT": case "ENOTDIR": return "not_found";
+    case "EACCES": case "EPERM": return "permission_denied";
+    case "JEVIA_TIMEOUT": return "timeout";
+    case "ABORT_ERR": return "aborted";
+    case "ERR_CHILD_PROCESS_STDIO_MAXBUFFER": return "output_limit";
+    case "ERR_INVALID_ARG_TYPE": case "ERR_INVALID_ARG_VALUE":
+    case "ERR_OUT_OF_RANGE": case "ERR_INVALID_FILE_URL_PATH":
+    case "ERR_INVALID_FILE_URL_HOST": case "ERR_INVALID_URL_SCHEME":
+      return "invalid_options";
+  }
+  if (typeof cause.code === "number" && Number.isSafeInteger(cause.code)) return "exit";
+  if (cause.signal && Object.hasOwn(constants.signals, cause.signal)) return "signal";
+  return "spawn_failed";
 }
 
 function requireOptionalBoolean(value: unknown, name: string): void {
