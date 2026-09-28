@@ -77,8 +77,80 @@ compatible within a supported schema.
 
 ## Development tests
 
+See [opt-in storage](#opt-in-storage-unreleased) below for the new storage methods.
+
 Run `pnpm test` for the SDK unit tests. To check argument handling against the
 real Rust CLI, build it from the repository root with `cargo build --locked -p jevia`,
 then run `pnpm --dir packages/jevia-node test:cli`. The integration tests use
 temporary projects and a local mock routing server; no API credentials are needed.
 Set `JEVIA_TEST_BINARY` to an absolute executable path to test another CLI build.
+Set `JEVIA_TEST_POSTGRES_URL` only to an isolated test database to include the
+PostgreSQL SDK integration test. It creates a uniquely named project and records;
+the disposable CI service is discarded afterward.
+
+## Opt-in storage (unreleased)
+
+The following methods are pending the next npm release; they are not in `jevia@0.1.0`.
+They require Jevia CLI 0.1.2 or newer and an existing `jevia init` project.
+
+JSONL remains the default. Every client method reads the project's existing
+`.jevia/config.toml`; constructing a client never initializes, connects to, or
+migrates a database. Keep ordinary routing calls separate from administrative setup.
+
+```ts
+import { JeviaClient } from "jevia";
+
+const jevia = new JeviaClient({ cwd: process.cwd(), timeoutMs: 120_000 });
+const target = { backend: "sqlite", path: ".jevia/jevia.db" } as const;
+
+// Preview only: no database connection or file changes.
+console.log(await jevia.setupStorage(target, { importJsonl: true }));
+
+// After inspecting the preview and stopping ALL project writers/supervisors:
+console.log(await jevia.setupStorage(target, {
+  apply: true,
+  confirmStopped: true,
+  importJsonl: true,
+}));
+console.log(await jevia.checkStorage());
+console.log(await jevia.checkStorage({ deep: true }));
+```
+
+SQLite paths are relative to the project root (an absolute path is also allowed).
+For PostgreSQL, provision a database and set its connection URL in the process
+environment or a secret manager before constructing the client:
+
+```ts
+const target = {
+  backend: "postgres",
+  project: "my-app",
+  urlEnv: "JEVIA_DATABASE_URL",
+} as const;
+
+console.log(await jevia.setupStorage(target)); // Preview; credentials not required yet.
+// Use the same explicit apply/confirmStopped/importJsonl options after review.
+```
+
+`urlEnv` is the variable **name**, not the URL. The client also accepts environment
+overrides via `new JeviaClient({ env: { JEVIA_DATABASE_URL: secretFromYourVault } })`.
+Never put a database URL in arguments or committed configuration. PostgreSQL uses
+certificate-verified TLS by default; `allowInsecureLocalhost: true` permits only
+loopback development connections, not insecure remote databases. `project` scopes
+history inside a shared database; it is not an authorization boundary.
+
+- `setupStorage(target, options?)` returns a human-readable CLI report. Preview is
+  the default; `apply: true` requires `confirmStopped: true` at both type and runtime levels.
+- `importJsonl: true` explicitly preserves existing JSONL records in the database;
+  it is required on apply if the current JSONL history is nonempty. Source JSONL
+  remains unchanged and is not continuously synchronized. Config is switched last.
+- Failed setup leaves the original config selected, but destination schema/project
+  or imported records may remain. Inspect both before retrying. A client timeout
+  or cancellation is not a transaction rollback guarantee; verify state afterward.
+- `checkStorage()` checks access using the CLI's rollback-only write probe for SQL.
+  `{ deep: true }` validates records and metadata without a write probe or repairs.
+  Neither initializes missing storage. These reports are not stable JSON APIs.
+- Both methods accept `signal`; client timeout/buffer limits apply. Increase the
+  timeout explicitly for large imports. Routes, feedback, and run queries then use
+  the selected backend with no new per-request option.
+- This is explicit JSONL-to-database setup, not SQL-to-SQL migration, database
+  provisioning, a hosted service, or a no-storage mode. Cache remains project-local.

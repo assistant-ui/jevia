@@ -32,6 +32,62 @@ A route returns the selected tier, confidence, probabilities, cache source, and 
 - `feedback(runId, outcome, options?)` — Record an explicit success, failure, or unknown outcome for a run.
 - `runs(options?)` — List recent route records with a configurable positive result limit.
 - `show(runId, options?)` — Read one complete route record, including lifecycle and outcome evidence.
+- `setupStorage(target, options?)` — Unreleased: preview opt-in SQLite or PostgreSQL setup; apply only with confirmation.
+- `checkStorage(options?)` — Unreleased: check selected storage, or deeply validate it without a write probe.
+
+## Opt-in storage
+
+**Unreleased Node API:** these methods are pending the next npm release and are not
+in `jevia@0.1.0`. They require CLI 0.1.2 or newer and an existing `jevia init` project.
+
+JSONL remains the default. Creating a client never connects to a database or changes
+storage. All methods use the backend selected in `.jevia/config.toml`.
+
+```typescript
+const target = { backend: "sqlite", path: ".jevia/jevia.db" } as const;
+
+// Preview only: no database connection or file changes.
+console.log(await jevia.setupStorage(target, { importJsonl: true }));
+
+// After review, stop all project writers and supervisors before applying.
+await jevia.setupStorage(target, {
+  apply: true,
+  confirmStopped: true,
+  importJsonl: true,
+});
+console.log(await jevia.checkStorage());
+console.log(await jevia.checkStorage({ deep: true }));
+```
+
+Paths are relative to the project root, or absolute. Applying switches config last.
+Nonempty JSONL history requires explicit import. Source JSONL remains intact and is
+not continuously synchronized. Routes, feedback, and run queries then use SQL.
+
+For PostgreSQL, provision a database and set its URL in the environment before
+creating the client. Never put credentials in arguments or committed config:
+
+```typescript
+const target = {
+  backend: "postgres",
+  project: "my-app",
+  urlEnv: "JEVIA_DATABASE_URL",
+} as const;
+
+console.log(await jevia.setupStorage(target)); // Preview first.
+// Apply with the same explicit confirmation and import options above.
+```
+
+`urlEnv` is the variable name, not the URL. Environment overrides can also be supplied
+through `new JeviaClient({ env: { JEVIA_DATABASE_URL: secretFromYourVault } })`.
+PostgreSQL requires verified TLS by default. `allowInsecureLocalhost: true` is only
+for loopback development. Project names scope history, not database permissions.
+
+Both methods return human-readable CLI reports, not stable JSON. Normal checks use
+a rollback-only SQL write probe; deep checks validate records without a write probe
+or repairs. Neither initializes missing storage. Both support `signal`; raise the
+client's `timeoutMs` for large imports. After failures or cancellation, inspect config
+and destination before retrying: database changes may remain. This is not SQL-to-SQL
+migration, database provisioning, a hosted service, or a no-storage mode. Cache stays local.
 
 ## Open any harness
 

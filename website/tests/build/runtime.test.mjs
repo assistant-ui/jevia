@@ -40,6 +40,12 @@ test("prerendering emits the Node.js API documentation", async () => {
   assert.match(html, /Client methods/);
   assert.match(html, /Harness adapter/);
   assert.match(html, /JeviaCommandError/);
+  assert.match(html, /id="storage"/);
+  assert.match(html, /href="#storage"/);
+  assert.match(html, /Opt-in storage/);
+  assert.match(html, /Unreleased Node API/);
+  assert.match(html, /setupStorage/);
+  assert.match(html, /checkStorage/);
   assert.match(html, /token keyword/);
   assert.match(html, /aria-label="Documentation navigation"/);
   assert.match(html, /href="\/docs\.md"/);
@@ -60,6 +66,9 @@ test("the packaged runtime serves the Markdown documentation", async () => {
   const markdown = await response.text();
   assert.match(markdown, /^# Jevia for Node\.js$/m);
   assert.match(markdown, /^## Client methods$/m);
+  assert.match(markdown, /^## Opt-in storage$/m);
+  assert.match(markdown, /confirmStopped: true/);
+  assert.match(markdown, /urlEnv: "JEVIA_DATABASE_URL"/);
   assert.match(markdown, /import \{ JeviaClient \} from "jevia";/);
   assert.doesNotMatch(markdown, /View \.mdCOPY \.MD/);
 });
