@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.1.3 — 2026-09-28
+
+- Keep non-interactive Unix harness and verifier phases supervised until their
+  process groups are empty, including descendants whose parent already exited.
+  Keep cancellation and deadlines active and preserve the main command's exit code.
+- Retry denied process-group probes within the existing deadline. Only confirmed
+  absence permits completion; permanent uncertainty still reports interruption.
+- Preserve JSONL record boundaries when an existing valid final record has no
+  newline. Validate the unterminated history under its lock before appending;
+  leave malformed or unsupported data untouched for explicit repair.
+- Redact parser payloads in config, history, cache, and maintenance diagnostics,
+  including error source chains and nonfatal routing-cache warnings. Retain safe
+  validation guidance and line/column positions where available.
+
+Existing configuration and history formats are unchanged. Rust 1.92 remains the
+minimum supported version.
+
 ## 0.1.2 — 2026-09-27
 
 - Explicitly release configuration setup locks on drop so duplicated Unix file
