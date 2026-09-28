@@ -79,7 +79,7 @@ test("the build includes crawler discovery and social image assets", async () =>
   }
 });
 
-test("the Nitro runtime renders the homepage through patched H3", { timeout: 5000 }, async () => {
+test("the Nitro beta runtime renders the homepage", { timeout: 5000 }, async () => {
   const response = await runtime.fetch(new Request("https://jevia.test/"));
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
