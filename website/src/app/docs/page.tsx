@@ -196,7 +196,7 @@ export default function DocsPage() {
           <div className="docs-footer-content">
             <span>Need implementation details?</span>
             <a
-              href="https://github.com/assistant-ui/jevia/tree/feat/node-sdk/packages/jevia-node"
+              href="https://github.com/assistant-ui/jevia/tree/main/packages/jevia-node"
               target="_blank"
               rel="noreferrer"
             >
