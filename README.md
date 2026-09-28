@@ -161,8 +161,7 @@ jevia harness setup agent --command my-agent \
   --arg=run --arg=--model --arg='{model}' --arg='{task}' \
   --model fast=provider/small \
   --model balanced=provider/standard \
-  --model strong=provider/frontier \
-  --verify-command cargo --verify-arg=test
+  --model strong=provider/frontier
 ```
 
 This is a generic example, not a provider preset: substitute your agent's actual
@@ -181,9 +180,12 @@ shown and use `--arg=--flag` / `--verify-arg=--flag` for leading-hyphen argument
 - Changing an existing harness also requires `--replace`. Reapplying identical
   settings does not rewrite the config or make another backup (apply may create
   the config lock sidecar). The selected harness entry is rewritten when changed.
-- Omitted verifier options preserve an existing verifier. Use `--no-verification`
-  to explicitly remove it; supplying `--verify-command` replaces its whole command
-  and argument list. Without verification, process success alone is not eligible
+- Omitted verifier options preserve an existing verifier and automatic-detection
+  setting. New adapters default to automatic project tests. Use `--no-verification`
+  to disable both explicit and automatic checks, or `--auto-verification` to remove
+  a custom verifier and re-enable detection. Supplying `--verify-command` replaces
+  its whole command and argument list (for example, `--verify-command cargo
+  --verify-arg=test`). Without verification, process success alone is not eligible
   learning evidence. Missing/duplicate/unknown tier mappings and unsupported
   template placeholders are rejected before config replacement.
 - Commands, arguments, and model IDs appear in previews and committed config.
@@ -319,6 +321,49 @@ tier; the application maps that tier to a harness-specific model. Feedback stays
 explicit—a successful process or function return is not automatically proof of
 task success. The CLI must already be installed and available on `PATH`; npm
 installation does not run a binary downloader.
+
+## Automatic CLI pipeline (unreleased)
+
+After configuring your harness once, use the normal command:
+
+```sh
+jevia run codex "fix the failing test"
+```
+
+Jevia routes the task, launches the agent, runs verification after a successful
+agent exit, and records the lifecycle and result in your selected storage backend.
+Verified results are available to subsequent routing automatically. **Do not run
+`feedback` or `runs complete` afterward** for the normal supervised CLI flow.
+Those APIs are for manual corrections and externally executed work, respectively.
+
+If the adapter has no explicit verifier, `auto_verify = true` (the default)
+detects existing tests at the Jevia project root:
+
+- Rust: `cargo test --workspace` for a root Cargo package/workspace.
+- Node: the existing `test` script, using `packageManager`, then an unambiguous
+  lockfile, then npm. npm, pnpm, Yarn, and Bun are supported. Empty scripts and
+  common placeholder/no-op scripts are not selected.
+
+Automatic checks run with `CI=true`, no stdin, owned process-tree cleanup, and a
+five-minute deadline even if the agent was interactive. To override the deadline,
+use `--non-interactive --verification-timeout-seconds <seconds>`. Jevia does not
+install a test runner or package manager. The existing Cargo/package-manager test
+command may build/download dependencies as it normally does; use trusted projects.
+
+An explicit `[harnesses.<name>.verification]` always wins. For mixed Rust/Node
+roots, unsupported projects, invalid manifests, or conflicting lockfiles, Jevia
+reports that automatic verification is unavailable instead of guessing. The run
+is still recorded, but process-only results are not verified learning evidence.
+Configure a suitable check once for such projects. `harness check <name>` previews
+detection and executable availability without running tests. Passing tests means
+the selected checks passed—not a guarantee that every requirement was satisfied.
+
+This behavior is pending the next CLI release after 0.1.3. Existing adapters
+without a verifier also gain detection. To preserve process-only behavior, set
+`auto_verify = false` in that adapter; the older `--no-verification` removed the
+verifier without storing an explicit opt-out. The new flag persists that opt-out.
+The Node SDK's `route`, `feedback`, and `complete` remain explicit and flexible;
+they never launch an agent or run project tests automatically.
 
 ## Run lifecycle
 

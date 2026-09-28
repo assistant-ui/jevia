@@ -49,6 +49,12 @@ capability tier; your adapter owns the tier-to-model mapping and harness API.
 Feedback is explicit. A successful function return is not automatically treated
 as proof that the task succeeded.
 
+This flexibility is for externally executed SDK work. The CLI's `jevia run`
+pipeline already owns execution and records its verifier results automatically;
+it does not need a subsequent `feedback` or `complete` call. Automatic root-project
+test detection for CLI runs is pending the next CLI release after 0.1.3. These
+SDK methods do not automatically launch your harness or run project tests.
+
 ## API
 
 ```ts

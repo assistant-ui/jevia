@@ -25,14 +25,17 @@ pub struct Options {
     #[arg(long = "model", value_name = "TIER=MODEL", required = true, value_parser = model_mapping)]
     models: Vec<(String, String)>,
     /// Optional verifier executable; omission preserves an existing verifier.
-    #[arg(long, conflicts_with = "no_verification")]
+    #[arg(long, conflicts_with_all = ["no_verification", "auto_verification"])]
     verify_command: Option<String>,
     /// Repeat verifier arguments; use --verify-arg=--flag for leading hyphens.
     #[arg(long = "verify-arg", value_name = "ARG", requires = "verify_command")]
     verify_args: Vec<String>,
-    /// Explicitly remove verification (a process exit alone is not learning evidence).
+    /// Disable both explicit and automatic verification (process-only records).
     #[arg(long, conflicts_with = "verify_command")]
     no_verification: bool,
+    /// Use automatic project tests instead of an explicit verifier.
+    #[arg(long, conflicts_with_all = ["no_verification", "verify_command"])]
+    auto_verification: bool,
     /// Back up and atomically save the previewed harness configuration.
     #[arg(long)]
     apply: bool,
@@ -98,12 +101,19 @@ fn prepare(paths: &ProjectPaths, options: &Options) -> Result<ConfigEdit> {
                 command: command.clone(),
                 args: options.verify_args.clone(),
             })
-        } else if options.no_verification {
+        } else if options.no_verification || options.auto_verification {
             None
         } else {
             previous.and_then(|harness| harness.verification.clone())
         };
         let harness = HarnessConfig {
+            auto_verify: if options.no_verification {
+                false
+            } else if options.auto_verification {
+                true
+            } else {
+                previous.is_none_or(|h| h.auto_verify)
+            },
             command: options.command.clone(),
             args: options.args.clone(),
             models,
@@ -158,9 +168,15 @@ pub fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
         options.name
     );
     if harness.verification.is_none() {
-        println!(
-            "No verifier configured: a successful process exit is not verified learning evidence."
-        );
+        if harness.auto_verify {
+            println!(
+                "Automatic project tests are enabled; use harness check to preview detection. No manual feedback is needed after a verified run."
+            );
+        } else {
+            println!(
+                "Verification disabled: a successful process exit is not verified learning evidence."
+            );
+        }
     }
     if !options.apply {
         println!("No files changed, programs launched, or API/database requests made.");
@@ -203,6 +219,7 @@ fn harness_item(harness: &HarnessConfig) -> Item {
     let mut table = Table::new();
     table["command"] = value(&harness.command);
     table["args"] = arguments(&harness.args);
+    table["auto_verify"] = value(harness.auto_verify);
     let mut models = Table::new();
     for (tier, model) in &harness.models {
         models[tier] = value(model);

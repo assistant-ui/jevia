@@ -128,6 +128,13 @@ running/verifying record interrupted; it never reruns work or infers task failur
 The durable phases are routed, running, verifying, completed, launch_failed, and
 interrupted. Start and finish timestamps are distinct from routing time.
 Manual feedback is refused on active runs and never invents harness metadata.
+For CLI-run work, a configured verifier takes precedence; otherwise automatic
+root-project test detection is enabled by default unless the adapter sets
+`auto_verify = false`. Detected checks use the same durable verification state and
+evidence, run with CI semantics and owned process-tree cleanup, and have a default
+five-minute deadline. Missing/ambiguous checks leave process-only evidence; they
+are never silently treated as verification. No manual completion is needed after
+`run`. Route-only/SDK integrations remain explicit and do not execute tests.
 External completion is a separate, explicitly confirmed operation. It holds the
 per-run lease and atomically records manual feedback plus a completed lifecycle
 only for pending, unowned external work. It does not invent a start time or

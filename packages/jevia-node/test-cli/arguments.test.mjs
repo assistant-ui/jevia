@@ -102,6 +102,49 @@ test("real CLI completes external work and makes it eligible for archival", asyn
   assert.equal(JSON.parse(stdout).archived_records, 1);
 });
 
+test("CLI run automatically tests a Node project, records outcomes, and honors overrides", async (t) => {
+  const { client, cwd } = await fixture(t);
+  const configPath = join(cwd, ".jevia", "config.toml");
+  const initial = await readFile(configPath, "utf8");
+  const adapter = `\n[harnesses.agent]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ["agent.cjs", "{model}", "{task}"]\n[harnesses.agent.models]\nfast = "test"\nbalanced = "test"\nstrong = "test"\n`;
+  await writeFile(configPath, initial + adapter);
+  await writeFile(join(cwd, "package.json"), JSON.stringify({ scripts: { test: "node check.cjs" } }));
+  await writeFile(join(cwd, "agent.cjs"), `require('node:fs').writeFileSync('agent-finished', 'ok');`);
+  await writeFile(join(cwd, "check.cjs"), `
+    const fs = require('node:fs'); const assert = require('node:assert/strict');
+    assert.equal(fs.readFileSync('agent-finished', 'utf8'), 'ok');
+    assert.equal(process.env.CI, 'true');
+    fs.appendFileSync('verified', 'v');
+    process.exit(fs.existsSync('fail-check') ? 1 : 0);
+  `);
+  const run = () => execute(binary, ["run", "agent", "fix task"], { cwd, env: client.env, timeout: 30000 });
+  await run();
+  let [record] = await client.runs({ limit: 1 });
+  assert.equal(record.outcome, "success");
+  assert.equal(record.outcome_evidence.source, "verification");
+  assert.equal(record.lifecycle.state, "completed");
+  assert.equal(record.feedback, undefined);
+  await writeFile(join(cwd, "fail-check"), "fail");
+  await assert.rejects(run());
+  [record] = await client.runs({ limit: 1 });
+  assert.equal(record.outcome, "failure");
+  assert.equal(record.outcome_evidence.source, "verification");
+  const before = await readFile(join(cwd, "verified"), "utf8");
+  await writeFile(configPath, initial + adapter.replace('[harnesses.agent]\n', '[harnesses.agent]\nauto_verify = false\n'));
+  await run();
+  [record] = await client.runs({ limit: 1 });
+  assert.equal(record.outcome_evidence.source, "process_exit");
+  assert.equal(record.execution.verification, undefined);
+  assert.equal(await readFile(join(cwd, "verified"), "utf8"), before);
+  // Explicit verification wins even with a discoverable failing npm test.
+  await writeFile(configPath, initial + adapter + `\n[harnesses.agent.verification]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ["--version"]\n`);
+  await run();
+  [record] = await client.runs({ limit: 1 });
+  assert.equal(record.outcome_evidence.source, "verification");
+  assert.equal(record.outcome, "success");
+  assert.equal(await readFile(join(cwd, "verified"), "utf8"), before);
+});
+
 test("real CLI looks up option-like imported run IDs literally", async (t) => {
   const { client, cwd } = await fixture(t);
   const record = await client.route("a normal task");

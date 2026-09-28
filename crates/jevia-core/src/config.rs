@@ -297,8 +297,15 @@ pub struct HarnessConfig {
     pub command: String,
     pub args: Vec<String>,
     pub models: BTreeMap<String, String>,
+    /// Discover root project tests when no explicit verifier is configured.
+    #[serde(default = "default_auto_verify")]
+    pub auto_verify: bool,
     #[serde(default)]
     pub verification: Option<VerificationConfig>,
+}
+
+fn default_auto_verify() -> bool {
+    true
 }
 
 /// Optional process that verifies a successful harness run.
@@ -624,6 +631,7 @@ mod tests {
     #[test]
     fn harness_invocation_substitutes_without_a_shell() {
         let harness = HarnessConfig {
+            auto_verify: true,
             command: "agent".to_owned(),
             args: vec![
                 "run".to_owned(),
@@ -681,11 +689,22 @@ mod tests {
     }
 
     #[test]
+    fn automatic_verification_is_default_but_can_be_disabled() {
+        let raw = "command='agent'\nargs=['{model}', '{task}']\nmodels={fast='test'}\n";
+        let harness: HarnessConfig = toml::from_str(raw).unwrap();
+        assert!(harness.auto_verify);
+        let disabled: HarnessConfig = toml::from_str(&format!("{raw}auto_verify=false\n")).unwrap();
+        assert!(!disabled.auto_verify);
+        assert!(toml::from_str::<HarnessConfig>(&format!("{raw}auto_verify='false'\n")).is_err());
+    }
+
+    #[test]
     fn config_rejects_incomplete_harness_model_mappings() {
         let mut config = Config::default();
         config.harnesses.insert(
             "agent".to_owned(),
             HarnessConfig {
+                auto_verify: true,
                 command: "agent".to_owned(),
                 args: vec![
                     "--model".to_owned(),
@@ -709,6 +728,7 @@ mod tests {
     #[test]
     fn invocation_rejects_unknown_placeholders_without_panicking() {
         let harness = HarnessConfig {
+            auto_verify: true,
             command: "agent".to_owned(),
             args: vec!["{unknown}".to_owned()],
             models: [("balanced".to_owned(), "provider/model".to_owned())]
@@ -730,6 +750,7 @@ mod tests {
         config.harnesses.insert(
             "agent".to_owned(),
             HarnessConfig {
+                auto_verify: true,
                 command: "agent".to_owned(),
                 args: vec!["{model}".to_owned(), "{task}".to_owned()],
                 models: config
@@ -756,6 +777,7 @@ mod tests {
         config.harnesses.insert(
             "agent".to_owned(),
             HarnessConfig {
+                auto_verify: true,
                 command: "agent".to_owned(),
                 args: vec!["{model}".to_owned(), "{task}".to_owned()],
                 models: config
