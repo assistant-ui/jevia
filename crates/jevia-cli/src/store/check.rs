@@ -32,8 +32,8 @@ pub fn check_deep(path: &Path) -> Result<usize> {
         if line.trim().is_empty() {
             continue;
         }
-        // Unlike routine reads, diagnostic errors must never echo an invalid
-        // enum/string value from a prompt or an edited/imported record.
+        // Never echo an invalid enum/string value from a prompt or an
+        // edited/imported record, matching routine history reads.
         let record: RouteRecord = serde_json::from_str(&line).map_err(|_| {
             anyhow!("invalid history record at line {position} (contents redacted)")
         })?;

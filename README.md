@@ -676,6 +676,11 @@ routing metadata.
 In JSONL mode, `jevia doctor` validates the complete history and reports malformed records
 without deleting or rewriting them.
 
+Malformed configuration, history, and cache diagnostics omit raw values, including
+parser error chains. They report line/column positions where available and safe
+configuration guidance. This does not redact deliberately requested run/task output
+or stdout/stderr streamed by your configured harness and verifier.
+
 ### History maintenance
 
 Both maintenance commands preview by default. Inspect the report before repeating
