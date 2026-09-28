@@ -1,6 +1,7 @@
 mod cache;
 mod config_edit;
 mod diagnostics;
+mod explain;
 mod harness;
 mod lease;
 mod paths;
@@ -19,6 +20,7 @@ use jevia_core::{
     VerificationEvidence, route_cache_key,
 };
 
+use crate::explain::{CacheStatus, CacheWrite, Coordination, Routed, Trace};
 use crate::paths::ProjectPaths;
 use crate::storage::Storage;
 
@@ -56,6 +58,9 @@ enum Command {
         /// Bypass the local routing-decision cache.
         #[arg(long)]
         no_cache: bool,
+        /// Explain cache, evidence, and confidence policy on stderr (no task text).
+        #[arg(long)]
+        explain: bool,
     },
     /// Route a task and launch a configured coding-agent harness.
     Run {
@@ -75,6 +80,9 @@ enum Command {
         /// Bypass the local routing-decision cache.
         #[arg(long)]
         no_cache: bool,
+        /// Explain routing on stderr before launching the harness (no task text).
+        #[arg(long)]
+        explain: bool,
         /// Additional arguments appended after the configured template.
         #[arg(last = true)]
         args: Vec<String>,
@@ -239,8 +247,9 @@ async fn run() -> Result<ExitCode> {
             task,
             json,
             no_cache,
+            explain,
         } => {
-            route(&task, json, no_cache).await?;
+            route(&task, json, no_cache, explain).await?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Run {
@@ -251,12 +260,14 @@ async fn run() -> Result<ExitCode> {
             task,
             args,
             no_cache,
+            explain,
         } => {
             run_harness(
                 &harness,
                 &task,
                 &args,
                 no_cache,
+                explain,
                 RunOptions {
                     non_interactive,
                     timeout_seconds,
@@ -347,17 +358,21 @@ fn init(force: bool) -> Result<()> {
     Ok(())
 }
 
-async fn route(task: &str, print_json: bool, no_cache: bool) -> Result<()> {
+async fn route(task: &str, print_json: bool, no_cache: bool, explain: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
     let storage = Storage::open(&config, &paths, false).await?;
-    let record = routed_record_in(task, None, no_cache, &config, &paths, &storage).await?;
-    storage.append(&record).await?;
+    let routed = routed_record_in(task, None, no_cache, &config, &paths, &storage).await?;
+    let record = &routed.record;
+    storage.append(record).await?;
+    if explain {
+        routed.print_explanation();
+    }
 
     if print_json {
         println!("{}", serde_json::to_string_pretty(&record)?);
     } else {
-        print_record(&record);
+        print_record(record);
     }
     Ok(())
 }
@@ -367,6 +382,7 @@ async fn run_harness(
     task: &str,
     extra_args: &[String],
     no_cache: bool,
+    explain: bool,
     options: RunOptions,
 ) -> Result<ExitCode> {
     let paths = ProjectPaths::discover()?;
@@ -388,7 +404,7 @@ async fn run_harness(
         )
     })?;
     let storage = Storage::open(&config, &paths, false).await?;
-    let record = routed_record_in(
+    let routed = routed_record_in(
         task,
         Some(harness_name),
         no_cache,
@@ -397,6 +413,7 @@ async fn run_harness(
         &storage,
     )
     .await?;
+    let record = &routed.record;
     let invocation = harness.invocation(
         harness_name,
         &record.decision.tier,
@@ -404,13 +421,17 @@ async fn run_harness(
         &record.decision.run_id,
         extra_args,
     )?;
-    storage.append(&record).await?;
+    storage.append(record).await?;
+
+    if explain {
+        routed.print_explanation();
+    }
 
     execute_stored_harness(
         &paths,
         harness_name,
         &invocation,
-        &record,
+        record,
         options,
         &storage,
     )
@@ -661,7 +682,11 @@ async fn routed_record(
     paths: &ProjectPaths,
 ) -> Result<RouteRecord> {
     let storage = Storage::open(config, paths, false).await?;
-    routed_record_in(task, harness_name, no_cache, config, paths, &storage).await
+    Ok(
+        routed_record_in(task, harness_name, no_cache, config, paths, &storage)
+            .await?
+            .record,
+    )
 }
 
 async fn routed_record_in(
@@ -671,8 +696,19 @@ async fn routed_record_in(
     config: &Config,
     paths: &ProjectPaths,
     storage: &Storage,
-) -> Result<RouteRecord> {
+) -> Result<Routed> {
     let wait_started = Instant::now();
+    let mut trace = Trace {
+        cache: if no_cache {
+            CacheStatus::Bypassed
+        } else if !config.cache.enabled {
+            CacheStatus::Disabled
+        } else {
+            CacheStatus::Miss(cache::MissReason::NotFound)
+        },
+        coordination: Coordination::NotNeeded,
+        write: CacheWrite::Skipped,
+    };
     let wait_budget =
         std::time::Duration::from_millis(config.jev.timeout_ms.saturating_add(1_000).min(30_000));
     // The lease remains held through the HTTP request and cache insertion, never
@@ -686,29 +722,42 @@ async fn routed_record_in(
             Ok(key) => key,
             Err(error) => {
                 eprintln!("jevia: routing cache key unavailable: {error:#}");
+                trace.cache = CacheStatus::KeyUnavailable;
                 break (history, None, None);
             }
         };
         match cache::lookup(&paths.cache, &key) {
-            Ok(Some(decision)) => {
+            Ok(cache::Lookup::Hit(decision)) => {
                 eprintln!("jevia: routing cache hit");
-                let stored_task = config.privacy.store_task_text.then(|| task.to_owned());
-                return Ok(RouteRecord::new(decision.for_cache_hit(), stored_task));
+                trace.cache = CacheStatus::Hit;
+                return Ok(Routed::new(
+                    decision.for_cache_hit(),
+                    task,
+                    config,
+                    &history,
+                    wait_started,
+                    trace,
+                ));
             }
-            Ok(None) => {}
+            Ok(cache::Lookup::Miss(reason)) => trace.cache = CacheStatus::Miss(reason),
             Err(error) => {
                 eprintln!("jevia: routing cache unavailable: {error:#}");
+                trace.cache = CacheStatus::Unavailable;
                 break (history, None, None);
             }
         }
         if wait_started.elapsed() >= wait_budget {
             eprintln!("jevia: cache coordination wait expired; routing live");
+            trace.coordination = Coordination::TimedOut;
             break (history, Some(key), None);
         }
         // The first byte of the SHA-256 key selects one of 256 fixed stripes.
         // Sidecars stay stable without growing once per distinct task forever.
         match lease::try_acquire(&paths.directory.join("cache-leases"), &key[..2]) {
             Ok(Some(guard)) => {
+                if !matches!(trace.coordination, Coordination::Waited) {
+                    trace.coordination = Coordination::Acquired;
+                }
                 let latest = storage.recent(config.router.history_limit, true).await?;
                 let latest_key = route_cache_key(task, harness_name, config, &latest)?;
                 if latest_key != key {
@@ -717,21 +766,36 @@ async fn routed_record_in(
                 // Another process may have populated the cache between our
                 // first lookup and acquisition of the request lease.
                 match cache::lookup(&paths.cache, &key) {
-                    Ok(Some(decision)) => {
+                    Ok(cache::Lookup::Hit(decision)) => {
                         eprintln!("jevia: routing cache hit");
-                        let stored_task = config.privacy.store_task_text.then(|| task.to_owned());
-                        return Ok(RouteRecord::new(decision.for_cache_hit(), stored_task));
+                        trace.cache = CacheStatus::Hit;
+                        return Ok(Routed::new(
+                            decision.for_cache_hit(),
+                            task,
+                            config,
+                            &latest,
+                            wait_started,
+                            trace,
+                        ));
                     }
-                    Ok(None) => break (latest, Some(key), Some(guard)),
+                    Ok(cache::Lookup::Miss(reason)) => {
+                        trace.cache = CacheStatus::Miss(reason);
+                        break (latest, Some(key), Some(guard));
+                    }
                     Err(error) => {
                         eprintln!("jevia: routing cache unavailable: {error:#}");
+                        trace.cache = CacheStatus::Unavailable;
                         break (latest, None, None);
                     }
                 }
             }
-            Ok(None) => tokio::time::sleep(std::time::Duration::from_millis(25)).await,
+            Ok(None) => {
+                trace.coordination = Coordination::Waited;
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
             Err(error) => {
                 eprintln!("jevia: cache coordination unavailable: {error:#}");
+                trace.coordination = Coordination::Unavailable;
                 break (history, Some(key), None);
             }
         }
@@ -741,19 +805,29 @@ async fn routed_record_in(
         .context("TYPESAFE_API_KEY is not set; Jevia never stores this key in config")?;
     let client = JevClient::new(api_key, &config.jev)?;
     let decision = client.route(task, config, &history).await?;
-    if let Some(key) = cache_key
-        && let Err(error) = cache::insert(
+    if let Some(key) = cache_key {
+        match cache::insert(
             &paths.cache,
             key,
             decision.clone(),
             config.cache.ttl_seconds,
             config.cache.max_entries,
-        )
-    {
-        eprintln!("jevia: could not update routing cache: {error:#}");
+        ) {
+            Ok(()) => trace.write = CacheWrite::Stored,
+            Err(error) => {
+                trace.write = CacheWrite::Failed;
+                eprintln!("jevia: could not update routing cache: {error:#}");
+            }
+        }
     }
-    let stored_task = config.privacy.store_task_text.then(|| task.to_owned());
-    Ok(RouteRecord::new(decision, stored_task))
+    Ok(Routed::new(
+        decision,
+        task,
+        config,
+        &history,
+        wait_started,
+        trace,
+    ))
 }
 
 async fn maintain_history(
