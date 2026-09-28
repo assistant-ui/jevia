@@ -24,7 +24,19 @@ test("routes a task as one shell-free argument and supports cache bypass", async
 
   assert.equal(route.task, task);
   assert.equal(route.tier, "balanced");
-  assert.match(route.jev_model, /route\|.*\|--json\|--no-cache$/);
+  assert.deepEqual(route.jev_model.split("|"), ["route", "--json", "--no-cache", "--", task]);
+});
+
+test("keeps option-like text behind the CLI option boundary", async () => {
+  for (const task of ["--help", "- fix this", "--", "--json"]) {
+    const route = await client().route(task);
+    assert.equal(route.task, task);
+    assert.deepEqual(route.jev_model.split("|"), ["route", "--json", "--", task]);
+  }
+  const updated = await client().feedback("--help", "success", { reason: "--reason=a=b" });
+  assert.equal(updated.run_id, "--help");
+  assert.equal(updated.feedback[0].reason, "--reason=a=b");
+  assert.equal((await client().show("--help")).run_id, "--help");
 });
 
 test("records explicit feedback with a reason", async () => {

@@ -1,4 +1,5 @@
 const args = process.argv.slice(2);
+const positionals = args.slice(args.indexOf("--") + 1);
 
 function record(overrides = {}) {
   return {
@@ -22,41 +23,42 @@ function record(overrides = {}) {
 if (args[0] === "--version") {
   console.log("jevia 0.2.0");
 } else if (args[0] === "route") {
-  if (args[1] === "fail") {
+  const task = positionals[0];
+  if (task === "fail") {
     console.error("error: simulated routing failure");
     process.exitCode = 2;
-  } else if (args[1] === "wait") {
+  } else if (task === "wait") {
     await new Promise((resolve) => setTimeout(resolve, 1_000));
-    console.log(JSON.stringify(record({ task: args[1] })));
+    console.log(JSON.stringify(record({ task })));
   } else {
     console.log(
       JSON.stringify(
-        record({ task: args[1], jev_model: args.join("|") }),
+        record({ task, jev_model: args.join("|") }),
       ),
     );
   }
 } else if (args[0] === "feedback") {
-  const reasonIndex = args.indexOf("--reason");
+  const reason = args.find((arg) => arg.startsWith("--reason="))?.slice("--reason=".length);
   console.log(
     JSON.stringify(
       record({
-        run_id: args[1],
-        outcome: args[2],
+        run_id: positionals[0],
+        outcome: positionals[1],
         outcome_evidence: { source: "manual", recorded_at_ms: 2 },
         feedback: [
           {
             previous_outcome: "unknown",
             previous_source: null,
-            outcome: args[2],
+            outcome: positionals[1],
             recorded_at_ms: 2,
-            reason: reasonIndex === -1 ? null : args[reasonIndex + 1],
+            reason: reason ?? null,
           },
         ],
       }),
     ),
   );
 } else if (args[0] === "runs" && args[1] === "show") {
-  console.log(JSON.stringify(record({ run_id: args[2] })));
+  console.log(JSON.stringify(record({ run_id: positionals[0] })));
 } else if (args[0] === "runs") {
   const limitIndex = args.indexOf("--limit");
   const limit = Number(args[limitIndex + 1]);
