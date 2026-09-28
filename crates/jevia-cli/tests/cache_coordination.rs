@@ -169,6 +169,54 @@ fn concurrent_misses_share_one_request_and_keep_distinct_runs() {
 }
 
 #[test]
+fn cached_routes_preserve_a_history_without_a_final_newline() {
+    let root = tempdir().unwrap();
+    let server = Server::new(false);
+    server.configure(root.path());
+    assert!(
+        route(root.path(), false)
+            .wait_with_output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let path = root.path().join(".jevia/runs.jsonl");
+    let mut original = fs::read(&path).unwrap();
+    assert_eq!(original.pop(), Some(b'\n'));
+    fs::write(&path, &original).unwrap();
+
+    // Exercise the boundary under competing appenders, including cache hits.
+    let children: Vec<_> = (0..6).map(|_| route(root.path(), false)).collect();
+    for child in children {
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let record: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(record["source"], "cache");
+    }
+    let bytes = fs::read(&path).unwrap();
+    assert!(bytes.starts_with(&original));
+    let records: Vec<jevia_core::RouteRecord> = String::from_utf8(bytes)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(records.len(), 7);
+    assert_eq!(
+        records
+            .iter()
+            .map(|r| &r.decision.run_id)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        7
+    );
+    assert_eq!(server.requests.load(Ordering::SeqCst), 1);
+}
+
+#[test]
 fn failed_leader_releases_lease_and_is_not_cached() {
     let root = tempdir().unwrap();
     let server = Server::new(true);
