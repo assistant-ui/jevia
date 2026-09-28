@@ -114,13 +114,6 @@ export function DocsSidebar() {
               ))}
             </nav>
           </div>
-
-          <div className="docs-sidebar-meta">
-            <span>Package</span>
-            <strong>jevia</strong>
-            <span>Runtime</span>
-            <strong>Node 20+</strong>
-          </div>
         </div>
       </aside>
     </>

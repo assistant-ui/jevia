@@ -194,7 +194,11 @@ export default function DocsPage() {
             </div>
           </section>
 
-          <footer className="docs-content-footer">
+        </article>
+
+        <footer className="docs-footer">
+          <div className="docs-footer-spacer" aria-hidden="true" />
+          <div className="docs-footer-content">
             <span>Need implementation details?</span>
             <a
               href="https://github.com/assistant-ui/jevia/tree/main/packages/jevia-node"
@@ -204,8 +208,10 @@ export default function DocsPage() {
               View the package source
               <ArrowUpRight size={14} strokeWidth={1.7} aria-hidden="true" />
             </a>
-          </footer>
-        </article>
+          </div>
+          <span className="frame-junctions docs-footer-junctions" aria-hidden="true" />
+          <span className="docs-footer-sidebar-junction" aria-hidden="true" />
+        </footer>
       </div>
     </main>
   );
