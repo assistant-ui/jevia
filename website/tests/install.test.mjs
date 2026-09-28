@@ -114,7 +114,7 @@ test("explains the prerequisite when curl is missing", (t) => {
 test("installs the verified Linux release binary without Cargo", (t) => {
   const { installDirectory, result } = runInstaller(t);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Downloading Jevia 0\.1\.2 for x86_64-unknown-linux-musl/);
+  assert.match(result.stdout, /Downloading Jevia 0\.1\.3 for x86_64-unknown-linux-musl/);
   assert.match(result.stdout, /OK/);
   assert.doesNotMatch(result.stdout, /cargo|crates\.io/i);
 
