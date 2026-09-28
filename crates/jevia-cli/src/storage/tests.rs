@@ -28,6 +28,22 @@ fn sqlite_config() -> Config {
     }
 }
 
+#[tokio::test]
+async fn invalid_decisions_are_rejected_before_jsonl_or_sqlite_writes() {
+    for config in [Config::default(), sqlite_config()] {
+        let directory = tempfile::tempdir().unwrap();
+        let paths = ProjectPaths::at(directory.path().into());
+        let storage = Storage::open(&config, &paths, true).await.unwrap();
+        let mut bad = sample("private-run");
+        bad.decision
+            .probabilities
+            .insert("private-tier".into(), 2.0);
+        let error = storage.append(&bad).await.unwrap_err();
+        assert!(!format!("{error:#}").contains("private-"));
+        assert!(storage.recent(10, false).await.unwrap().is_empty());
+    }
+}
+
 fn postgres_config() -> Config {
     Config {
         storage: StorageConfig::Postgres {

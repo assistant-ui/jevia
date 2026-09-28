@@ -223,7 +223,7 @@ fn decode_decision(body: &[u8], config: &Config) -> Result<RouteDecision, JevErr
         answer.choice.clone()
     };
 
-    Ok(RouteDecision {
+    let decision = RouteDecision {
         run_id: Uuid::new_v4().to_string(),
         tier,
         suggested_tier: answer.choice,
@@ -233,7 +233,9 @@ fn decode_decision(body: &[u8], config: &Config) -> Result<RouteDecision, JevErr
         jev_model: response.model,
         created_at_ms: now_ms(),
         source: DecisionSource::Live,
-    })
+    };
+    decision.validate().map_err(JevError::InvalidDecision)?;
+    Ok(decision)
 }
 
 fn now_ms() -> u64 {
@@ -246,6 +248,8 @@ fn now_ms() -> u64 {
 
 #[derive(Debug, Error)]
 pub enum JevError {
+    #[error("Jev returned an invalid routing decision: {0} (values redacted)")]
+    InvalidDecision(&'static str),
     #[error("TYPESAFE_API_KEY is missing or empty")]
     MissingApiKey,
     #[error("task cannot be empty")]
@@ -311,6 +315,39 @@ mod tests {
     use crate::{ExecutionEvidence, Outcome, OutcomeSource, VerificationEvidence};
 
     use super::*;
+
+    #[test]
+    fn rejects_invalid_probabilities_and_blank_models_without_echoing_values() {
+        let valid = json!({"model": "test", "answers": {"tier": {
+            "type": "choice", "choice": "fast", "confidence": 0.9,
+            "probabilities": {"private-tier": 0.9}
+        }}});
+        for probability in [-1.0, 1.01, 2.0] {
+            let mut body = valid.clone();
+            body["answers"]["tier"]["probabilities"]["private-tier"] = probability.into();
+            let error = decode_decision(&serde_json::to_vec(&body).unwrap(), &Config::default())
+                .unwrap_err();
+            assert!(matches!(error, JevError::InvalidDecision(_)));
+            assert!(!format!("{error:?} {error}").contains("private-tier"));
+        }
+        for model in ["", " \n\t"] {
+            let mut body = valid.clone();
+            body["model"] = model.into();
+            assert!(
+                decode_decision(&serde_json::to_vec(&body).unwrap(), &Config::default()).is_err()
+            );
+        }
+        for probabilities in [json!({}), json!({"fast": 0.0, "strong": 1.0})] {
+            let mut body = valid.clone();
+            body["answers"]["tier"]["probabilities"] = probabilities;
+            let mut decision =
+                decode_decision(&serde_json::to_vec(&body).unwrap(), &Config::default()).unwrap();
+            for number in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                decision.probabilities.insert("private-tier".into(), number);
+                assert!(decision.validate().is_err());
+            }
+        }
+    }
 
     #[test]
     fn provider_errors_discard_private_values_in_all_formats() {

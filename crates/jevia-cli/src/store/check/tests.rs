@@ -36,11 +36,17 @@ fn deep_check_jsonl_rejects_ambiguous_records_and_redacts_payloads() {
     empty["run_id"] = json!("");
     let mut invalid = record(1);
     invalid["outcome"] = json!("private-enum-value");
+    let mut bad_probability = record(1);
+    bad_probability["probabilities"] = json!({"private-tier": 2});
+    let mut blank_model = record(1);
+    blank_model["jev_model"] = json!(" \t");
     for bad in [
         "{private-truncated".into(),
         unsupported.to_string(),
         empty.to_string(),
         invalid.to_string(),
+        bad_probability.to_string(),
+        blank_model.to_string(),
         record(0).to_string(),
     ] {
         let contents = format!("{}\n{bad}\n", record(0));

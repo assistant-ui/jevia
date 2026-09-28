@@ -143,12 +143,23 @@ fn read_records_from(
                 path.display()
             );
         }
+        record
+            .decision
+            .validate()
+            .map_err(anyhow::Error::msg)
+            .with_context(|| {
+                format!(
+                    "invalid routing decision on line {} (contents redacted)",
+                    index + 1
+                )
+            })?;
         visit(record)?;
     }
     Ok(())
 }
 
 pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
+    record.decision.validate().map_err(anyhow::Error::msg)?;
     let parent = path
         .parent()
         .context("run history path does not have a parent directory")?;
