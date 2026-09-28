@@ -1390,6 +1390,50 @@ mod tests {
         assert!(stored.execution.unwrap().verification.is_none());
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn verification_and_completion_wait_for_background_children() {
+        let dir = tempdir().unwrap();
+        let paths = ProjectPaths::at(dir.path().to_path_buf());
+        let record = sample_record();
+        store::append(&paths.runs, &record).unwrap();
+        let invocation = HarnessInvocation {
+            program: "sh".into(),
+            args: vec!["-c".into(), "(sleep 0.2; touch ready) & exit 0".into()],
+            model: "test".into(),
+            verification: Some(VerificationInvocation {
+                program: "sh".into(),
+                args: vec![
+                    "-c".into(),
+                    "test -f ready || exit 1; (sleep 0.2; touch verified) & exit 0".into(),
+                ],
+            }),
+        };
+        let code = execute_harness_with_options(
+            &paths,
+            "test",
+            &invocation,
+            &record,
+            RunOptions {
+                non_interactive: true,
+                timeout_seconds: Some(5),
+                verification_timeout_seconds: Some(5),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(dir.path().join("ready").exists());
+        assert!(dir.path().join("verified").exists());
+        let stored = store::load(&paths.runs).unwrap().remove(0);
+        assert_eq!(stored.outcome, Outcome::Success);
+        assert_eq!(
+            stored.lifecycle.as_ref().unwrap().state,
+            RunState::Completed
+        );
+        assert!(stored.is_learning_evidence());
+    }
+
     #[tokio::test]
     async fn verifier_timeout_preserves_successful_harness_evidence() {
         let dir = tempdir().unwrap();

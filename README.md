@@ -360,6 +360,12 @@ and verification cancellation preserves the harness evidence. Exit codes are 130
 for cancellation and 124 for timeout. Cleanup errors record `interrupted` instead
 of claiming the process tree was stopped.
 
+The main command exiting does not finish a supervised phase while background
+processes remain in its group/job. Jevia waits for them before starting verification
+or recording completion, and the phase deadline and cancellation remain active.
+The main command's exit code is preserved; background commands must report their
+own failures to the main command (or the verifier) if they should affect the outcome.
+
 Without this flag, existing interactive terminal behavior remains unchanged.
 This is not a sandbox: descendants that deliberately escape a process group/job,
 SIGKILL of Jevia, and machine crashes cannot be handled reliably. Use explicit
