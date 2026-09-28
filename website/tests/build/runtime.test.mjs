@@ -48,6 +48,7 @@ test("prerendering emits the Node.js API documentation", async () => {
   assert.match(html, /checkStorage/);
   assert.match(html, /token keyword/);
   assert.match(html, /aria-label="Documentation navigation"/);
+  assert.match(html, /class="docs-nav-highlight" aria-hidden="true"/);
   assert.match(html, /href="\/docs\.md"/);
   assert.match(html, /VIEW \.MD/i);
   assert.match(html, /COPY \.MD/i);

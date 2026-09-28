@@ -3,6 +3,7 @@
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 
 import { DocsPageActions } from "./docs-page-actions";
+import { DocsNavLinks } from "./docs-nav-links";
 
 const SECTIONS = [
   { id: "overview", number: "00", label: "Overview", title: "Get started with Jevia" },
@@ -110,17 +111,21 @@ export function DocsSidebar() {
   }, []);
 
   useEffect(() => {
-    if (window.innerWidth > 800) return;
+    function centerActiveLink() {
+      if (window.innerWidth > 800) return;
+      const anchor = document.querySelector<HTMLAnchorElement>(
+        '.docs-nav-group a[href="#' + activeId + '"]',
+      );
+      const navigation = anchor?.closest<HTMLElement>(".docs-nav-group");
+      if (!anchor || !navigation) return;
 
-    const anchor = document.querySelector<HTMLAnchorElement>(
-      '.docs-nav-group a[href="#' + activeId + '"]',
-    );
-    const navigation = anchor?.closest<HTMLElement>(".docs-nav-group");
-    if (!anchor || !navigation) return;
-
-    const left =
-      anchor.offsetLeft - navigation.clientWidth / 2 + anchor.offsetWidth / 2;
-    navigation.scrollTo({ left, behavior: "auto" });
+      const left = navigation.scrollLeft + anchor.getBoundingClientRect().left -
+        navigation.getBoundingClientRect().left - navigation.clientWidth / 2 + anchor.offsetWidth / 2;
+      navigation.scrollTo({ left, behavior: "auto" });
+    }
+    centerActiveLink();
+    window.addEventListener("resize", centerActiveLink);
+    return () => window.removeEventListener("resize", centerActiveLink);
   }, [activeId]);
 
   const activeSection =
@@ -161,8 +166,8 @@ export function DocsSidebar() {
     }
 
     document.getElementById(id)?.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
+      behavior: event.detail === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
         : "smooth",
       block: "start",
     });
@@ -185,21 +190,7 @@ export function DocsSidebar() {
       <aside className="docs-sidebar" aria-label="Documentation navigation">
         <div className="docs-sidebar-inner">
           <div className="docs-nav-group">
-            <nav aria-label="Node API sections">
-              {SECTIONS.map(({ id, number, label }) => (
-                <a
-                  key={id}
-                  href={"#" + id}
-                  aria-current={activeId === id ? "location" : undefined}
-                  onClick={(event) => beginSectionNavigation(event, id)}
-                >
-                  <span className="docs-nav-index" aria-hidden="true">
-                    {number}
-                  </span>
-                  <span>{label}</span>
-                </a>
-              ))}
-            </nav>
+            <DocsNavLinks sections={SECTIONS} activeId={activeId} onNavigate={beginSectionNavigation} />
           </div>
         </div>
       </aside>
