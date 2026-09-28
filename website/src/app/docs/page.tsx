@@ -57,7 +57,7 @@ const ERROR_HANDLING = [
   "  await jevia.route(task, { signal: controller.signal });",
   "} catch (error) {",
   "  if (error instanceof JeviaCommandError) {",
-  "    console.error(error.exitCode, error.stderr);",
+  "    console.error(error.message, error.exitCode, error.signal);",
   "  }",
   "}",
 ].join("\n");
@@ -183,8 +183,9 @@ export default function DocsPage() {
             <div className="docs-note">
               <strong>Structured failures</strong>
               <p>
-                <code>JeviaCommandError</code> includes the exit code, signal, stdout, and
-                stderr. Invalid JSON or records raise <code>JeviaProtocolError</code>.
+                Log only the message, exit code, and signal. Raw command, stdout, and
+                stderr can contain sensitive data and are for private debugging only.
+                Invalid JSON or records raise <code>JeviaProtocolError</code>.
               </p>
             </div>
           </section>

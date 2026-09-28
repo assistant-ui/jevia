@@ -59,8 +59,12 @@ const run = await jevia.show(route.run_id, { signal });
 const updated = await jevia.feedback(route.run_id, "success", { signal });
 ```
 
-All child processes use `execFile` without a shell. `JeviaCommandError` exposes
-the exit code, signal, stdout, and stderr for failed CLI calls.
+All child processes use `execFile` without a shell. `JeviaCommandError` has a
+generic message, exit code, and signal safe for ordinary error logging. The raw
+`command`, `stdout`, and `stderr` remain available through explicit getters for
+private debugging, but are excluded from normal inspection and serialization.
+These getters may contain tasks, credentials, and other sensitive data: do not
+send them to logs or telemetry. Raw process and JSON parser causes are not retained.
 Tasks, run IDs, and feedback reasons are passed as literal values, including
 text starting with `-` or `--`.
 
