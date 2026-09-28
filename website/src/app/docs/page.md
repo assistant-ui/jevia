@@ -77,4 +77,4 @@ try {
 
 ## Source
 
-[View the Node.js package source](https://github.com/assistant-ui/jevia/tree/main/packages/jevia-node).
+[View the Node.js package source](https://github.com/assistant-ui/jevia/tree/feat/node-sdk/packages/jevia-node).
