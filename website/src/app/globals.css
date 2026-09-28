@@ -928,6 +928,9 @@ pre {
 }
 
 .docs-nav-group a {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
   padding: 0.38rem 1rem;
   border-left: 1px solid transparent;
   color: var(--muted);
@@ -937,6 +940,14 @@ pre {
     border-color 140ms ease,
     background-color 140ms ease,
     color 140ms ease;
+}
+
+.docs-nav-index {
+  min-width: 1.25rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.57rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .docs-nav-group a:hover {
@@ -1350,9 +1361,14 @@ pre {
   }
 
   .docs-nav-group a {
+    gap: 0.35rem;
     padding: 0.38rem 0.5rem;
     border: 1px solid transparent;
     white-space: nowrap;
+  }
+
+  .docs-nav-index {
+    min-width: auto;
   }
 
   .docs-nav-group a[aria-current="location"] {

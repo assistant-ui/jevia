@@ -5,12 +5,12 @@ import { useEffect, useState } from "react";
 import { DocsPageActions } from "./docs-page-actions";
 
 const SECTIONS = [
-  { id: "overview", label: "Overview", title: "Get started with Jevia" },
-  { id: "install", label: "Install", title: "Install the Node.js package" },
-  { id: "quickstart", label: "Quickstart", title: "Create a client and route" },
-  { id: "methods", label: "Methods", title: "Client methods" },
-  { id: "adapters", label: "Harness adapters", title: "Open any harness" },
-  { id: "errors", label: "Errors", title: "Cancellation and errors" },
+  { id: "overview", number: "00", label: "Overview", title: "Get started with Jevia" },
+  { id: "install", number: "01", label: "Install", title: "Install the Node.js package" },
+  { id: "quickstart", number: "02", label: "Quickstart", title: "Create a client and route" },
+  { id: "methods", number: "03", label: "Methods", title: "Client methods" },
+  { id: "adapters", number: "04", label: "Harness adapters", title: "Open any harness" },
+  { id: "errors", number: "05", label: "Errors", title: "Cancellation and errors" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -103,13 +103,16 @@ export function DocsSidebar() {
         <div className="docs-sidebar-inner">
           <div className="docs-nav-group">
             <nav aria-label="Node API sections">
-              {SECTIONS.map(({ id, label }) => (
+              {SECTIONS.map(({ id, number, label }) => (
                 <a
                   key={id}
                   href={"#" + id}
                   aria-current={activeId === id ? "location" : undefined}
                 >
-                  {label}
+                  <span className="docs-nav-index" aria-hidden="true">
+                    {number}
+                  </span>
+                  <span>{label}</span>
                 </a>
               ))}
             </nav>
