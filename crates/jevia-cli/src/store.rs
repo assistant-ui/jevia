@@ -133,13 +133,8 @@ fn read_records_from(
         if line.trim().is_empty() {
             continue;
         }
-        let record: RouteRecord = serde_json::from_str(&line).with_context(|| {
-            format!(
-                "invalid run record on line {} of {}",
-                index + 1,
-                path.display()
-            )
-        })?;
+        let record: RouteRecord = serde_json::from_str(&line)
+            .map_err(|error| crate::diagnostics::json_line("run record", index + 1, &error))?;
         if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
             bail!(
                 "unsupported run record schema {} on line {} of {}",
