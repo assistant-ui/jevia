@@ -100,11 +100,6 @@ export default function DocsPage() {
               Node.js while keeping Jevia&apos;s local policy, storage, and learning
               behavior in one place.
             </p>
-            <div className="docs-capabilities" aria-label="Package capabilities">
-              <span>Typed records</span>
-              <span>Shell-free execution</span>
-              <span>AbortSignal support</span>
-            </div>
           </header>
 
           <section className="docs-section" id="install" aria-labelledby="install-title">

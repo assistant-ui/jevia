@@ -1032,22 +1032,6 @@ pre {
   line-height: 1.75;
 }
 
-.docs-capabilities {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 1.75rem;
-}
-
-.docs-capabilities span {
-  padding: 0.38rem 0.55rem;
-  border: 1px solid var(--border);
-  color: var(--muted);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.59rem;
-  letter-spacing: 0.025em;
-}
-
 .docs-section {
   padding-block: 3.75rem;
   border-top: 1px dashed var(--border);
