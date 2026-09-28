@@ -103,7 +103,7 @@ pub fn route_cache_key(
         "harness": harness,
         "request": request,
     });
-    let encoded = serde_json::to_vec(&material).map_err(JevError::CacheKey)?;
+    let encoded = serde_json::to_vec(&material).map_err(|_| JevError::CacheKey)?;
     let digest = Sha256::digest(encoded);
     let mut key = String::with_capacity(digest.len() * 2);
     for byte in digest {
@@ -207,13 +207,13 @@ fn decode_decision(body: &[u8], config: &Config) -> Result<RouteDecision, JevErr
     let answer: ChoiceAnswer = serde_json::from_value(answer.clone())?;
 
     if answer.kind != "choice" {
-        return Err(JevError::UnexpectedAnswerType(answer.kind));
+        return Err(JevError::UnexpectedAnswerType);
     }
     if !answer.confidence.is_finite() || !(0.0..=1.0).contains(&answer.confidence) {
-        return Err(JevError::InvalidConfidence(answer.confidence));
+        return Err(JevError::InvalidConfidence);
     }
     if !config.tiers.contains_key(&answer.choice) {
-        return Err(JevError::UnknownTier(answer.choice));
+        return Err(JevError::UnknownTier);
     }
 
     let fallback_applied = answer.confidence < config.router.confidence_floor;
@@ -251,23 +251,53 @@ pub enum JevError {
     #[error("task cannot be empty")]
     EmptyTask,
     #[error("Jev request failed: {0}")]
-    Request(#[from] reqwest::Error),
+    Request(&'static str),
     #[error("Jev returned HTTP status {0}")]
     ApiStatus(u16),
-    #[error("Jev returned invalid JSON: {0}")]
-    InvalidJson(#[from] serde_json::Error),
-    #[error("could not encode a routing cache key: {0}")]
-    CacheKey(serde_json::Error),
+    #[error("Jev returned invalid JSON at line {line}, column {column} (values redacted)")]
+    InvalidJson { line: usize, column: usize },
+    #[error("could not encode a routing cache key")]
+    CacheKey,
     #[error("Jev response did not contain the `tier` answer")]
     MissingTierAnswer,
-    #[error("Jev returned `{0}` for the tier answer instead of `choice`")]
-    UnexpectedAnswerType(String),
-    #[error("Jev returned invalid confidence {0}")]
-    InvalidConfidence(f64),
-    #[error("Jev selected undefined tier `{0}`")]
-    UnknownTier(String),
+    #[error("Jev returned an unexpected tier answer type; expected `choice` (value redacted)")]
+    UnexpectedAnswerType,
+    #[error("Jev returned invalid confidence; expected a number between 0 and 1 (value redacted)")]
+    InvalidConfidence,
+    #[error("Jev selected an undefined tier (value redacted)")]
+    UnknownTier,
     #[error(transparent)]
     Config(#[from] crate::ConfigError),
+}
+
+// Transport errors may carry credentials in URLs and provider parser errors can
+// quote response values. Discard the raw sources, not just their Display text:
+// Debug and error-chain formatting must be safe too.
+impl From<reqwest::Error> for JevError {
+    fn from(error: reqwest::Error) -> Self {
+        Self::Request(if error.is_timeout() {
+            "timeout"
+        } else if error.is_connect() {
+            "connection failed"
+        } else if error.is_builder() {
+            "invalid request configuration"
+        } else if error.is_body() {
+            "response body failed"
+        } else if error.is_decode() {
+            "response decoding failed"
+        } else {
+            "transport failure"
+        })
+    }
+}
+
+impl From<serde_json::Error> for JevError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::InvalidJson {
+            line: error.line(),
+            column: error.column(),
+        }
+    }
 }
 
 impl From<StatusCode> for JevError {
@@ -281,6 +311,32 @@ mod tests {
     use crate::{ExecutionEvidence, Outcome, OutcomeSource, VerificationEvidence};
 
     use super::*;
+
+    #[test]
+    fn provider_errors_discard_private_values_in_all_formats() {
+        use std::error::Error as _;
+        const PRIVATE: &str = "PRIVATE_PROVIDER_SENTINEL";
+        let valid = json!({
+            "model": "test", "answers": {"tier": {
+                "type": "choice", "choice": "fast", "confidence": 0.9
+            }}
+        });
+        for field in ["type", "choice", "confidence", "probabilities"] {
+            let mut invalid = valid.clone();
+            invalid["answers"]["tier"][field] = PRIVATE.into();
+            let error = decode_decision(&serde_json::to_vec(&invalid).unwrap(), &Config::default())
+                .unwrap_err();
+            assert!(!format!("{error} {error:?}").contains(PRIVATE));
+            assert!(error.source().is_none());
+        }
+        let error: JevError = reqwest::Client::new()
+            .get(format!("invalid-url-{PRIVATE}"))
+            .build()
+            .unwrap_err()
+            .into();
+        assert!(!format!("{error} {error:?}").contains(PRIVATE));
+        assert!(error.source().is_none());
+    }
 
     #[test]
     fn request_includes_only_recent_completed_outcomes() {

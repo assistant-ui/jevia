@@ -681,6 +681,10 @@ parser error chains. They report line/column positions where available and safe
 configuration guidance. This does not redact deliberately requested run/task output
 or stdout/stderr streamed by your configured harness and verifier.
 
+Provider and transport failures also omit raw response values and endpoint URLs,
+including underlying error chains. Diagnostics retain safe failure categories,
+JSON positions where available, and HTTP status codes.
+
 ### History maintenance
 
 Both maintenance commands preview by default. Inspect the report before repeating
