@@ -2,6 +2,7 @@
 
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 
+import { glidePosition, scrollDuration } from "../lib/scroll-motion";
 import { DocsPageActions } from "./docs-page-actions";
 
 const SECTIONS = [
@@ -17,11 +18,37 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 
 const NAVIGATION_FALLBACK_DELAY_MS = 5_000;
 const NAVIGATION_SETTLE_DELAY_MS = 250;
+const SCROLL_POSITION_TOLERANCE = 2;
+const SCROLL_KEYS = new Set([
+  "ArrowDown",
+  "ArrowUp",
+  "End",
+  "Home",
+  "PageDown",
+  "PageUp",
+  " ",
+]);
+
+function getDocsScrollOffset() {
+  const pageBarBottom =
+    document.querySelector(".docs-page-bar")?.getBoundingClientRect().bottom ?? 126;
+  const mobileNavigationHeight =
+    window.innerWidth <= 800
+      ? (document.querySelector(".docs-sidebar")?.getBoundingClientRect().height ?? 0)
+      : 0;
+
+  return pageBarBottom + mobileNavigationHeight + 21;
+}
 
 export function DocsSidebar() {
   const [activeId, setActiveId] = useState<SectionId>("overview");
   const navigationTargetRef = useRef<SectionId | null>(null);
   const navigationReleaseTimerRef = useRef<number | null>(null);
+  const scrollFrameRef = useRef(0);
+  const scrollStartRef = useRef(0);
+  const scrollTargetRef = useRef<number | null>(null);
+  const scrollStartedAtRef = useRef(0);
+  const scrollDurationRef = useRef(0);
 
   useEffect(() => {
     let frame = 0;
@@ -37,13 +64,7 @@ export function DocsSidebar() {
 
     function updateActiveSection() {
       frame = 0;
-      const pageBarBottom =
-        document.querySelector(".docs-page-bar")?.getBoundingClientRect().bottom ?? 126;
-      const mobileNavigationHeight =
-        window.innerWidth <= 800
-          ? (document.querySelector(".docs-sidebar")?.getBoundingClientRect().height ?? 0)
-          : 0;
-      const offset = pageBarBottom + mobileNavigationHeight + 21;
+      const offset = getDocsScrollOffset();
       let nextId: SectionId = SECTIONS[0].id;
       const atPageEnd =
         Math.ceil(window.scrollY + window.innerHeight) >=
@@ -60,7 +81,10 @@ export function DocsSidebar() {
       } else {
         for (const { id } of SECTIONS) {
           const section = document.getElementById(id);
-          if (section && section.getBoundingClientRect().top <= offset) {
+          if (
+            section &&
+            section.getBoundingClientRect().top <= offset + SCROLL_POSITION_TOLERANCE
+          ) {
             nextId = id;
           }
         }
@@ -90,14 +114,35 @@ export function DocsSidebar() {
       }
     }
 
+    function stopScrollMotion() {
+      if (scrollFrameRef.current === 0) return;
+
+      window.cancelAnimationFrame(scrollFrameRef.current);
+      scrollFrameRef.current = 0;
+      scrollTargetRef.current = null;
+      clearNavigationTarget();
+      scheduleUpdate();
+    }
+
+    function stopScrollMotionFromKeyboard(event: KeyboardEvent) {
+      if (SCROLL_KEYS.has(event.key)) stopScrollMotion();
+    }
+
     updateActiveSection();
     window.addEventListener("scroll", scheduleUpdate, { passive: true });
     window.addEventListener("resize", scheduleUpdate);
     window.addEventListener("hashchange", scheduleUpdate);
     window.addEventListener("popstate", scheduleUpdate);
+    window.addEventListener("pointerdown", stopScrollMotion, { passive: true });
+    window.addEventListener("touchstart", stopScrollMotion, { passive: true });
+    window.addEventListener("wheel", stopScrollMotion, { passive: true });
+    window.addEventListener("keydown", stopScrollMotionFromKeyboard);
 
     return () => {
       if (frame !== 0) window.cancelAnimationFrame(frame);
+      if (scrollFrameRef.current !== 0) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
       if (navigationReleaseTimerRef.current !== null) {
         window.clearTimeout(navigationReleaseTimerRef.current);
       }
@@ -105,6 +150,10 @@ export function DocsSidebar() {
       window.removeEventListener("resize", scheduleUpdate);
       window.removeEventListener("hashchange", scheduleUpdate);
       window.removeEventListener("popstate", scheduleUpdate);
+      window.removeEventListener("pointerdown", stopScrollMotion);
+      window.removeEventListener("touchstart", stopScrollMotion);
+      window.removeEventListener("wheel", stopScrollMotion);
+      window.removeEventListener("keydown", stopScrollMotionFromKeyboard);
     };
   }, []);
 
@@ -124,6 +173,30 @@ export function DocsSidebar() {
 
   const activeSection =
     SECTIONS.find((section) => section.id === activeId) ?? SECTIONS[0];
+
+  function animateScroll(time: number) {
+    const target = scrollTargetRef.current;
+    if (target === null) {
+      scrollFrameRef.current = 0;
+      return;
+    }
+
+    const next = glidePosition(
+      scrollStartRef.current,
+      target,
+      time - scrollStartedAtRef.current,
+      scrollDurationRef.current,
+    );
+    window.scrollTo({ top: next, behavior: "instant" });
+
+    if (next === target) {
+      scrollFrameRef.current = 0;
+      scrollTargetRef.current = null;
+      return;
+    }
+
+    scrollFrameRef.current = window.requestAnimationFrame(animateScroll);
+  }
 
   function beginSectionNavigation(
     event: MouseEvent<HTMLAnchorElement>,
@@ -159,12 +232,29 @@ export function DocsSidebar() {
       window.history.pushState(null, "", hash);
     }
 
-    document.getElementById(id)?.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-      block: "start",
-    });
+    const section = document.getElementById(id);
+    if (!section) return;
+
+    const target = Math.min(
+      document.documentElement.scrollHeight - window.innerHeight,
+      Math.max(0, window.scrollY + section.getBoundingClientRect().top - getDocsScrollOffset()),
+    );
+
+    const shouldSkipMotion =
+      event.detail === 0 ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (shouldSkipMotion) {
+      window.scrollTo({ top: target, behavior: "instant" });
+      return;
+    }
+
+    scrollTargetRef.current = target;
+    scrollStartRef.current = window.scrollY;
+    scrollStartedAtRef.current = window.performance.now();
+    scrollDurationRef.current = scrollDuration(target - scrollStartRef.current);
+    if (scrollFrameRef.current === 0) {
+      scrollFrameRef.current = window.requestAnimationFrame(animateScroll);
+    }
   }
 
   return (
