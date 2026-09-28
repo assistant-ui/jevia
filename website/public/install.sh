@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-JEVIA_VERSION="${JEVIA_VERSION:-0.1.2}"
+JEVIA_VERSION="${JEVIA_VERSION:-0.1.3}"
 JEVIA_REPOSITORY='assistant-ui/jevia'
 JEVIA_INSTALL_DIR="${JEVIA_INSTALL_DIR:-${HOME:?HOME must be set}/.local/bin}"
 JEVIA_DOWNLOAD_BASE_URL="${JEVIA_DOWNLOAD_BASE_URL:-https://github.com/${JEVIA_REPOSITORY}/releases/download/v${JEVIA_VERSION}}"
