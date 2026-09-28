@@ -103,7 +103,6 @@ pre {
 .site-shell:not(.docs-shell) > .quickstart {
   min-height: 0;
   flex: 1 1 auto;
-  overflow: hidden;
 }
 
 .site-shell::before {
