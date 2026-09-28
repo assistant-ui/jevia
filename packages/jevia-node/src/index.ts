@@ -1,4 +1,5 @@
 import { execFile, type ExecFileException } from "node:child_process";
+import { constants } from "node:os";
 
 export type Outcome = "success" | "failure" | "unknown";
 export type OutcomeSource = "process_exit" | "verification" | "manual";
@@ -101,11 +102,11 @@ export interface JeviaClientOptions {
 }
 
 export class JeviaCommandError extends Error {
-  readonly command: readonly string[];
+  #command: readonly string[];
+  #stdout: string;
+  #stderr: string;
   readonly exitCode: number | null;
   readonly signal: NodeJS.Signals | null;
-  readonly stdout: string;
-  readonly stderr: string;
 
   constructor(
     command: readonly string[],
@@ -113,15 +114,25 @@ export class JeviaCommandError extends Error {
     stdout: string,
     stderr: string,
   ) {
-    const detail = stderr.trim() || cause.message;
-    super(`Jevia command failed: ${detail}`, { cause });
+    // execFile's message/cause can contain the entire task and captured output.
+    // Keep raw diagnostics behind explicit getters, out of normal error logging.
+    super("Jevia command failed");
     this.name = "JeviaCommandError";
-    this.command = command;
-    this.exitCode = typeof cause.code === "number" ? cause.code : null;
-    this.signal = cause.signal ?? null;
-    this.stdout = stdout;
-    this.stderr = stderr;
+    this.#command = Object.freeze([...command]);
+    this.exitCode = typeof cause.code === "number" && Number.isSafeInteger(cause.code)
+      ? cause.code : null;
+    this.signal = cause.signal && Object.hasOwn(constants.signals, cause.signal)
+      ? cause.signal : null;
+    this.#stdout = stdout;
+    this.#stderr = stderr;
   }
+
+  /** Sensitive: explicitly accessing this getter reveals literal CLI arguments. */
+  get command(): readonly string[] { return this.#command; }
+  /** Sensitive: explicitly accessing this getter reveals raw CLI output. */
+  get stdout(): string { return this.#stdout; }
+  /** Sensitive: explicitly accessing this getter reveals raw CLI diagnostics. */
+  get stderr(): string { return this.#stderr; }
 }
 
 export class JeviaProtocolError extends Error {
@@ -224,40 +235,46 @@ export class JeviaClient {
   private json(output: string): unknown {
     try {
       return JSON.parse(output) as unknown;
-    } catch (cause) {
-      throw new JeviaProtocolError("Jevia returned invalid JSON", { cause });
+    } catch {
+      throw new JeviaProtocolError("Jevia returned invalid JSON");
     }
   }
 
   private execute(args: readonly string[], signal?: AbortSignal): Promise<string> {
     const command = [this.binary, ...this.binaryArgs, ...args];
     return new Promise((resolve, reject) => {
-      execFile(
-        this.binary,
-        [...this.binaryArgs, ...args],
-        {
-          cwd: this.cwd,
-          env: this.env,
-          encoding: "utf8",
-          maxBuffer: this.maxBufferBytes,
-          signal,
-          timeout: this.timeoutMs,
-          windowsHide: true,
-        },
-        (error, stdout, stderr) => {
-          if (error) {
-            reject(new JeviaCommandError(command, error, stdout, stderr));
-            return;
-          }
-          resolve(stdout);
-        },
-      );
+      try {
+        execFile(
+          this.binary,
+          [...this.binaryArgs, ...args],
+          {
+            cwd: this.cwd,
+            env: this.env,
+            encoding: "utf8",
+            maxBuffer: this.maxBufferBytes,
+            signal,
+            timeout: this.timeoutMs,
+            windowsHide: true,
+          },
+          (error, stdout, stderr) => {
+            if (error) {
+              reject(new JeviaCommandError(command, error, stdout, stderr));
+              return;
+            }
+            resolve(stdout);
+          },
+        );
+      } catch (cause) {
+        // Invalid spawn options can throw synchronously, before the callback.
+        reject(new JeviaCommandError(command, cause instanceof Error ? cause : new Error(), "", ""));
+      }
     });
   }
 }
 
 function requireText(value: string, name: string): void {
-  if (!value.trim()) throw new TypeError(`${name} cannot be empty`);
+  if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} cannot be empty`);
+  if (value.includes("\0")) throw new TypeError(`${name} cannot contain NUL`);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
