@@ -39,13 +39,7 @@ impl ProcessTree {
         // Keep this wait inside the timeout/cancellation select, including after
         // the leader's status has been cached by process-wrap.
         #[cfg(unix)]
-        loop {
-            match nix::sys::signal::killpg(self.group, None) {
-                Err(nix::errno::Errno::ESRCH) => break,
-                Err(error) => return Err(error.into()),
-                Ok(()) => tokio::time::sleep(Duration::from_millis(20)).await,
-            }
-        }
+        wait_until_group_empty(|| nix::sys::signal::killpg(self.group, None)).await?;
         Ok(status)
     }
 
@@ -60,6 +54,22 @@ impl ProcessTree {
             return Ok(());
         }
         result
+    }
+}
+
+#[cfg(unix)]
+async fn wait_until_group_empty(mut probe: impl FnMut() -> nix::Result<()>) -> std::io::Result<()> {
+    loop {
+        match probe() {
+            Err(nix::errno::Errno::ESRCH) => return Ok(()),
+            // A denied probe is not proof that a group is empty. It can occur
+            // transiently while macOS cleans up killed descendants. Keep the
+            // wait pending; the caller's phase/cleanup deadline still bounds it.
+            Ok(()) | Err(nix::errno::Errno::EPERM) => {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            Err(error) => return Err(error.into()),
+        }
     }
 }
 
@@ -208,6 +218,30 @@ async fn supervise(
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn denied_group_probe_waits_until_absence_is_confirmed() {
+        let mut probes = [
+            Err(nix::errno::Errno::EPERM),
+            Ok(()),
+            Err(nix::errno::Errno::ESRCH),
+        ]
+        .into_iter();
+        wait_until_group_empty(|| probes.next().unwrap())
+            .await
+            .unwrap();
+        assert!(probes.next().is_none());
+    }
+
+    #[tokio::test]
+    async fn permanently_denied_group_probe_never_claims_completion() {
+        let result = tokio::time::timeout(
+            Duration::from_millis(50),
+            wait_until_group_empty(|| Err(nix::errno::Errno::EPERM)),
+        )
+        .await;
+        assert!(result.is_err());
+    }
 
     #[tokio::test]
     async fn parent_exit_waits_for_background_children_and_preserves_status() {
