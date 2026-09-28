@@ -84,6 +84,25 @@ impl Storage {
         }
     }
 
+    pub async fn complete_external(
+        &self,
+        id: &str,
+        outcome: Outcome,
+        reason: Option<&str>,
+        confirmed_stopped: bool,
+    ) -> Result<RouteRecord> {
+        if !confirmed_stopped {
+            bail!(
+                "external completion requires --confirm-stopped after all external work and verification have stopped"
+            );
+        }
+        let _guard = self.execution_guard(id).await?;
+        match self {
+            Self::Jsonl(paths) => store::complete_external(&paths.runs, id, outcome, reason),
+            Self::Database(db) => db.complete_external(id, outcome, reason).await,
+        }
+    }
+
     pub async fn state(
         &self,
         id: &str,

@@ -84,6 +84,24 @@ test("real CLI preserves option-like feedback reasons", async (t) => {
   }
 });
 
+test("real CLI completes external work and makes it eligible for archival", async (t) => {
+  const { client, cwd } = await fixture(t);
+  const records = [await client.route("first task"), await client.route("second task")];
+  await assert.rejects(execute(binary, ["runs", "complete", records[0].run_id, "success"], { cwd }));
+  for (const record of records) {
+    const done = await client.complete(record.run_id, "success", { confirmStopped: true, reason: "--tests passed" });
+    assert.equal(done.lifecycle.state, "completed");
+    assert.equal(done.lifecycle.started_at_ms, null);
+    assert.ok(done.lifecycle.finished_at_ms > 0);
+    assert.equal(done.execution, undefined);
+    assert.equal(done.outcome_evidence.source, "manual");
+    assert.equal(done.feedback.at(-1).reason, "--tests passed");
+    await assert.rejects(client.complete(record.run_id, "success", { confirmStopped: true }));
+  }
+  const { stdout } = await execute(binary, ["runs", "archive", "--keep", "1", "--json"], { cwd });
+  assert.equal(JSON.parse(stdout).archived_records, 1);
+});
+
 test("real CLI looks up option-like imported run IDs literally", async (t) => {
   const { client, cwd } = await fixture(t);
   const record = await client.route("a normal task");

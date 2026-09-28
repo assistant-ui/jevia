@@ -67,6 +67,28 @@ fn record(index: usize) -> RouteRecord {
     })).unwrap()
 }
 
+#[tokio::test]
+async fn sqlite_external_completion_refuses_stale_supervisor_ownership() {
+    let f = Fixture::new(false).await;
+    let mut pending = record(0);
+    pending.lifecycle = Some(Default::default());
+    pending.execution = None;
+    pending.outcome_evidence = None;
+    f.storage.append(&pending).await.unwrap();
+    sqlx::query("UPDATE jevia_runs SET owner = 'stale-owner' WHERE project = $1")
+        .bind(&f.db().project)
+        .execute(&f.db().pool)
+        .await
+        .unwrap();
+    assert!(
+        f.storage
+            .complete_external("run-0", jevia_core::Outcome::Success, None, true)
+            .await
+            .is_err()
+    );
+    assert_eq!(f.storage.get("run-0").await.unwrap(), pending);
+}
+
 async fn contract(postgres: bool) {
     let f = Fixture::new(postgres).await;
     assert_eq!(f.storage.check_deep().await.unwrap(), 0);

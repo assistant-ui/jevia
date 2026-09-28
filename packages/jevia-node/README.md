@@ -83,6 +83,28 @@ responses raise `JeviaProtocolError` without their contents. Legacy records can
 omit optional evidence; the SDK never invents it. Additive unknown fields remain
 compatible within a supported schema.
 
+## External completion (unreleased)
+
+`complete` requires the next CLI release after 0.1.3 and the next npm release;
+it is not available in `jevia@0.1.0`. After your harness and verifier have both
+stopped, use it instead of `feedback` when you also want to finish the run:
+
+```ts
+const done = await jevia.complete(route.run_id, verified ? "success" : "failure", {
+  confirmStopped: true,
+  reason: "External verification finished",
+});
+```
+
+This atomically records manual feedback and `lifecycle.state = "completed"`,
+making the record eligible for explicit archival. It never manufactures a start
+time, process exit, or verifier evidence. Pass `unknown` if work stopped without
+a conclusive result. Changing a known outcome requires a reason. Pending legacy
+records without execution evidence are supported; active, terminal, or supervised
+runs are refused. It does not stop external processes. Repeated completion is
+refused; after a timeout or lost response, inspect `show(runId)` before retrying.
+Ordinary `feedback` keeps its existing behavior and does not close a run.
+
 ## Development tests
 
 See [opt-in storage](#opt-in-storage-unreleased) below for the new storage methods.

@@ -299,8 +299,20 @@ impl Database {
         outcome: Outcome,
         reason: Option<&str>,
     ) -> Result<RouteRecord> {
-        self.mutate(id, None, false, |record| {
+        self.mutate(id, None, false, false, |record| {
             store::apply_outcome(record, outcome, reason)
+        })
+        .await
+    }
+
+    pub async fn complete_external(
+        &self,
+        id: &str,
+        outcome: Outcome,
+        reason: Option<&str>,
+    ) -> Result<RouteRecord> {
+        self.mutate(id, None, false, true, |record| {
+            store::apply_external_completion(record, outcome, reason)
         })
         .await
     }
@@ -313,7 +325,7 @@ impl Database {
         execution: Option<ExecutionEvidence>,
         recover: bool,
     ) -> Result<RouteRecord> {
-        self.mutate(id, Some(state), recover, |record| {
+        self.mutate(id, Some(state), recover, false, |record| {
             store::apply_state(record, state, outcome, execution)
         })
         .await
@@ -324,6 +336,7 @@ impl Database {
         id: &str,
         state: Option<RunState>,
         recover: bool,
+        require_unowned: bool,
         mutation: impl FnOnce(&mut RouteRecord) -> Result<()>,
     ) -> Result<RouteRecord> {
         let mut tx = self.write().await?;
@@ -342,6 +355,9 @@ impl Database {
         let owner: String = row
             .try_get("owner")
             .map_err(|_| anyhow!("invalid stored owner"))?;
+        if require_unowned && !owner.is_empty() {
+            bail!("run belongs to a supervisor; external completion refused");
+        }
         if let Some(next) = state {
             if next == RunState::Running {
                 if !owner.is_empty() {

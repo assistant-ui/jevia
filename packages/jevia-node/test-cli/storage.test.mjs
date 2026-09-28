@@ -49,6 +49,9 @@ async function migrateAndVerify(t, target, env) {
   assert.equal((await client.runs()).length, 1);
   assert.equal((await client.show(record.run_id)).task, record.task);
   assert.equal((await client.feedback(record.run_id, "success")).outcome, "success");
+  const done = await client.complete(record.run_id, "success", { confirmStopped: true });
+  assert.equal(done.lifecycle.state, "completed");
+  assert.equal(done.outcome_evidence.source, "manual");
   assert.equal(await readFile(historyPath, "utf8"), history, "feedback must use SQL, not retained JSONL");
   assert.match(await client.checkStorage(), new RegExp(`backend=${target.backend}, records=1`));
   assert.match(await client.checkStorage({ deep: true }), /check=deep/);

@@ -128,6 +128,10 @@ running/verifying record interrupted; it never reruns work or infers task failur
 The durable phases are routed, running, verifying, completed, launch_failed, and
 interrupted. Start and finish timestamps are distinct from routing time.
 Manual feedback is refused on active runs and never invents harness metadata.
+External completion is a separate, explicitly confirmed operation. It holds the
+per-run lease and atomically records manual feedback plus a completed lifecycle
+only for pending, unowned external work. It does not invent a start time or
+execution/verifier evidence. Ordinary feedback never changes lifecycle state.
 
 History maintenance is explicit and preview-first. Apply takes the same exclusive
 history lock, revalidates the complete input, durably saves an exact original-byte

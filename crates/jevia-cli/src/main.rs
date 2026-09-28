@@ -159,6 +159,17 @@ enum StorageAction {
 enum RunsAction {
     /// Inspect one complete run record, including its execution lifecycle.
     Show { run_id: String },
+    /// Finish an externally executed pending run with an explicit manual outcome.
+    Complete {
+        run_id: String,
+        outcome: OutcomeArgument,
+        /// Confirm all external work and verification have stopped.
+        #[arg(long, required = true)]
+        confirm_stopped: bool,
+        /// Explanation required when changing a known outcome. Stored in history.
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Mark an execution whose Jevia supervisor exited as interrupted. Never reruns it.
     Recover {
         run_id: String,
@@ -273,6 +284,24 @@ async fn run() -> Result<ExitCode> {
             match action {
                 None => runs(limit, json).await?,
                 Some(RunsAction::Show { run_id }) => show_run(&run_id).await?,
+                Some(RunsAction::Complete {
+                    run_id,
+                    outcome,
+                    confirm_stopped,
+                    reason,
+                }) => {
+                    let paths = ProjectPaths::discover()?;
+                    let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
+                    let record = storage
+                        .complete_external(
+                            &run_id,
+                            outcome.into(),
+                            reason.as_deref(),
+                            confirm_stopped,
+                        )
+                        .await?;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                }
                 Some(RunsAction::Recover {
                     run_id,
                     confirm_stopped,
