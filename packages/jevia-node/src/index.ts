@@ -167,8 +167,9 @@ export class JeviaClient {
 
   async route(task: string, options: RouteOptions = {}): Promise<RouteRecord> {
     requireText(task, "task");
-    const args = ["route", task, "--json"];
+    const args = ["route", "--json"];
     if (options.noCache) args.push("--no-cache");
+    args.push("--", task);
     return this.record(await this.execute(args, options.signal));
   }
 
@@ -182,12 +183,12 @@ export class JeviaClient {
       throw new TypeError("outcome must be success, failure, or unknown");
     }
 
-    const args = ["feedback", runId, outcome];
+    const args = ["feedback", "--json"];
     if (options.reason !== undefined) {
       requireText(options.reason, "reason");
-      args.push("--reason", options.reason);
+      args.push(`--reason=${options.reason}`);
     }
-    args.push("--json");
+    args.push("--", runId, outcome);
     return this.record(await this.execute(args, options.signal));
   }
 
@@ -208,7 +209,7 @@ export class JeviaClient {
   async show(runId: string, options: CommandOptions = {}): Promise<RouteRecord> {
     requireText(runId, "runId");
     return this.record(
-      await this.execute(["runs", "show", runId, "--json"], options.signal),
+      await this.execute(["runs", "show", "--json", "--", runId], options.signal),
     );
   }
 

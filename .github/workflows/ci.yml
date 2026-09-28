@@ -37,6 +37,15 @@ jobs:
         run: pnpm type-check
       - name: Test package
         run: pnpm test
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Build CLI for SDK integration tests
+        working-directory: .
+        run: cargo build --locked -p jevia
+      - name: Test SDK against the real CLI
+        run: pnpm test:cli
       - name: Verify package contents
         run: npm pack --dry-run
 

@@ -61,3 +61,13 @@ const updated = await jevia.feedback(route.run_id, "success", { signal });
 
 All child processes use `execFile` without a shell. `JeviaCommandError` exposes
 the exit code, signal, stdout, and stderr for failed CLI calls.
+Tasks, run IDs, and feedback reasons are passed as literal values, including
+text starting with `-` or `--`.
+
+## Development tests
+
+Run `pnpm test` for the SDK unit tests. To check argument handling against the
+real Rust CLI, build it from the repository root with `cargo build --locked -p jevia`,
+then run `pnpm --dir packages/jevia-node test:cli`. The integration tests use
+temporary projects and a local mock routing server; no API credentials are needed.
+Set `JEVIA_TEST_BINARY` to an absolute executable path to test another CLI build.
