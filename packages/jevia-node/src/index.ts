@@ -1,6 +1,7 @@
-import { execFile, type ExecFileException } from "node:child_process";
+import type { ExecFileException } from "node:child_process";
 import { constants } from "node:os";
 import { isRouteRecord } from "./protocol.js";
+import { runCommand } from "./command.js";
 
 export type Outcome = "success" | "failure" | "unknown";
 export type OutcomeSource = "process_exit" | "verification" | "manual";
@@ -141,7 +142,8 @@ export class JeviaCommandError extends Error {
   ) {
     // execFile's message/cause can contain the entire task and captured output.
     // Keep raw diagnostics behind explicit getters, out of normal error logging.
-    super("Jevia command failed");
+    super(cause.code === "JEVIA_TIMEOUT" ? "Jevia command timed out"
+      : cause.code === "ABORT_ERR" ? "Jevia command aborted" : "Jevia command failed");
     this.name = "JeviaCommandError";
     this.#command = Object.freeze([...command]);
     this.exitCode = typeof cause.code === "number" && Number.isSafeInteger(cause.code)
@@ -184,8 +186,8 @@ export class JeviaClient {
     this.maxBufferBytes = options.maxBufferBytes ?? 4 * 1024 * 1024;
 
     if (!this.binary.trim()) throw new TypeError("binary cannot be empty");
-    if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs <= 0) {
-      throw new TypeError("timeoutMs must be a positive safe integer");
+    if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs <= 0 || this.timeoutMs > 2_147_483_647) {
+      throw new TypeError("timeoutMs must be an integer between 1 and 2147483647");
     }
     if (!Number.isSafeInteger(this.maxBufferBytes) || this.maxBufferBytes <= 0) {
       throw new TypeError("maxBufferBytes must be a positive safe integer");
@@ -317,33 +319,10 @@ export class JeviaClient {
 
   private execute(args: readonly string[], signal?: AbortSignal): Promise<string> {
     const command = [this.binary, ...this.binaryArgs, ...args];
-    return new Promise((resolve, reject) => {
-      try {
-        execFile(
-          this.binary,
-          [...this.binaryArgs, ...args],
-          {
-            cwd: this.cwd,
-            env: this.env,
-            encoding: "utf8",
-            maxBuffer: this.maxBufferBytes,
-            signal,
-            timeout: this.timeoutMs,
-            windowsHide: true,
-          },
-          (error, stdout, stderr) => {
-            if (error) {
-              reject(new JeviaCommandError(command, error, stdout, stderr));
-              return;
-            }
-            resolve(stdout);
-          },
-        );
-      } catch (cause) {
-        // Invalid spawn options can throw synchronously, before the callback.
-        reject(new JeviaCommandError(command, cause instanceof Error ? cause : new Error(), "", ""));
-      }
-    });
+    return runCommand({
+      binary: this.binary, args: [...this.binaryArgs, ...args], cwd: this.cwd,
+      env: this.env, timeoutMs: this.timeoutMs, maxBufferBytes: this.maxBufferBytes,
+    }, signal, (cause, stdout, stderr) => new JeviaCommandError(command, cause, stdout, stderr));
   }
 }
 

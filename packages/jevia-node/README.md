@@ -59,7 +59,7 @@ const run = await jevia.show(route.run_id, { signal });
 const updated = await jevia.feedback(route.run_id, "success", { signal });
 ```
 
-All child processes use `execFile` without a shell. `JeviaCommandError` has a
+All CLI processes use `spawn` without a shell. `JeviaCommandError` has a
 generic message, exit code, and signal safe for ordinary error logging. The raw
 `command`, `stdout`, and `stderr` remain available through explicit getters for
 private debugging, but are excluded from normal inspection and serialization.
@@ -67,6 +67,14 @@ These getters may contain tasks, credentials, and other sensitive data: do not
 send them to logs or telemetry. Raw process and JSON parser causes are not retained.
 Tasks, run IDs, and feedback reasons are passed as literal values, including
 text starting with `-` or `--`.
+
+`timeoutMs` bounds each SDK call (default 30 seconds; maximum 2147483647 ms).
+Timeouts and aborts reject without waiting for the CLI callback. On POSIX, the
+SDK sends SIGTERM to the call's isolated process group, then SIGKILL after a
+100 ms grace period; on Windows it requests native process-tree termination.
+Already-aborted signals never launch a process. Timeout/abort diagnostics may
+be empty because rejection does not wait for output collection. Cancellation
+cannot undo completed writes; inspect storage before retrying a mutation.
 
 Record responses are validated at runtime, including schema versions 1–3,
 finite probabilities in `[0, 1]`, safe-integer timestamps, and optional lifecycle,
