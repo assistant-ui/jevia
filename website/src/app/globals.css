@@ -1212,6 +1212,7 @@ pre {
 
 .docs-footer {
   position: relative;
+  z-index: 11;
   display: grid;
   min-height: 80px;
   grid-column: 1 / -1;
