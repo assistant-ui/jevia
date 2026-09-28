@@ -19,7 +19,7 @@ export function getInstallGuide(origin: string) {
     "",
     "## 2. Install the CLI",
     "",
-    `Review the installer at ${installer} before running it. It detects macOS or Linux and Intel or ARM, downloads the matching Jevia 0.1.2 binary from https://github.com/assistant-ui/jevia/releases/tag/v0.1.2, and verifies its SHA-256 checksum before installing it.`,
+    `Review the installer at ${installer} before running it. It detects macOS or Linux and Intel or ARM, downloads the matching Jevia 0.1.3 binary from https://github.com/assistant-ui/jevia/releases/tag/v0.1.3, and verifies its SHA-256 checksum before installing it.`,
     "",
     "```bash",
     "set -euo pipefail",
