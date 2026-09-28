@@ -1,5 +1,6 @@
 import { execFile, type ExecFileException } from "node:child_process";
 import { constants } from "node:os";
+import { isRouteRecord } from "./protocol.js";
 
 export type Outcome = "success" | "failure" | "unknown";
 export type OutcomeSource = "process_exit" | "verification" | "manual";
@@ -275,26 +276,4 @@ export class JeviaClient {
 function requireText(value: string, name: string): void {
   if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} cannot be empty`);
   if (value.includes("\0")) throw new TypeError(`${name} cannot contain NUL`);
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isRouteRecord(value: unknown): value is RouteRecord {
-  if (!isObject(value)) return false;
-  return (
-    typeof value.schema_version === "number" &&
-    typeof value.run_id === "string" &&
-    typeof value.tier === "string" &&
-    typeof value.suggested_tier === "string" &&
-    typeof value.confidence === "number" &&
-    isObject(value.probabilities) &&
-    typeof value.fallback_applied === "boolean" &&
-    typeof value.jev_model === "string" &&
-    typeof value.created_at_ms === "number" &&
-    (value.source === "live" || value.source === "cache") &&
-    (value.task === null || typeof value.task === "string") &&
-    (value.outcome === "success" || value.outcome === "failure" || value.outcome === "unknown")
-  );
 }

@@ -68,6 +68,13 @@ send them to logs or telemetry. Raw process and JSON parser causes are not retai
 Tasks, run IDs, and feedback reasons are passed as literal values, including
 text starting with `-` or `--`.
 
+Record responses are validated at runtime, including schema versions 1–3,
+finite probabilities in `[0, 1]`, safe-integer timestamps, and optional lifecycle,
+execution, verification, outcome evidence, and feedback. Malformed or unsupported
+responses raise `JeviaProtocolError` without their contents. Legacy records can
+omit optional evidence; the SDK never invents it. Additive unknown fields remain
+compatible within a supported schema.
+
 ## Development tests
 
 Run `pnpm test` for the SDK unit tests. To check argument handling against the
