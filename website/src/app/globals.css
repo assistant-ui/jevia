@@ -1191,6 +1191,7 @@ pre {
 .docs-note {
   display: grid;
   grid-template-columns: 130px minmax(0, 1fr);
+  align-items: first baseline;
   gap: 1rem;
   margin-top: 1.25rem;
   padding: 1rem 1.1rem;
@@ -1239,6 +1240,7 @@ pre {
 .docs-method {
   display: grid;
   grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr);
+  align-items: first baseline;
   gap: 1.5rem;
   padding-block: 1rem;
   border-bottom: 1px solid var(--border);
@@ -1544,11 +1546,13 @@ pre {
 
   .docs-note {
     grid-template-columns: minmax(0, 1fr);
+    align-items: start;
     gap: 0.45rem;
   }
 
   .docs-method {
     grid-template-columns: minmax(0, 1fr);
+    align-items: start;
     gap: 0.4rem;
   }
 
