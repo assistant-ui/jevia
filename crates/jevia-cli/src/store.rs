@@ -1,7 +1,7 @@
 use std::{
     collections::VecDeque,
     fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, BufWriter, Write},
+    io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -165,6 +165,20 @@ pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
     let mut file = private_append_options()
         .open(path)
         .with_context(|| format!("could not open {} for writing", path.display()))?;
+    if file.metadata()?.len() > 0 {
+        file.seek(SeekFrom::End(-1))?;
+        let mut last = [0];
+        file.read_exact(&mut last)?;
+        if last[0] != b'\n' {
+            // Readers accept a valid final record without a newline. Validate
+            // before extending it, so truncated/unsupported records stay intact
+            // for explicit repair. The exclusive lock covers inspection and the
+            // append; the normal newline-terminated path only reads one byte.
+            file.rewind()?;
+            read_records_from(BufReader::new(&mut file), path, |_| Ok(()))?;
+            encoded.insert(0, b'\n');
+        }
+    }
     file.write_all(&encoded)
         .context("could not append run record")?;
     file.sync_data().context("could not sync run history")?;
@@ -368,7 +382,7 @@ fn acquire_lock(path: &Path, mode: LockMode) -> Result<File> {
 
 fn private_append_options() -> OpenOptions {
     let mut options = OpenOptions::new();
-    options.create(true).append(true);
+    options.create(true).read(true).append(true);
 
     #[cfg(unix)]
     {
@@ -420,6 +434,58 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn append_preserves_valid_unterminated_history_bytes() {
+        let first = sample_record();
+        let mut second = sample_record();
+        second.decision.run_id = "run-2".into();
+        for suffix in ["", " ", "\r", "\n", "\r\n", "\n  "] {
+            let directory = tempdir().unwrap();
+            let path = directory.path().join("runs.jsonl");
+            let original = format!("{}{suffix}", serde_json::to_string(&first).unwrap());
+            fs::write(&path, &original).unwrap();
+            assert_eq!(load(&path).unwrap(), vec![first.clone()]);
+            append(&path, &second).unwrap();
+            assert_eq!(load(&path).unwrap(), vec![first.clone(), second.clone()]);
+            let separator = if original.ends_with('\n') { "" } else { "\n" };
+            assert_eq!(
+                fs::read_to_string(&path).unwrap(),
+                format!(
+                    "{original}{separator}{}\n",
+                    serde_json::to_string(&second).unwrap()
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn append_refuses_invalid_unterminated_history_without_modifying_it() {
+        let mut unsupported = sample_record();
+        unsupported.schema_version = RECORD_SCHEMA_VERSION + 1;
+        for original in [
+            "{\"schema_version\":".to_owned(),
+            "not json".to_owned(),
+            serde_json::to_string(&unsupported).unwrap(),
+        ] {
+            let directory = tempdir().unwrap();
+            let path = directory.path().join("runs.jsonl");
+            fs::write(&path, &original).unwrap();
+            assert!(append(&path, &sample_record()).is_err());
+            assert_eq!(fs::read_to_string(path).unwrap(), original);
+        }
+    }
+
+    #[test]
+    fn append_handles_empty_and_whitespace_only_history() {
+        for original in ["", " ", "\r", "\n"] {
+            let directory = tempdir().unwrap();
+            let path = directory.path().join("runs.jsonl");
+            fs::write(&path, original).unwrap();
+            append(&path, &sample_record()).unwrap();
+            assert_eq!(load(&path).unwrap(), vec![sample_record()]);
+        }
+    }
 
     #[test]
     fn streaming_export_matches_history_and_stops_on_write_failure() {
