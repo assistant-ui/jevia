@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 
 import { DocsPageActions } from "./docs-page-actions";
 
@@ -15,11 +15,25 @@ const SECTIONS = [
 
 type SectionId = (typeof SECTIONS)[number]["id"];
 
+const NAVIGATION_FALLBACK_DELAY_MS = 5_000;
+const NAVIGATION_SETTLE_DELAY_MS = 250;
+
 export function DocsSidebar() {
   const [activeId, setActiveId] = useState<SectionId>("overview");
+  const navigationTargetRef = useRef<SectionId | null>(null);
+  const navigationReleaseTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let frame = 0;
+
+    function clearNavigationTarget() {
+      navigationTargetRef.current = null;
+
+      if (navigationReleaseTimerRef.current !== null) {
+        window.clearTimeout(navigationReleaseTimerRef.current);
+        navigationReleaseTimerRef.current = null;
+      }
+    }
 
     function updateActiveSection() {
       frame = 0;
@@ -34,6 +48,12 @@ export function DocsSidebar() {
       const atPageEnd =
         Math.ceil(window.scrollY + window.innerHeight) >=
         document.documentElement.scrollHeight - 1;
+      const navigationTarget = navigationTargetRef.current;
+
+      if (navigationTarget !== null) {
+        setActiveId(navigationTarget);
+        return;
+      }
 
       if (atPageEnd) {
         nextId = SECTIONS[SECTIONS.length - 1].id;
@@ -49,7 +69,22 @@ export function DocsSidebar() {
       setActiveId(nextId);
     }
 
+    function releaseNavigationTarget() {
+      clearNavigationTarget();
+      updateActiveSection();
+    }
+
     function scheduleUpdate() {
+      if (navigationTargetRef.current !== null) {
+        if (navigationReleaseTimerRef.current !== null) {
+          window.clearTimeout(navigationReleaseTimerRef.current);
+        }
+        navigationReleaseTimerRef.current = window.setTimeout(
+          releaseNavigationTarget,
+          NAVIGATION_SETTLE_DELAY_MS,
+        );
+      }
+
       if (frame === 0) {
         frame = window.requestAnimationFrame(updateActiveSection);
       }
@@ -59,12 +94,17 @@ export function DocsSidebar() {
     window.addEventListener("scroll", scheduleUpdate, { passive: true });
     window.addEventListener("resize", scheduleUpdate);
     window.addEventListener("hashchange", scheduleUpdate);
+    window.addEventListener("popstate", scheduleUpdate);
 
     return () => {
       if (frame !== 0) window.cancelAnimationFrame(frame);
+      if (navigationReleaseTimerRef.current !== null) {
+        window.clearTimeout(navigationReleaseTimerRef.current);
+      }
       window.removeEventListener("scroll", scheduleUpdate);
       window.removeEventListener("resize", scheduleUpdate);
       window.removeEventListener("hashchange", scheduleUpdate);
+      window.removeEventListener("popstate", scheduleUpdate);
     };
   }, []);
 
@@ -84,6 +124,48 @@ export function DocsSidebar() {
 
   const activeSection =
     SECTIONS.find((section) => section.id === activeId) ?? SECTIONS[0];
+
+  function beginSectionNavigation(
+    event: MouseEvent<HTMLAnchorElement>,
+    id: SectionId,
+  ) {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    if (id === activeId) return;
+
+    if (navigationReleaseTimerRef.current !== null) {
+      window.clearTimeout(navigationReleaseTimerRef.current);
+    }
+
+    navigationTargetRef.current = id;
+    navigationReleaseTimerRef.current = window.setTimeout(() => {
+      navigationTargetRef.current = null;
+      navigationReleaseTimerRef.current = null;
+      window.dispatchEvent(new Event("scroll"));
+    }, NAVIGATION_FALLBACK_DELAY_MS);
+    setActiveId(id);
+
+    const hash = `#${id}`;
+    if (window.location.hash !== hash) {
+      window.history.pushState(null, "", hash);
+    }
+
+    document.getElementById(id)?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "start",
+    });
+  }
 
   return (
     <>
@@ -108,6 +190,7 @@ export function DocsSidebar() {
                   key={id}
                   href={"#" + id}
                   aria-current={activeId === id ? "location" : undefined}
+                  onClick={(event) => beginSectionNavigation(event, id)}
                 >
                   <span className="docs-nav-index" aria-hidden="true">
                     {number}
