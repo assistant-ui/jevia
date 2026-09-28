@@ -16,7 +16,7 @@ export function DocsPageActions() {
       </a>
       <CopyButton
         valueUrl="/docs.md"
-        label="Node.js API documentation"
+        label="Jevia documentation"
         format="markdown"
         kind="code"
       />

@@ -6,13 +6,15 @@ import { DocsPageActions } from "./docs-page-actions";
 import { DocsNavLinks } from "./docs-nav-links";
 
 const SECTIONS = [
-  { id: "overview", number: "00", label: "Overview", title: "Get started with Jevia" },
-  { id: "install", number: "01", label: "Install", title: "Install the Node.js package" },
-  { id: "quickstart", number: "02", label: "Quickstart", title: "Create a client and route" },
-  { id: "methods", number: "03", label: "Methods", title: "Client methods" },
-  { id: "storage", number: "04", label: "Storage", title: "Opt-in storage" },
-  { id: "adapters", number: "05", label: "Harness adapters", title: "Open any harness" },
-  { id: "errors", number: "06", label: "Errors", title: "Cancellation and errors" },
+  { id: "overview", number: "00", label: "Overview", title: "Jevia documentation" },
+  { id: "install", number: "01", label: "Install", title: "Install and validate" },
+  { id: "quickstart", number: "02", label: "CLI workflow", title: "Route, run, and inspect" },
+  { id: "adaptive", number: "03", label: "Adaptive loop", title: "How routing learns" },
+  { id: "adapters", number: "04", label: "Harnesses", title: "Connect any harness" },
+  { id: "methods", number: "05", label: "Node.js SDK", title: "Embed Jevia in a harness" },
+  { id: "outcomes", number: "06", label: "Outcomes", title: "Verify and report outcomes" },
+  { id: "storage", number: "07", label: "Storage", title: "Choose and configure storage" },
+  { id: "errors", number: "08", label: "Maintenance", title: "Cache, diagnostics, and recovery" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -177,8 +179,8 @@ export function DocsSidebar() {
     <>
       <header className="docs-page-bar">
         <a className="docs-sidebar-title" href="#overview">
-          <span aria-hidden="true">01</span>
-          API reference
+          <span aria-hidden="true">00</span>
+          Documentation
         </a>
         <div className="docs-page-bar-main">
           <h1>{activeSection.title}</h1>

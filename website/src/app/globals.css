@@ -1136,6 +1136,30 @@ pre {
   background: var(--surface);
 }
 
+.docs-section > .command-block + .docs-code-block,
+.docs-methods-spaced,
+.docs-methods + .docs-code-block,
+.docs-note + .docs-code-block,
+.docs-code-block + .docs-code-block {
+  margin-top: 1.25rem;
+}
+
+.docs-subheading {
+  margin: 2.5rem 0 0.9rem;
+  color: var(--foreground);
+  font-size: 0.86rem;
+  font-weight: 520;
+  letter-spacing: -0.015em;
+}
+
+.docs-subheading-first {
+  margin-top: 0;
+}
+
+.docs-note-flush {
+  margin-top: 0;
+}
+
 .docs-code-meta {
   display: flex;
   min-height: 40px;

@@ -25,35 +25,37 @@ test("prerendering emits the homepage and the unchanged installer", async () => 
   assert.match(html, /href="\/docs"/);
   assert.doesNotMatch(html, /From task to evidence/);
   assert.match(html, /COPY: Launch/);
-  assert.match(html, /rel="canonical" href="https:\/\/jevia\.vercel\.app\/"/);
-  assert.match(html, /property="og:url" content="https:\/\/jevia\.vercel\.app\/"/);
-  assert.match(html, /property="og:image" content="https:\/\/jevia\.vercel\.app\/og-image\.png"/);
+  assert.match(html, /rel="canonical" href="https:\/\/jevia\.dev\/"/);
+  assert.match(html, /property="og:url" content="https:\/\/jevia\.dev\/"/);
+  assert.match(html, /property="og:image" content="https:\/\/jevia\.dev\/og-image\.png"/);
   assert.match(html, /name="twitter:card" content="summary_large_image"/);
   const source = await readFile(new URL("../../public/install.sh", import.meta.url));
   const built = await readFile(new URL("static/install.sh", output));
   assert.deepEqual(built, source);
 });
 
-test("prerendering emits the Node.js API documentation", async () => {
+test("prerendering emits the Jevia documentation", async () => {
   const html = await readFile(new URL("static/docs/index.html", output), "utf8");
-  assert.match(html, /Get started with Jevia/);
-  assert.match(html, /Client methods/);
-  assert.match(html, /Harness adapter/);
-  assert.match(html, /JeviaCommandError/);
-  assert.match(html, /id="storage"/);
-  assert.match(html, /href="#storage"/);
-  assert.match(html, /Opt-in storage/);
-  assert.match(html, /Unreleased Node API/);
+  assert.match(html, /Jevia documentation/);
+  assert.match(html, /Route, run, and inspect/);
+  assert.match(html, /How adaptive routing works/);
+  assert.match(html, /Programmatic harness integration/);
   assert.match(html, /setupStorage/);
-  assert.match(html, /checkStorage/);
+  assert.match(html, /JeviaCommandError/);
+  assert.match(html, /Choose and configure storage/);
+  assert.match(html, /storage setup sqlite --import-jsonl/);
+  assert.match(html, /Cache, diagnostics, and recovery/);
   assert.match(html, /token keyword/);
   assert.match(html, /aria-label="Documentation navigation"/);
+  assert.match(html, /aria-label="Documentation sections"/);
   assert.match(html, /class="docs-nav-highlight" aria-hidden="true"/);
   assert.match(html, /href="\/docs\.md"/);
   assert.match(html, /VIEW \.MD/i);
   assert.match(html, /COPY \.MD/i);
-  assert.match(html, /<title>Node\.js API documentation — Jevia<\/title>/);
-  assert.match(html, /rel="canonical" href="https:\/\/jevia\.vercel\.app\/docs"/);
+  assert.match(html, /Need a portable version of this guide/);
+  assert.doesNotMatch(html, /blob\/main\/docs\/reference\.md/);
+  assert.match(html, /<title>Documentation — Jevia<\/title>/);
+  assert.match(html, /rel="canonical" href="https:\/\/jevia\.dev\/docs"/);
 });
 
 test("the packaged runtime serves the Markdown documentation", async () => {
@@ -65,11 +67,14 @@ test("the packaged runtime serves the Markdown documentation", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/markdown/);
   const markdown = await response.text();
-  assert.match(markdown, /^# Jevia for Node\.js$/m);
-  assert.match(markdown, /^## Client methods$/m);
-  assert.match(markdown, /^## Opt-in storage$/m);
+  assert.match(markdown, /^# Jevia documentation$/m);
+  assert.match(markdown, /^## Route, run, and inspect$/m);
+  assert.match(markdown, /^### Client methods$/m);
   assert.match(markdown, /confirmStopped: true/);
   assert.match(markdown, /urlEnv: "JEVIA_DATABASE_URL"/);
+  assert.match(markdown, /^## Choose and configure storage$/m);
+  assert.match(markdown, /jevia storage setup postgres --project my-project/);
+  assert.match(markdown, /^## Cache, diagnostics, and recovery$/m);
   assert.match(markdown, /import \{ JeviaClient \} from "jevia";/);
   assert.doesNotMatch(markdown, /View \.mdCOPY \.MD/);
 });
@@ -77,11 +82,11 @@ test("the packaged runtime serves the Markdown documentation", async () => {
 test("the build includes crawler discovery and social image assets", async () => {
   const robots = await readFile(new URL("static/robots.txt", output), "utf8");
   assert.match(robots, /^User-agent: \*$/m);
-  assert.match(robots, /^Sitemap: https:\/\/jevia\.vercel\.app\/sitemap\.xml$/m);
+  assert.match(robots, /^Sitemap: https:\/\/jevia\.dev\/sitemap\.xml$/m);
 
   const sitemap = await readFile(new URL("static/sitemap.xml", output), "utf8");
-  assert.match(sitemap, /<loc>https:\/\/jevia\.vercel\.app\/<\/loc>/);
-  assert.match(sitemap, /<loc>https:\/\/jevia\.vercel\.app\/docs<\/loc>/);
+  assert.match(sitemap, /<loc>https:\/\/jevia\.dev\/<\/loc>/);
+  assert.match(sitemap, /<loc>https:\/\/jevia\.dev\/docs<\/loc>/);
 
   for (const asset of ["favicon.ico", "favicon.png", "og-image.png"]) {
     const contents = await readFile(new URL(`static/${asset}`, output));
@@ -89,7 +94,7 @@ test("the build includes crawler discovery and social image assets", async () =>
   }
 });
 
-test("the Nitro beta runtime renders the homepage", { timeout: 5000 }, async () => {
+test("the Nitro runtime renders the homepage through patched H3", { timeout: 5000 }, async () => {
   const response = await runtime.fetch(new Request("https://jevia.test/"));
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
@@ -105,8 +110,9 @@ test("the Nitro runtime renders the documentation route", { timeout: 5000 }, asy
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
   const html = await response.text();
-  assert.match(html, /Get started with Jevia/);
-  assert.match(html, /Client methods/);
+  assert.match(html, /Route, run, and inspect/);
+  assert.match(html, /Choose and configure storage/);
+  assert.match(html, /Cache, diagnostics, and recovery/);
 });
 
 test("unmatched routes return 404 instead of a runtime error", { timeout: 5000 }, async () => {
