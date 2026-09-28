@@ -1211,13 +1211,15 @@ pre {
 }
 
 .docs-footer {
-  position: relative;
-  z-index: 11;
+  position: sticky;
+  z-index: 41;
+  bottom: 0;
   display: grid;
   min-height: 80px;
   grid-column: 1 / -1;
   grid-row: 3;
   grid-template-columns: var(--docs-sidebar-width) minmax(0, 1fr);
+  background: var(--background);
 }
 
 .docs-footer::before {
