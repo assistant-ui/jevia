@@ -922,6 +922,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "jevia-core",
+ "nix",
  "process-wrap",
  "serde",
  "serde_json",
