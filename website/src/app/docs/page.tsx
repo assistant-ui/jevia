@@ -597,7 +597,7 @@ export default function DocsPage() {
           <div className="docs-footer-spacer" aria-hidden="true" />
           <div className="docs-footer-content">
             <span>Need a portable version of this guide?</span>
-            <a href="/docs.md">
+            <a href="/api/docs-markdown">
               View docs.md
               <ArrowUpRight size={14} strokeWidth={1.7} aria-hidden="true" />
             </a>

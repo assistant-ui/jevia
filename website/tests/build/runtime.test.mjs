@@ -49,7 +49,7 @@ test("prerendering emits the Jevia documentation", async () => {
   assert.match(html, /aria-label="Documentation navigation"/);
   assert.match(html, /aria-label="Documentation sections"/);
   assert.match(html, /class="docs-nav-highlight" aria-hidden="true"/);
-  assert.match(html, /href="\/docs\.md"/);
+  assert.match(html, /href="\/api\/docs-markdown"/);
   assert.match(html, /VIEW \.MD/i);
   assert.match(html, /COPY \.MD/i);
   assert.match(html, /Need a portable version of this guide/);
@@ -77,6 +77,20 @@ test("the packaged runtime serves the Markdown documentation", async () => {
   assert.match(markdown, /^## Cache, diagnostics, and recovery$/m);
   assert.match(markdown, /import \{ JeviaClient \} from "jevia";/);
   assert.doesNotMatch(markdown, /View \.mdCOPY \.MD/);
+});
+
+test("View .md serves raw Markdown under normal browser headers", async () => {
+  const response = await runtime.fetch(
+    new Request("https://jevia.test/api/docs-markdown", {
+      headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /text\/markdown/);
+  assert.equal(response.headers.get("content-disposition"), 'inline; filename="docs.md"');
+  const markdown = await response.text();
+  assert.match(markdown, /^# Jevia documentation$/m);
+  assert.doesNotMatch(markdown, /<!doctype html>/i);
 });
 
 test("the build includes crawler discovery and social image assets", async () => {

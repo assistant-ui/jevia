@@ -7,7 +7,7 @@ export function DocsPageActions() {
     <div className="docs-page-actions" aria-label="Page actions">
       <a
         className="docs-page-action"
-        href="/docs.md"
+        href="/api/docs-markdown"
         target="_blank"
         rel="noreferrer"
       >

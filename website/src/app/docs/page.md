@@ -278,7 +278,7 @@ jevia runs archive --keep 1000 --apply
 
 Repair is JSONL-only. Archive works with every backend and writes recovery files before removing eligible old records. Neither command applies changes until you repeat the reviewed command with `--apply`.
 
-Use this page at [`/docs.md`](/docs.md) when you need a portable, agent-readable version of the guide. The repository source also includes `docs/reference.md` for exhaustive guarantees and edge cases.
+Use the raw Markdown endpoint at [`/api/docs-markdown`](/api/docs-markdown) when you need a portable, agent-readable version of the guide. The repository source also includes `docs/reference.md` for exhaustive guarantees and edge cases.
 
 ## Source
 
