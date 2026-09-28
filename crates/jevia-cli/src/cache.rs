@@ -147,13 +147,8 @@ fn load_unlocked(path: &Path) -> Result<Vec<CacheEntry>> {
         if line.trim().is_empty() {
             continue;
         }
-        let entry: CacheEntry = serde_json::from_str(&line).with_context(|| {
-            format!(
-                "invalid cache entry on line {} of {}",
-                index + 1,
-                path.display()
-            )
-        })?;
+        let entry: CacheEntry = serde_json::from_str(&line)
+            .map_err(|error| crate::diagnostics::json_line("cache entry", index + 1, &error))?;
         if entry.schema_version != CACHE_SCHEMA_VERSION {
             bail!(
                 "unsupported cache schema {} on line {} of {}",

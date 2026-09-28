@@ -86,20 +86,13 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
                 break;
             }
             Err(error) => {
-                return Err(error).with_context(|| {
-                    format!(
-                        "invalid JSON on line {}; refusing to rewrite history",
-                        index + 1
-                    )
-                });
+                return Err(crate::diagnostics::json_line("JSON", index + 1, &error))
+                    .context("refusing to rewrite history");
             }
         };
-        let record: RouteRecord = serde_json::from_value(value).with_context(|| {
-            format!(
-                "invalid record on line {}; refusing to rewrite history",
-                index + 1
-            )
-        })?;
+        let record: RouteRecord = serde_json::from_value(value)
+            .map_err(|error| crate::diagnostics::json_line("record", index + 1, &error))
+            .context("refusing to rewrite history")?;
         if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
             bail!(
                 "unsupported schema {} on line {}; refusing to rewrite history",

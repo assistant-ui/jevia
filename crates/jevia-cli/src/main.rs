@@ -1,5 +1,6 @@
 mod cache;
 mod config_edit;
+mod diagnostics;
 mod harness;
 mod lease;
 mod paths;
@@ -1083,7 +1084,7 @@ fn ensure_local_ignore(path: &std::path::Path) -> Result<()> {
 fn load_config(paths: &ProjectPaths) -> Result<Config> {
     let input = fs::read_to_string(&paths.config)
         .with_context(|| format!("could not read {}", paths.config.display()))?;
-    Config::from_toml(&input).map_err(Into::into)
+    Config::from_toml(&input).map_err(|error| diagnostics::configuration(error, &input))
 }
 
 fn print_record(record: &RouteRecord) {
