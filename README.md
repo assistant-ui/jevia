@@ -435,6 +435,44 @@ Waiting is bounded to the configured Jev timeout plus one second (at most 30
 seconds). On expiry or a coordination error, routing proceeds live; duplicate
 requests are possible in that fallback. `--no-cache` skips coordination too.
 
+### Explain a routing decision (unreleased)
+
+Add `--explain` to `route` or `run` for observed cache, evidence, and confidence
+policy diagnostics. This option is on the development branch; it is not in the
+published 0.1.3 CLI.
+
+```sh
+jevia route --json --explain "fix the parser"
+jevia run my-harness --explain "fix the parser"
+```
+
+For example, stderr may contain:
+
+```text
+jevia: explain cache=miss:not_found coordination=acquired write=stored
+jevia: explain eligible_evidence=2 history_limit=20
+jevia: explain source=live confidence=0.6 floor=0.7 fallback=below_confidence_floor elapsed_ms=180
+```
+
+`miss:expired` means a matching entry exists but is expired. `miss:not_found`
+means no matching fingerprint exists; it cannot distinguish a new task, changed
+policy/evidence, eviction, or a cleared cache. Other states identify disabled or
+bypassed caching, unavailable cache/key computation, coordination fallback, and
+cache write failure.
+
+`eligible_evidence` counts only the bounded, eligible records in the routing
+input, not every historical outcome. On a cache hit it describes the equivalent
+input behind the cached decision; no fresh request was sent. Confidence and
+fallback are observed decision/policy facts, not an explanation of Jev's internal
+reasoning or a guarantee of task success. Elapsed time covers routing, including
+evidence loading and coordination, not history append or harness execution.
+
+Explanations use static labels and numbers, with no task text, tier/model names,
+credentials, run IDs, or cache fingerprints. They are printed only after routing
+and record storage succeed, and before a harness launches. Existing JSON stdout
+and stored record formats are unchanged. Normal record output and harness output
+retain their existing privacy behavior; `--explain` is not a general output scrubber.
+
 ## Storage
 
 JSONL remains the default. SQLite and PostgreSQL are opt-in alternatives; changing

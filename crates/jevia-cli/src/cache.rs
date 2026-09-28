@@ -328,6 +328,21 @@ mod tests {
     }
 
     #[test]
+    fn expired_duplicate_does_not_hide_a_still_valid_matching_entry() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("cache.jsonl");
+        write_unlocked(&path, &[entry("key", 100, 300), entry("key", 150, 200)]).unwrap();
+        assert!(matches!(
+            lookup_status_at(&path, "key", 200).unwrap(),
+            Lookup::Hit(_)
+        ));
+        assert!(matches!(
+            lookup_status_at(&path, "key", 300).unwrap(),
+            Lookup::Miss(MissReason::Expired)
+        ));
+    }
+
+    #[test]
     fn concurrent_inserts_preserve_every_entry() {
         const WRITERS: usize = 8;
 

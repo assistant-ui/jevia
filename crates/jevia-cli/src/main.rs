@@ -427,15 +427,7 @@ async fn run_harness(
         routed.print_explanation();
     }
 
-    execute_stored_harness(
-        &paths,
-        harness_name,
-        &invocation,
-        record,
-        options,
-        &storage,
-    )
-    .await
+    execute_stored_harness(&paths, harness_name, &invocation, record, options, &storage).await
 }
 
 #[cfg(test)]

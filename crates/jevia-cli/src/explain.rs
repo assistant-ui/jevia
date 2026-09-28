@@ -144,3 +144,46 @@ impl fmt::Display for Routed {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jevia_core::DecisionSource;
+
+    #[test]
+    fn formatting_never_renders_private_record_fields_or_configured_tier_names() {
+        let private = "PRIVATE_VALUE\u{1b}[31m";
+        let decision = RouteDecision {
+            run_id: private.into(),
+            tier: private.into(),
+            suggested_tier: private.into(),
+            confidence: 0.4,
+            probabilities: [(private.into(), 0.4)].into(),
+            fallback_applied: true,
+            jev_model: private.into(),
+            created_at_ms: 1,
+            source: DecisionSource::Live,
+        };
+        let mut config = Config::default();
+        config.privacy.store_task_text = true;
+        config.router.fallback_tier = private.into();
+        let routed = Routed::new(
+            decision,
+            private,
+            &config,
+            &[],
+            Instant::now(),
+            Trace {
+                cache: CacheStatus::KeyUnavailable,
+                coordination: Coordination::Unavailable,
+                write: CacheWrite::Failed,
+            },
+        );
+        let output = routed.to_string();
+        assert_eq!(routed.record.task.as_deref(), Some(private));
+        assert!(!output.contains("PRIVATE_VALUE"));
+        assert!(!output.contains('\u{1b}'));
+        assert!(output.contains("cache=key_unavailable coordination=unavailable write=failed"));
+        assert!(output.contains("confidence=0.4"));
+    }
+}

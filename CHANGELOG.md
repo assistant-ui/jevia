@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add opt-in `route --explain` and `run --explain` diagnostics on stderr for
+  cache hits/miss reasons, coordination/cache writes, eligible evidence count,
+  confidence fallback, and routing time. Keep task text out of explanations and
+  preserve existing JSON output and persisted record formats.
+
 ## 0.1.3 — 2026-09-28
 
 - Keep non-interactive Unix harness and verifier phases supervised until their
