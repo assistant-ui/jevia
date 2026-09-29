@@ -83,6 +83,45 @@ responses raise `JeviaProtocolError` without their contents. Legacy records can
 omit optional evidence; the SDK never invents it. Additive unknown fields remain
 compatible within a supported schema.
 
+## Error categories (unreleased)
+
+In the next npm release, `JeviaCommandError.kind` provides an allowlisted category
+without requiring access to private stderr, arguments, or raw system errors:
+
+| Kind | Meaning |
+| --- | --- |
+| `not_found` | Executable or working-directory path missing/not a directory. |
+| `permission_denied` | Operating system refused access or execution. |
+| `timeout` | SDK deadline elapsed. |
+| `aborted` | Caller cancelled through an AbortSignal. |
+| `output_limit` | Captured stdout or stderr exceeded its byte limit. |
+| `invalid_options` | Node rejected process options. |
+| `exit` | CLI exited unsuccessfully; inspect the safe `exitCode`. |
+| `signal` | CLI terminated by a signal; inspect the safe `signal`. |
+| `spawn_failed` | Other/unrecognized process failure. |
+
+`JeviaProtocolError.kind` is `protocol`. Existing error classes, private diagnostic
+getters, `exitCode`, and `signal` remain available. Invalid SDK method arguments
+still throw `TypeError`. Raw error codes, paths, messages, and causes are never
+copied into the public category. The OS cannot reliably distinguish a missing
+binary from a missing `cwd`, so `not_found` intentionally covers both.
+
+```ts
+import { JeviaCommandError } from "jevia";
+
+try {
+  await jevia.route(task);
+} catch (error) {
+  if (error instanceof JeviaCommandError) {
+    console.error({ kind: error.kind, exitCode: error.exitCode, signal: error.signal });
+  }
+  throw error;
+}
+```
+
+Categories do not imply retry safety. After a timeout, abort, or failed mutation,
+inspect the stored state before retrying; cancellation is not a rollback guarantee.
+
 ## External completion (unreleased)
 
 `complete` requires the next CLI release after 0.1.3 and the next npm release;
