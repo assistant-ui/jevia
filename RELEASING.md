@@ -56,14 +56,17 @@ missing API key when none is configured; it should not contact Jev.
 
 Only after registry installation succeeds, create an annotated `v<version>`
 tag on the published commit and push it. The `Release binaries` workflow builds
-Intel and ARM binaries for macOS and Linux, creates or updates the GitHub
-release, and uploads each binary with its SHA-256 checksum. Do not announce the
-installer until all release assets are present, and do not mark a GitHub release
-as published to crates.io if either crate is missing.
+Intel and ARM binaries for macOS and Linux plus the Windows MSVC binary, creates
+or updates the GitHub release, and uploads each binary with its SHA-256 checksum
+and an SPDX SBOM. The workflow signs GitHub build-provenance and SBOM attestations
+for every binary. Do not announce the installer until all release assets are
+present, and do not mark a GitHub release as published to crates.io if either
+crate is missing.
 
 After all five binaries and their checksums are uploaded, the release workflow
 smoke-tests the real installers against the published assets on macOS, Linux,
-and Windows.
+and Windows. Each smoke test also verifies both signed attestations against the
+installed binary with `gh attestation verify`.
 Only after those tests pass does it open a follow-up PR that updates
 the default version in `website/public/install.sh` and
 `website/public/install.ps1`, plus the versioned website install guide. Review
@@ -74,6 +77,18 @@ correctly. If automation is unavailable, run
 
 For an existing tag whose release assets need to be rebuilt, run the `Release
 binaries` workflow manually and supply the exact tag, such as `v0.1.0`.
+
+Consumers can independently verify a downloaded binary and inspect its SBOM:
+
+```bash
+gh attestation verify ./jevia-v<version>-<target> \
+  --repo assistant-ui/jevia
+gh attestation verify ./jevia-v<version>-<target> \
+  --repo assistant-ui/jevia \
+  --predicate-type https://spdx.dev/Document/v2.3
+```
+
+The matching `jevia-v<version>.spdx.json` is also attached to the GitHub release.
 
 ## Node.js package
 
