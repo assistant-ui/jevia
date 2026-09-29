@@ -11,7 +11,10 @@ test("release binaries receive provenance and SBOM attestations", () => {
   assert.match(workflow, /artifact-metadata: write/);
   assert.match(workflow, /attestations: write/);
   assert.match(workflow, /id-token: write/);
-  assert.match(workflow, /uses: anchore\/sbom-action@v0/);
+  assert.match(
+    workflow,
+    /uses: anchore\/sbom-action@[0-9a-f]{40} # v0/,
+  );
   assert.match(workflow, /format: spdx-json/);
   assert.equal(workflow.match(/uses: actions\/attest@v4/g)?.length, 2);
   assert.match(workflow, /sbom-path:/);
