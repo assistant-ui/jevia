@@ -18,6 +18,12 @@ test("release binaries receive provenance and SBOM attestations", () => {
 });
 
 test("release smoke tests verify provenance and SPDX attestations", () => {
+  const smokeJob = workflow.slice(
+    workflow.indexOf("  smoke:"),
+    workflow.indexOf("  sync-installer:"),
+  );
+
+  assert.doesNotMatch(smokeJob, /ref: \$\{\{ env\.RELEASE_TAG \}\}/);
   assert.match(workflow, /gh attestation verify "\$install_dir\/jevia"/);
   assert.match(workflow, /gh attestation verify \$binary/);
   assert.equal(
