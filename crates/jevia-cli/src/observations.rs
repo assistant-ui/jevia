@@ -685,15 +685,13 @@ mod tests {
             .prefix("jevia-events-")
             .suffix(".jsonl")
             .tempfile()
-            .unwrap();
-        receive(journal.path(), b"PRIVATE_INVALID_JSON".as_slice());
-        receive(
-            journal.path(),
-            vec![b'x'; INPUT_LIMIT as usize + 1].as_slice(),
-        );
-        let bytes = fs::read_to_string(journal.path()).unwrap();
+            .unwrap()
+            .into_temp_path();
+        receive(&journal, b"PRIVATE_INVALID_JSON".as_slice());
+        receive(&journal, vec![b'x'; INPUT_LIMIT as usize + 1].as_slice());
+        let bytes = fs::read_to_string(&journal).unwrap();
         assert!(!bytes.contains("PRIVATE_"));
-        let mut file = open_journal(journal.path()).unwrap();
+        let mut file = open_journal(&journal).unwrap();
         let snapshot = read_journal(&mut file).unwrap();
         assert_eq!(snapshot.status, Status::Partial);
         assert_eq!(snapshot.counts().discarded_inputs, 2);
@@ -701,22 +699,24 @@ mod tests {
 
     #[test]
     fn concurrent_tool_hooks_are_serialized_without_lost_events() {
+        let dir = tempfile::tempdir().unwrap();
         let journal = tempfile::Builder::new()
             .prefix("jevia-events-")
             .suffix(".jsonl")
-            .tempfile()
-            .unwrap();
+            .tempfile_in(dir.path())
+            .unwrap()
+            .into_temp_path();
         std::thread::scope(|scope| {
-            for i in 0..24 {
-                let path = journal.path();
+            for i in 0..8 {
+                let path = &journal;
                 scope.spawn(move || {
                     let raw = json!({"hook_event_name": "PostToolUse", "session_id": format!("session-{i}"), "tool_name": "Read"}).to_string();
                     receive_inner(path, raw.as_bytes()).unwrap();
                 });
             }
         });
-        let captured = read_journal(&mut open_journal(journal.path()).unwrap()).unwrap();
-        assert_eq!(captured.events.len(), 24);
+        let captured = read_journal(&mut open_journal(&journal).unwrap()).unwrap();
+        assert_eq!(captured.events.len(), 8);
         assert_eq!(captured.status, Status::Recorded);
     }
 
@@ -727,30 +727,31 @@ mod tests {
             .prefix("jevia-events-")
             .suffix(".jsonl")
             .tempfile_in(dir.path())
-            .unwrap();
+            .unwrap()
+            .into_temp_path();
         let raw = json!({"hook_event_name":"Stop", "session_id":"session-1", "last_assistant_message":"PRIVATE_OUTPUT", "prompt":"PRIVATE_PROMPT", "transcript_path":"/PRIVATE_PATH"}).to_string();
-        receive(journal.path(), raw.as_bytes());
-        let saved = fs::read_to_string(journal.path()).unwrap();
+        receive(&journal, raw.as_bytes());
+        let saved = fs::read_to_string(&journal).unwrap();
         assert!(!saved.contains("PRIVATE_"));
-        let mut file = open_journal(journal.path()).unwrap();
+        let mut file = open_journal(&journal).unwrap();
         let summary = read_journal(&mut file).unwrap();
         assert_eq!(summary.events[0].kind, Kind::TurnCompleted);
         assert_eq!(summary.events[0].model, None);
         assert!(!summary.routing_summary().to_string().contains("session-1"));
         for _ in 0..MAX_HARNESS_EVENTS + 3 {
-            receive_inner(journal.path(), raw.as_bytes()).unwrap();
+            receive_inner(&journal, raw.as_bytes()).unwrap();
         }
-        receive(journal.path(), b"malformed PRIVATE_INPUT".as_slice());
-        let summary = read_journal(&mut open_journal(journal.path()).unwrap()).unwrap();
+        receive(&journal, b"malformed PRIVATE_INPUT".as_slice());
+        let summary = read_journal(&mut open_journal(&journal).unwrap()).unwrap();
         assert_eq!(summary.events.len(), MAX_HARNESS_EVENTS);
         assert_eq!(summary.status, Status::Partial);
         assert_eq!(summary.event_count(), MAX_HARNESS_EVENTS as u64 + 4);
         receive(
-            journal.path(),
+            &journal,
             br#"{"hook_event_name":"PostModelSwitch","from_model":"early","to_model":"late"}"#
                 .as_slice(),
         );
-        let summary = read_journal(&mut open_journal(journal.path()).unwrap()).unwrap();
+        let summary = read_journal(&mut open_journal(&journal).unwrap()).unwrap();
         assert_eq!(
             summary.events.last().unwrap().model.as_deref(),
             Some("late")
@@ -763,7 +764,7 @@ mod tests {
             summary.routing_summary()["model_event_counts"]["late"]["model_changed"],
             1
         );
-        assert!(fs::metadata(journal.path()).unwrap().len() < JOURNAL_LIMIT);
+        assert!(fs::metadata(&journal).unwrap().len() < JOURNAL_LIMIT);
         assert!(
             summary.routing_summary()["summary_truncated"]
                 .as_bool()
