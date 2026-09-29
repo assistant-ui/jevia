@@ -29,6 +29,7 @@ affected version lines, leaving H3 1.x and the bundled Vite 8 build unchanged.
 | `@ai-sdk/provider-utils` 4.x | 4.0.33 | Fix GHSA-866g-f22w-33x8 without moving to AI SDK 7 dependencies |
 | `h3` 2.0.1 prereleases | 2.0.1-rc.18 | Fix the six H3 advisories through GHSA-q5pr-72pq-83v3 |
 | `sharp` | 0.35.4 | Fix GHSA-f88m-g3jw-g9cj and GHSA-rgj7-g3m4-5g8c |
+| `undici` through `@scalar/json-magic@0.15.2` | 7.29.1 | Fix GHSA-3wwx-pv8p-q78v; leave the separate 7.30.0 dependency unchanged |
 | `srvx` | 0.11.13 | Fix GHSA-p36q-q72m-gchr |
 | `uuid` | 11.1.1 | Fix GHSA-w5hq-g745-h8pq while keeping CommonJS support for Sequelize |
 | `vite` | 7.3.6 | Fix the Vite alerts and remove vulnerable esbuild 0.21; satisfy Nitro's Vite 7 peer |

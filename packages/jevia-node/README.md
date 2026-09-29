@@ -9,7 +9,7 @@ outcome eligibility stay consistent with the Rust implementation.
 Install the Jevia CLI first, then add the Node package:
 
 ```sh
-curl -fsSL https://jevia.vercel.app/install.sh | sh
+curl -fsSL https://jevia.dev/install.sh | sh
 npm install jevia
 ```
 
@@ -29,7 +29,7 @@ Automatic detection of existing root Rust/Node tests is **unreleased**, pending
 the next CLI release after 0.1.3. With CLI 0.1.3, configure a verifier once. If no
 usable verifier is available, Jevia records an unverified, process-only result;
 it does not treat the agent exiting as proof of task success. See the
-[CLI pipeline documentation](https://github.com/assistant-ui/jevia#automatic-cli-pipeline-unreleased).
+[CLI pipeline documentation](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline-unreleased).
 
 Use the SDK when your application should control how agents run and how their
 work is checked. SDK routing does not launch a harness or run project tests.

@@ -2,7 +2,7 @@ import type { LayoutProps, Metadata } from "@farm.js/core";
 import { defineLayoutFonts, localFont } from "@farm.js/core/font";
 import "./globals.css";
 
-const SITE_URL = "https://jevia.vercel.app";
+const SITE_URL = "https://jevia.dev";
 const TITLE = "Jevia — Outcome-aware model routing";
 const DESCRIPTION =
   "Route coding tasks to the right model, verify the result, and use real outcomes to improve the next decision.";
