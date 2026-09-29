@@ -280,6 +280,48 @@ const STORAGE_OPTIONS = [
   },
 ] as const;
 
+const STORED_RUN = [
+  "{",
+  '  "schema_version": 3,',
+  '  "run_id": "7b65a69a-0a6f-4a89-bd73-88f090954dd9",',
+  '  "tier": "balanced",',
+  '  "suggested_tier": "balanced",',
+  '  "confidence": 0.84,',
+  '  "probabilities": {',
+  '    "fast": 0.1,',
+  '    "balanced": 0.84,',
+  '    "strong": 0.06',
+  "  },",
+  '  "fallback_applied": false,',
+  '  "jev_model": "jev-latest",',
+  '  "created_at_ms": 1790700000000,',
+  '  "source": "live",',
+  '  "task": "fix the flaky integration test",',
+  '  "outcome": "success",',
+  '  "execution": {',
+  '    "harness": "codex",',
+  '    "model": "provider/standard",',
+  '    "duration_ms": 48231,',
+  '    "exit_code": 0,',
+  '    "verification": {',
+  '      "command": "pnpm",',
+  '      "launched": true,',
+  '      "duration_ms": 6842,',
+  '      "exit_code": 0',
+  "    }",
+  "  },",
+  '  "lifecycle": {',
+  '    "state": "completed",',
+  '    "started_at_ms": 1790700001120,',
+  '    "finished_at_ms": 1790700056193',
+  "  },",
+  '  "outcome_evidence": {',
+  '    "source": "verification",',
+  '    "recorded_at_ms": 1790700056193',
+  "  }",
+  "}",
+].join("\n");
+
 const STORAGE_TRANSFER = [
   "jevia storage check",
   "jevia storage check --deep",
@@ -612,6 +654,28 @@ export default function DocsPage() {
                   <p>{option.description}</p>
                 </div>
               ))}
+            </div>
+
+            <h3 className="docs-subheading">What a stored run looks like</h3>
+            <p className="docs-body-copy">
+              Every backend preserves the same logical record. JSONL writes one compact JSON
+              object per line to <code>.jevia/runs.jsonl</code>; this example is expanded only
+              for readability. SQLite and PostgreSQL store the equivalent fields while keeping
+              the same lifecycle and outcome-evidence semantics.
+            </p>
+            <CodeBlock
+              code={STORED_RUN}
+              label="One completed run · expanded JSONL"
+              language="json"
+            />
+            <div className="docs-note">
+              <strong>The verifier supplies the outcome</strong>
+              <p>
+                Jev selects the tier, but it does not declare its own work successful. Here,
+                the verifier exited successfully, so <code>outcome_evidence.source</code> is
+                <code> verification</code>. Set <code>privacy.store_task_text = false</code>
+                to persist <code>task: null</code> instead of the raw task.
+              </p>
             </div>
 
             <h3 className="docs-subheading">Move a project to SQLite</h3>
