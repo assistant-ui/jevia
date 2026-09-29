@@ -192,29 +192,26 @@ const METHODS = [
 ] as const;
 
 const HARNESS_SETUP = [
-  "jevia harness setup agent --command my-agent \\",
-  "  --arg=run --arg=--model --arg='{model}' --arg='{task}' \\",
-  "  --model fast=provider/small \\",
-  "  --model balanced=provider/standard \\",
-  "  --model strong=provider/frontier \\",
-  "  --verify-command cargo --verify-arg=test",
+  "jevia harness presets",
+  "jevia harness setup codex --preset codex \\",
+  "  --model fast=your-fast-model \\",
+  "  --model balanced=your-balanced-model \\",
+  "  --model strong=your-strong-model",
 ].join("\n");
 
 const HARNESS_COMMANDS = [
   "# Review the generated TOML, then save it",
-  "jevia harness setup agent --command my-agent \\",
-  "  --arg=run --arg=--model --arg='{model}' --arg='{task}' \\",
-  "  --model fast=provider/small \\",
-  "  --model balanced=provider/standard \\",
-  "  --model strong=provider/frontier \\",
-  "  --verify-command cargo --verify-arg=test --apply",
+  "jevia harness setup codex --preset codex \\",
+  "  --model fast=your-fast-model \\",
+  "  --model balanced=your-balanced-model \\",
+  "  --model strong=your-strong-model --apply",
   "",
   "# Validate templates and local executable paths without launching anything",
-  "jevia harness check agent",
-  "jevia harness check agent --json",
+  "jevia harness check codex",
+  "jevia harness check codex --json",
   "",
   "# Route and launch the configured harness",
-  'jevia run agent "investigate the failing integration test"',
+  'jevia run codex "investigate the failing integration test"',
 ].join("\n");
 
 const OUTCOME_COMMANDS = [
@@ -478,16 +475,19 @@ export default function DocsPage() {
             </div>
             <CodeBlock code={HARNESS_SETUP} label="Preview a harness adapter" language="bash" />
             <p className="docs-body-copy">
-              This generic adapter is a template, not a provider preset. Replace the command,
-              arguments, and model IDs with values your harness accepts. The preview is offline
-              and changes no files.
+              Built-in shell-free templates cover Codex, Claude Code, OpenCode, and
+              Gemini CLI. A preset supplies only the command and non-interactive argument
+              shape; you still choose model IDs, credentials, permissions, and verification.
+              The preview is offline and changes no files.
             </p>
             <h3 className="docs-subheading">Apply, validate, and run</h3>
             <CodeBlock code={HARNESS_COMMANDS} label="Harness workflow" language="bash" />
             <p className="docs-body-copy">
               Changing an existing adapter also requires <code>--replace</code>. Extra arguments
               for the configured harness can follow <code>--</code> on <code>jevia run</code>.
-              Jevia executes argument arrays directly without shell expansion.
+              Jevia executes argument arrays directly without shell expansion. Use explicit
+              <code> --command</code> and repeated <code>--arg</code> values when a preset does
+              not match your installed harness or when connecting another agent.
             </p>
             <div className="docs-note">
               <strong>Agnostic by design</strong>

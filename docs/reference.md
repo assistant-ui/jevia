@@ -112,6 +112,7 @@ jevia runs --json
 | Command | Purpose |
 | --- | --- |
 | `jevia init` | Create `.jevia/config.toml` and local store rules. |
+| `jevia harness presets` | List the built-in Codex, Claude Code, OpenCode, and Gemini CLI command templates. |
 | `jevia harness setup <name>` | Preview an explicit harness template; back up and save only with `--apply`. |
 | `jevia harness check <name> [--json]` | Inspect configuration and local executable candidates without launching programs or calling APIs. |
 | `jevia route <task>` | Ask Jev for a tier and record the decision. |
@@ -192,8 +193,34 @@ cost savings are estimated because token/cost telemetry is not recorded.
 
 ### Preview-first setup
 
-`jevia init` leaves harness selection to you. Configure your installed agent with
-an explicit argument template and one model mapping for every configured tier:
+`jevia init` leaves harness selection to you. Jevia includes shell-free command
+templates for Codex, Claude Code, OpenCode, and Gemini CLI. List them, then preview
+one with explicit model IDs for every configured tier:
+
+```sh
+jevia harness presets
+jevia harness setup codex --preset codex \
+  --model fast=your-fast-model \
+  --model balanced=your-balanced-model \
+  --model strong=your-strong-model
+```
+
+The built-in presets currently render these non-interactive argument arrays:
+
+| Preset | Command and arguments |
+| --- | --- |
+| `codex` | `codex exec --model {model} {task}` |
+| `claude` | `claude --print --model {model} {task}` |
+| `opencode` | `opencode run --model {model} {task}` |
+| `gemini` | `gemini --model {model} --prompt {task}` |
+
+Presets do not choose model IDs, install the harness, alter its permission policy,
+or bypass its prompts. Review the preview, ensure the selected harness version
+supports the shown flags, then repeat with `--apply`. Use `harness check` afterward
+to validate the local executable candidate without launching it.
+
+For another harness or a different invocation shape, provide an explicit argument
+template instead:
 
 ```sh
 jevia harness setup agent --command my-agent \
@@ -203,9 +230,9 @@ jevia harness setup agent --command my-agent \
   --model strong=provider/frontier
 ```
 
-This is a generic example, not a provider preset: substitute your agent's actual
-executable, argument syntax, and accessible model IDs. Repeat the same command
-with `--apply` after reviewing its TOML preview. Setup never launches either
+Substitute your agent's actual executable, argument syntax, and accessible model
+IDs. Repeat the same command with `--apply` after reviewing its TOML preview.
+Setup never launches either
 program, calls Jev, opens storage, or checks provider credentials/model access.
 It works offline, including when a configured database is unavailable. There
 is no interactive prompt or automatic agent installation. Quote placeholders as

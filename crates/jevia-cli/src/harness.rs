@@ -9,6 +9,8 @@ use std::process::ExitCode;
 
 #[derive(Debug, Subcommand)]
 pub enum Action {
+    /// List built-in shell-free command templates for supported harnesses.
+    Presets,
     /// Preview a harness configuration; --apply backs up and saves it.
     Setup(setup::Options),
     /// Check local configuration and executable candidates without running anything.
@@ -23,6 +25,7 @@ pub enum Action {
 
 pub fn run(paths: &ProjectPaths, action: Action) -> Result<ExitCode> {
     match action {
+        Action::Presets => setup::print_presets(),
         Action::Setup(options) => setup::run(paths, options)?,
         Action::Check { name, json } => return check::run(paths, &name, json),
     }

@@ -88,6 +88,8 @@ test("the packaged runtime serves the Markdown documentation", async () => {
 function assertAutomaticPipelineDocs(content) {
   const text = content.replace(/\s+/g, " ");
   assert.match(text, /Automatic CLI pipeline/);
+  assert.match(text, /jevia harness presets/);
+  assert.match(text, /--preset codex/);
   assert.match(text, /jevia run codex/);
   assert.match(text, /No manual feedback or runs complete step is needed/);
   assert.match(text, /CLI 0\.1\.4 detects root Rust/);
