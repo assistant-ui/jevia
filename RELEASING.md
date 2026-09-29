@@ -61,11 +61,14 @@ release, and uploads each binary with its SHA-256 checksum. Do not announce the
 installer until all release assets are present, and do not mark a GitHub release
 as published to crates.io if either crate is missing.
 
-After all four binaries and their checksums are uploaded and verified, update
-`JEVIA_VERSION` in `website/public/install.sh`, the versioned website install
-guide, and installer test fixtures in a follow-up PR. Run the website tests and
-wait for CI before merging. This ordering avoids pointing the deployed installer
-at assets that do not exist yet. Smoke-test the installer in an isolated directory.
+After all four binaries and their checksums are uploaded, the release workflow
+smoke-tests the real installer against the published assets on macOS and Linux.
+Only after those tests pass does it open a follow-up PR that updates
+`JEVIA_VERSION` in `website/public/install.sh` and the versioned website install
+guide. Review that PR and wait for its required CI before merging. This ordering
+avoids pointing the deployed installer at assets that do not exist or install
+correctly. If automation is unavailable, run
+`node scripts/sync-installer-version.mjs <version>` and follow the same review flow.
 
 For an existing tag whose release assets need to be rebuilt, run the `Release
 binaries` workflow manually and supply the exact tag, such as `v0.1.0`.

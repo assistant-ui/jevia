@@ -10,7 +10,7 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-binaries-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -82,6 +82,8 @@ jobs:
     name: Upload release assets
     needs: build
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -98,3 +100,99 @@ jobs:
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
           fi
           gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+
+  smoke:
+    name: Smoke test installer (${{ matrix.os }})
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Install from published release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          install_dir="$RUNNER_TEMP/jevia-bin"
+          JEVIA_VERSION="$version" \
+          JEVIA_INSTALL_DIR="$install_dir" \
+            sh website/public/install.sh
+          test "$("$install_dir/jevia" --version)" = "jevia $version"
+          project="$RUNNER_TEMP/jevia-project"
+          mkdir -p "$project"
+          cd "$project"
+          "$install_dir/jevia" init
+          "$install_dir/jevia" runs --json
+          "$install_dir/jevia" cache status
+
+  sync-installer:
+    name: Open installer version PR
+    needs: smoke
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.9.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: website/.node-version
+          cache: pnpm
+          cache-dependency-path: website/pnpm-lock.yaml
+      - name: Update installer release references
+        id: update
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/sync-installer-version.mjs "$RELEASE_TAG"
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Verify website
+        if: steps.update.outputs.changed == 'true'
+        working-directory: website
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test
+          pnpm type-check
+      - name: Create or update pull request
+        if: steps.update.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="chore/installer-${RELEASE_TAG}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add website/public/install.sh website/src/lib/install-guide.ts
+          git commit -m "chore(website): pin installer to ${RELEASE_TAG}"
+          git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch" || true
+          git push --force-with-lease origin "$branch"
+          pr_url="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state open --json url --jq '.[0].url')"
+          if [ -z "$pr_url" ]; then
+            gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base main \
+              --head "$branch" \
+              --title "chore(website): pin installer to ${RELEASE_TAG}" \
+              --body "Updates the public installer and install guide after the ${RELEASE_TAG} release assets passed real macOS and Linux smoke tests."
+          fi
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"

@@ -4,6 +4,11 @@ import test from "node:test";
 import ts from "typescript";
 
 const source = readFileSync(new URL("../src/lib/install-guide.ts", import.meta.url), "utf8");
+const installerSource = readFileSync(new URL("../public/install.sh", import.meta.url), "utf8");
+const installerVersion = installerSource.match(
+  /JEVIA_VERSION="\$\{JEVIA_VERSION:-([^}]+)\}"/,
+)?.[1];
+assert.ok(installerVersion, "installer declares a default version");
 const { outputText } = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 });
@@ -23,7 +28,7 @@ test("includes the complete installation and verification sequence", () => {
   assert.ok(guide.startsWith("# Install and verify Jevia\n"));
   assert.match(guide, /prebuilt binary/);
   assert.match(guide, /does not require Rust or Cargo/);
-  assert.match(guide, /releases\/tag\/v0\.1\.4/);
+  assert.ok(guide.includes(`releases/tag/v${installerVersion}`));
   assert.match(guide, /SHA-256 checksum/);
   const steps = [
     "curl --version",
