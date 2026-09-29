@@ -55,7 +55,7 @@ const CLI_COMMANDS = [
   },
   {
     signature: "run <harness> <task>",
-    description: "Route the task, launch a configured harness, verify it, and record the result.",
+    description: "Route, launch, and record automatically; extra verification is opt-in.",
   },
   {
     signature: "runs [--json]",
@@ -81,16 +81,16 @@ const ADAPTIVE_LOOP = [
     description: "Your chosen harness maps that tier to a concrete model and performs the work.",
   },
   {
-    signature: "03  Verify",
-    description: "Tests, review, or another trusted evaluator decides whether the task succeeded.",
+    signature: "03  Observe",
+    description: "Record process facts and supported native activity automatically; keep uncertain outcomes unknown.",
   },
   {
-    signature: "04  Record",
-    description: "The verified outcome is attached to the run with its evidence source.",
+    signature: "04  Optional outcome",
+    description: "Add feedback or extra verification only when wanted; neither is required for passive history.",
   },
   {
     signature: "05  Adapt",
-    description: "Eligible outcomes become evidence for later routing decisions.",
+    description: "Use recorded observations and known outcomes as separate context for later routing decisions.",
   },
 ] as const;
 
@@ -446,7 +446,7 @@ export default function DocsPage() {
               <span>03</span>
               <div>
                 <h2 id="adaptive-title">How adaptive routing works</h2>
-                <p>Routing and task success stay separate until a trusted result closes the loop.</p>
+                <p>Recorded activity informs routing without pretending every completed run is a successful task.</p>
               </div>
             </div>
             <div className="docs-methods" role="list">
@@ -458,10 +458,11 @@ export default function DocsPage() {
               ))}
             </div>
             <div className="docs-note">
-              <strong>Verified, not self-scored</strong>
+              <strong>Observed is not verified</strong>
               <p>
                 Jevia does not decide that its own output is good. A completed verifier
-                or explicit application or human feedback supplies the outcome used as learning evidence.
+                or explicit application or human feedback can supply a known outcome.
+                Without either, recorded activity still informs routing as passive context.
               </p>
             </div>
           </section>

@@ -39,8 +39,8 @@ jevia stats --json
 ```
 
 - `route <task>` selects a capability tier and saves the routing decision as a new run.
-- `run <harness> <task>` routes the task, launches a configured harness, verifies it, and records the result.
-- `runs [--json]` lists recent records, lifecycle state, outcome source, and learning eligibility.
+- `run <harness> <task>` routes, launches, and records automatically; extra verification is opt-in.
+- `runs [--json]` lists recent runs, lifecycle state, quality evidence, and execution observations.
 - `runs show <run-id>` prints one complete versioned record.
 - `stats [--limit N] [--json]` summarizes routing, trusted outcomes, feedback, and cache hits.
 
@@ -50,11 +50,11 @@ Add `--json` where supported for stable machine-readable output. Run `jevia <com
 
 1. **Route:** Jevia selects one configured capability tier for the current task.
 2. **Execute:** Your chosen harness maps that tier to a concrete model and performs the work.
-3. **Verify:** Tests, review, or another trusted evaluator decides whether the task succeeded.
-4. **Record:** The verified outcome is attached to the run with its evidence source.
-5. **Adapt:** Eligible outcomes become evidence for later routing decisions.
+3. **Observe:** Record process facts and supported native activity automatically; keep uncertain outcomes unknown.
+4. **Optional outcome:** Add feedback or extra verification only when wanted; neither is required for passive history.
+5. **Adapt:** Use recorded observations and known outcomes as separate context for later routing decisions.
 
-Jevia does not decide that its own output is good. A completed verifier or explicit application or human feedback supplies the outcome used as learning evidence.
+Jevia does not decide that its own output is good. A completed verifier or explicit application or human feedback can supply a known outcome. Without either, recorded activity still informs routing as passive context.
 
 ## Connect any harness
 

@@ -92,8 +92,15 @@ function assertAutomaticPipelineDocs(content) {
   assert.match(text, /--preset codex/);
   assert.match(text, /jevia run codex/);
   assert.match(text, /No manual feedback or runs complete step is needed/);
-  assert.match(text, /CLI 0\.1\.4 detects root Rust/);
-  assert.match(text, /Missing or ambiguous checks stay unverified and are excluded from learning/);
+  assert.match(text, /Unreleased: additional verification is opt-in/);
+  assert.match(text, /CLI 0\.1\.4–0\.1\.5 enabled test discovery by default/);
+  assert.match(text, /Recorded history informs later routing automatically, even when task success is unknown/);
+  assert.match(text, /Claude Code 2\.1\.251/);
+  assert.match(text, /other harnesses currently provide process-level observations/);
+  assert.match(text, /execution\.observations/);
+  assert.match(text, /schema 4/);
+  assert.match(text, /each history window/);
+  assert.doesNotMatch(text, /verifies it, and records|Unknown, active, and process-exit-only records are excluded/);
   assert.match(text, /when the agent process\/session finishes/);
   assert.match(text, /SDK routing does not launch an agent or run tests/);
   assert.match(text, /no human feedback prompt is required/);
@@ -101,7 +108,7 @@ function assertAutomaticPipelineDocs(content) {
   assert.match(text, /No manual cache clearing is needed/);
   assert.match(text, /application-reported/);
   assert.match(text, /history_limit/);
-  assert.match(text, /feedback reasons stay in storage/);
+  assert.match(text, /feedback reasons, session IDs, and raw event lists stay in storage/);
   assert.match(text, /Feedback and verification are optional/);
   assert.match(text, /Skipping feedback still records the route with an unknown outcome/);
   assert.doesNotMatch(text, /useHistory|verifyResult\(result\)/);
