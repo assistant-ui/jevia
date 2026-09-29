@@ -47,8 +47,8 @@ and argument list. Tier definitions remain stable when individual model
 catalogs change. Templates are rendered into a process and argument vector;
 they are never passed through a shell. Jevia launches the child in the project
 root and mirrors its exit code. After a successful harness exit, Jevia runs a
-configured verifier, or the root Rust/Node tests detected by the unreleased
-CLI after 0.1.3. Verification, terminal outcome recording, and inclusion of
+configured verifier, or root Rust/Node tests detected automatically by CLI 0.1.4.
+Verification, terminal outcome recording, and inclusion of
 eligible evidence in later routing need no manual feedback/completion call.
 Missing or ambiguous checks remain explicitly unverified: process-only results
 do not enter learning. A passing check is evidence, not proof of every requirement.

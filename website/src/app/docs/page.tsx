@@ -168,12 +168,16 @@ const METHODS = [
     description: "Read one complete record, including lifecycle and outcome evidence.",
   },
   {
+    signature: "complete(runId, outcome, options)",
+    description: "Finish externally executed work after confirming it has stopped; requires CLI 0.1.4 or newer.",
+  },
+  {
     signature: "setupStorage(target, options?)",
-    description: "Unreleased: preview SQLite or PostgreSQL setup and apply it only with confirmation.",
+    description: "Preview SQLite or PostgreSQL setup and apply it only with confirmation.",
   },
   {
     signature: "checkStorage(options?)",
-    description: "Unreleased: check selected storage or deeply validate it without a write probe.",
+    description: "Check selected storage or deeply validate it without a write probe.",
   },
 ] as const;
 
@@ -442,19 +446,17 @@ export default function DocsPage() {
               label="Run a configured harness"
             />
             <p className="docs-body-copy">
-              Automatic test detection is unreleased, pending the next CLI release
-              after 0.1.3. The current installer still installs 0.1.3: configure a
-              verifier once for that version. The upcoming CLI detects root Rust
-              workspace tests or Node test scripts; an explicit verifier takes
-              precedence. Missing or ambiguous checks stay unverified and are excluded
-              from learning. Passing tests is evidence, not proof of every requirement.
+              CLI 0.1.4 detects root Rust workspace tests or Node test scripts when no
+              verifier is configured; an explicit verifier takes precedence. Missing
+              or ambiguous checks stay unverified and are excluded from learning.
+              Passing tests is evidence, not proof of every requirement.
             </p>
             <p className="docs-body-copy">
               Verification runs when the agent process/session finishes, not after each
               internal message or tool call. Jevia does not install the agent or test
               runner, supply credentials, bypass agent permission prompts, or retry
               failed work. Prepare project dependencies first. See the{" "}
-              <a href="https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline-unreleased">
+              <a href="https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline">
                 CLI setup and verification reference
               </a> for supported tests, deadlines, and opt-out settings.
             </p>
@@ -524,12 +526,11 @@ export default function DocsPage() {
 
             <h3 className="docs-subheading">Configure storage from Node.js</h3>
             <div className="docs-note docs-note-flush">
-              <strong>Unreleased Node API</strong>
+              <strong>Node API availability</strong>
               <p>
-                These methods are pending the next npm release and are not in
-                <code> jevia@0.1.0</code>. They require CLI 0.1.2 or newer and an
-                existing <code>jevia init</code> project. Creating a client never
-                connects to a database or changes storage.
+                These methods are available in <code>jevia@0.1.1</code>. They require
+                CLI 0.1.2 or newer and an existing <code>jevia init</code> project.
+                Creating a client never connects to a database or changes storage.
               </p>
             </div>
             <CodeBlock code={SDK_STORAGE_SETUP} label="SDK: SQLite setup" />

@@ -79,10 +79,9 @@ jevia run agent "fix the flaky integration test"
 ```
 
 Jevia routes, executes, verifies, and records this run automatically. No manual
-`feedback` or `runs complete` step is needed. Automatic discovery of existing
-Rust/Node tests is **unreleased**, pending the next CLI release after 0.1.3;
-that released version needs the configured verifier shown above. See the
-[automatic CLI pipeline](docs/reference.md#automatic-cli-pipeline-unreleased)
+`feedback` or `runs complete` step is needed. CLI 0.1.4 can automatically discover
+existing root Rust or Node tests when no verifier is configured. See the
+[automatic CLI pipeline](docs/reference.md#automatic-cli-pipeline)
 for detection, opt-out settings, and verification limits.
 
 Harness and verifier processes are launched directly without shell

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 0.1.4 — 2026-09-28
+
+- Validate live and cached routing decisions against the current tier policy
+  before recording or reusing them. Invalid cached values fail open to a live
+  request; invalid live responses fail without entering history or cache.
+- Add `jevia runs complete` for explicitly finishing externally executed work
+  with manual outcome evidence after the caller confirms that work has stopped.
+- Automatically discover existing root Rust or Node test commands for harnesses
+  without an explicit verifier, with preview, persistent opt-out, bounded
+  execution, and process-tree cleanup.
+- Redact provider, transport, SDK, and CLI diagnostics while retaining stable,
+  allowlisted error categories and useful status/location metadata.
+- Release `jevia@0.1.1` with storage setup/check methods, external completion,
+  stricter runtime protocol validation, bounded command execution, process-tree
+  cleanup, and privacy-safe error categories.
+- Upgrade `process-wrap` to 10.0.1 after passing the full Rust, Node, storage,
+  website, Linux, macOS, and Windows test matrix.
+
+Existing configuration and history formats are unchanged. Rust 1.92 and Node.js
+20 remain the minimum supported versions.
+
 ## 0.1.3 — 2026-09-28
 
 - Keep non-interactive Unix harness and verifier phases supervised until their

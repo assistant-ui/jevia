@@ -96,18 +96,16 @@ outcomes become evidence for later routing decisions automatically.
 jevia run codex "fix the failing test"
 ```
 
-Automatic test detection is **unreleased**, pending the next CLI release after
-0.1.3. The current installer still installs 0.1.3: configure a verifier once for
-that version. The upcoming CLI detects root Rust workspace tests or Node test
-scripts; an explicit verifier takes precedence. Missing or ambiguous checks stay
-unverified and are excluded from learning. Passing tests is evidence, not proof
-of every requirement.
+CLI 0.1.4 detects root Rust workspace tests or Node test scripts when no verifier
+is configured; an explicit verifier takes precedence. Missing or ambiguous checks
+stay unverified and are excluded from learning. Passing tests is evidence, not
+proof of every requirement.
 
 Verification runs when the agent process/session finishes, not after each internal
 message or tool call. Jevia does not install the agent or test runner, supply
 credentials, bypass agent permission prompts, or retry failed work. Prepare
 project dependencies first. See the
-[CLI setup and verification reference](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline-unreleased)
+[CLI setup and verification reference](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline)
 for supported tests, deadlines, and opt-out settings.
 
 ## Use the Node.js SDK
@@ -178,12 +176,13 @@ omits task text from new records, not older history or the current routing reque
 - `feedback(runId, outcome, options?)` — Optionally record an application-reported outcome. No verifier is required; omitting feedback leaves the outcome unknown.
 - `runs(options?)` — List recent route records with a configurable positive result limit.
 - `show(runId, options?)` — Read one complete record, including lifecycle and evidence.
-- `setupStorage(target, options?)` — Unreleased: preview SQLite or PostgreSQL setup and apply only with confirmation.
-- `checkStorage(options?)` — Unreleased: check selected storage or deeply validate it without a write probe.
+- `complete(runId, outcome, options)` — Finish externally executed work after confirming it has stopped; requires CLI 0.1.4 or newer.
+- `setupStorage(target, options?)` — Preview SQLite or PostgreSQL setup and apply only with confirmation.
+- `checkStorage(options?)` — Check selected storage or deeply validate it without a write probe.
 
 ### Configure storage from Node.js
 
-**Unreleased Node API:** these methods are pending the next npm release and are not in `jevia@0.1.0`. They require CLI 0.1.2 or newer and an existing `jevia init` project. Creating a client never connects to a database or changes storage.
+**Node API availability:** these methods are available in `jevia@0.1.1`. They require CLI 0.1.2 or newer and an existing `jevia init` project. Creating a client never connects to a database or changes storage.
 
 ```typescript
 const target = { backend: "sqlite", path: ".jevia/jevia.db" } as const;

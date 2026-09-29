@@ -85,7 +85,7 @@ function assertAutomaticPipelineDocs(content) {
   assert.match(text, /Automatic CLI pipeline/);
   assert.match(text, /jevia run codex/);
   assert.match(text, /No manual feedback or runs complete step is needed/);
-  assert.match(text, /next CLI release after 0\.1\.3/);
+  assert.match(text, /CLI 0\.1\.4 detects root Rust/);
   assert.match(text, /Missing or ambiguous checks stay unverified and are excluded from learning/);
   assert.match(text, /when the agent process\/session finishes/);
   assert.match(text, /SDK routing does not launch an agent or run tests/);
