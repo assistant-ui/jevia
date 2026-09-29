@@ -85,8 +85,10 @@ agent exit, and saves the outcome automatically. **No manual `feedback` or
 later routing decisions. The name `codex` must match your configured adapter;
 Jevia does not install or authenticate the agent for you.
 
-CLI 0.1.4 automatically discovers existing root Rust or Node tests when no
-verifier is configured. See [automatic CLI pipeline](#automatic-cli-pipeline)
+**Unreleased default change:** additional verification is now opt-in. Recording
+still happens automatically. CLI 0.1.4–0.1.5 enabled test discovery by default;
+the next release only discovers tests when `auto_verify = true` is explicitly
+configured. See [automatic CLI pipeline](#automatic-cli-pipeline)
 for detection, overrides, and verification limits.
 
 ### Route only: your integration owns execution
@@ -248,7 +250,7 @@ shown and use `--arg=--flag` / `--verify-arg=--flag` for leading-hyphen argument
   the config lock sidecar). The selected harness entry is rewritten when changed.
 - Automatic test detection and persistent opt-out behavior are available in
   CLI 0.1.4. Omitted verifier options preserve an existing verifier and automatic-detection
-  setting. New adapters default to automatic project tests. Use `--no-verification`
+  setting. In the next release, new adapters default to recording without extra tests. Use `--no-verification`
   to disable both explicit and automatic checks, or `--auto-verification` to remove
   a custom verifier and re-enable detection. Supplying `--verify-command` replaces
   its whole command and argument list (for example, `--verify-command cargo
@@ -451,8 +453,8 @@ the agent, supplying credentials/model mappings, and preparing project dependenc
 are one-time prerequisites, not per-run feedback tasks. Jevia does not retry or
 repair failed work automatically.
 
-If the adapter has no explicit verifier, `auto_verify = true` (the default)
-detects existing tests at the Jevia project root:
+If you opt in with `auto_verify = true` and have no explicit verifier, Jevia
+detects existing tests at the project root. The unreleased default is `false`:
 
 - Rust: `cargo test --workspace` for a root Cargo package/workspace.
 - Node: the existing `test` script, using `packageManager`, then an unambiguous
@@ -473,10 +475,11 @@ Configure a suitable check once for such projects. `harness check <name>` previe
 detection and executable availability without running tests. Passing tests means
 the selected checks passed—not a guarantee that every requirement was satisfied.
 
-This behavior is available in CLI 0.1.4. Existing adapters without a verifier
-also gain detection. To preserve process-only behavior, set
-`auto_verify = false` in that adapter; the older `--no-verification` removed the
-verifier without storing an explicit opt-out. The new flag persists that opt-out.
+Test discovery is available since CLI 0.1.4. In the next release, omitted
+`auto_verify` means no extra tests; existing explicit `true` values and custom
+verifiers remain honored. Earlier setup commands wrote `auto_verify = true`, so
+use `harness setup ... --no-verification --replace --apply` or set it to `false`
+and remove any custom verifier to stop those previously configured checks.
 The Node SDK's `route`, `feedback`, and `complete` remain explicit and flexible;
 they never launch an agent or run project tests automatically.
 

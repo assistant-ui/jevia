@@ -189,9 +189,9 @@ fn inspect(paths: &ProjectPaths, name: &str) -> Report {
     } else {
         report.add(
             "verification",
-            Status::Warning,
+            Status::Pass,
             "verification_disabled",
-            "Verification is explicitly disabled; process-only results are not learning evidence.",
+            "No additional verification requested. Execution is still recorded; process exit is not proof of task success.",
         );
     }
     if cfg!(windows) {

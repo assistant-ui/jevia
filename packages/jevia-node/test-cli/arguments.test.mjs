@@ -189,7 +189,7 @@ test("real CLI completes external work and makes it eligible for archival", asyn
   assert.equal(JSON.parse(stdout).archived_records, 1);
 });
 
-test("CLI run automatically tests a Node project, records outcomes, and honors overrides", async (t) => {
+test("CLI run records by default and only adds Node tests after opting in", async (t) => {
   const { client, cwd } = await fixture(t);
   const configPath = join(cwd, ".jevia", "config.toml");
   const initial = await readFile(configPath, "utf8");
@@ -207,6 +207,12 @@ test("CLI run automatically tests a Node project, records outcomes, and honors o
   const run = () => execute(binary, ["run", "agent", "fix task"], { cwd, env: client.env, timeout: 30000 });
   await run();
   let [record] = await client.runs({ limit: 1 });
+  assert.equal(record.execution.verification, undefined);
+  assert.equal(record.lifecycle.state, "completed");
+  await assert.rejects(readFile(join(cwd, "verified")), { code: "ENOENT" });
+  await writeFile(configPath, initial + adapter.replace('[harnesses.agent]\n', '[harnesses.agent]\nauto_verify = true\n'));
+  await run();
+  [record] = await client.runs({ limit: 1 });
   assert.equal(record.outcome, "success");
   assert.equal(record.outcome_evidence.source, "verification");
   assert.equal(record.lifecycle.state, "completed");

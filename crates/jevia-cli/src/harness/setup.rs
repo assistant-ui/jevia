@@ -82,7 +82,7 @@ pub struct Options {
     /// Disable both explicit and automatic verification (process-only records).
     #[arg(long, conflicts_with = "verify_command")]
     no_verification: bool,
-    /// Use automatic project tests instead of an explicit verifier.
+    /// Opt in to automatic project tests instead of an explicit verifier.
     #[arg(long, conflicts_with_all = ["no_verification", "verify_command"])]
     auto_verification: bool,
     /// Back up and atomically save the previewed harness configuration.
@@ -184,7 +184,7 @@ fn prepare(paths: &ProjectPaths, options: &Options) -> Result<ConfigEdit> {
             } else if options.auto_verification {
                 true
             } else {
-                previous.is_none_or(|h| h.auto_verify)
+                previous.is_some_and(|h| h.auto_verify)
             },
             command,
             args,

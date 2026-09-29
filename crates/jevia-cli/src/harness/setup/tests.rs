@@ -88,13 +88,13 @@ fn replacement_preserves_verifier_unless_explicitly_changed_or_removed() {
 }
 
 #[test]
-fn automatic_verification_defaults_on_and_explicit_disabling_survives_replacement() {
+fn automatic_verification_is_opt_in_and_explicit_choices_survive_replacement() {
     let (_directory, paths) = fixture();
     let mut opts = options();
     opts.verify_command = None;
     opts.verify_args.clear();
     let automatic = prepare(&paths, &opts).unwrap();
-    assert!(automatic.next.harnesses["agent"].auto_verify);
+    assert!(!automatic.next.harnesses["agent"].auto_verify);
     assert!(automatic.next.harnesses["agent"].verification.is_none());
     automatic.commit().unwrap();
     opts.no_verification = true;
@@ -103,6 +103,9 @@ fn automatic_verification_defaults_on_and_explicit_disabling_survives_replacemen
     opts.command = Some("changed".into());
     assert!(!prepare(&paths, &opts).unwrap().next.harnesses["agent"].auto_verify);
     opts.auto_verification = true;
+    assert!(prepare(&paths, &opts).unwrap().next.harnesses["agent"].auto_verify);
+    prepare(&paths, &opts).unwrap().commit().unwrap();
+    opts.auto_verification = false;
     assert!(prepare(&paths, &opts).unwrap().next.harnesses["agent"].auto_verify);
 }
 
