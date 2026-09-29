@@ -599,15 +599,16 @@ the selected backend. These options require v0.1.2 or newer.
 The guided CLI path avoids editing TOML by hand (run `jevia init` first):
 
 ```sh
-jevia storage setup sqlite --import-jsonl
+jevia storage setup sqlite --path .data/jevia/history.db --import-jsonl
 # Stop all Jevia writers/supervisors using this workspace, then:
-jevia storage setup sqlite --import-jsonl --apply --confirm-stopped
+jevia storage setup sqlite --path .data/jevia/history.db --import-jsonl --apply --confirm-stopped
 jevia storage check
 jevia stats
 ```
 
 The first command previews without creating files or contacting a database.
-`--path .jevia/custom.db` chooses another local file; paths are resolved from the
+Without `--path`, SQLite uses `.jevia/jevia.db`. `--path` accepts another
+project-relative or absolute local file; relative paths are resolved from the
 discovered project root even when invoked from a subdirectory. Protect and ignore
 custom paths outside `.jevia` yourself. An empty JSONL project can omit
 `--import-jsonl`; a nonempty one must include it to avoid silently abandoning
@@ -620,7 +621,7 @@ Add to `.jevia/config.toml`:
 ```toml
 [storage]
 backend = "sqlite"
-url = "sqlite://.jevia/jevia.db"
+url = "sqlite://.data/jevia/history.db"
 ```
 
 Then explicitly initialize and optionally import your old JSONL history:

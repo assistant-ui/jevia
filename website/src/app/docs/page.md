@@ -185,7 +185,8 @@ omits task text from new records, not older history or the current routing reque
 **Node API availability:** these methods are available in `jevia@0.1.1`. They require CLI 0.1.2 or newer and an existing `jevia init` project. Creating a client never connects to a database or changes storage.
 
 ```typescript
-const target = { backend: "sqlite", path: ".jevia/jevia.db" } as const;
+// Relative paths resolve from the client cwd; absolute paths also work.
+const target = { backend: "sqlite", path: ".data/jevia/history.db" } as const;
 
 // Preview only: no database connection or file changes.
 console.log(await jevia.setupStorage(target, { importJsonl: true }));
@@ -254,22 +255,36 @@ Changing a known outcome requires `--reason`. Jevia retains the prior value in f
 ## Choose and configure storage
 
 - **JSONL · default:** No setup required. Local history lives in `.jevia/runs.jsonl` and is ignored by Git.
-- **SQLite · local database:** A bundled, server-free database for larger local histories and indexed queries.
-- **PostgreSQL · shared evidence:** Bring a direct or session-pooled database for trusted workspaces that share one project.
+- **SQLite · local database:** Defaults to `.jevia/jevia.db`; choose another project-relative or absolute file with `--path`.
+- **PostgreSQL · shared evidence:** Records live in your configured database under the selected project namespace.
 
 ### Move a project to SQLite
 
 ```bash
-# Preview the migration; this writes nothing
-jevia storage setup sqlite --import-jsonl
+# Choose a project-relative or absolute SQLite file; preview writes nothing
+jevia storage setup sqlite \
+  --path .data/jevia/history.db \
+  --import-jsonl
 
-# Stop Jevia writers and supervisors, then apply the reviewed plan
-jevia storage setup sqlite --import-jsonl --apply --confirm-stopped
+# Stop Jevia writers and supervisors, then apply the same reviewed path
+jevia storage setup sqlite \
+  --path .data/jevia/history.db \
+  --import-jsonl --apply --confirm-stopped
 jevia storage check
 jevia stats
 ```
 
-Omit `--import-jsonl` when the current JSONL history is empty. The source file is never deleted or rewritten. Relative paths resolve from the project root.
+Without `--path`, SQLite uses `.jevia/jevia.db`. Relative paths resolve from the discovered project root, even when the command runs in a subdirectory; absolute paths are also accepted. Omit `--import-jsonl` when the current JSONL history is empty. The source file is never deleted or rewritten.
+
+The selected location is saved in `.jevia/config.toml`:
+
+```toml
+[storage]
+backend = "sqlite"
+url = "sqlite://.data/jevia/history.db"
+```
+
+Files under `.jevia` are ignored automatically. If you choose a path elsewhere, add the database, its WAL/SHM sidecars, and run-lock files to your ignore rules and protect the containing directory.
 
 ### Share evidence with PostgreSQL
 
