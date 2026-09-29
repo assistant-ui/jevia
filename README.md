@@ -343,6 +343,9 @@ const model = {
 const result = await runYourHarness({ task, model, runId: route.run_id });
 const verified = await verifyResult(result);
 await jevia.feedback(route.run_id, verified ? "success" : "failure");
+
+// Automatically uses eligible outcomes already in the project's storage.
+const next = await jevia.route("investigate another integration failure");
 ~~~
 
 The adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor Agent,
@@ -351,6 +354,18 @@ tier; the application maps that tier to a harness-specific model. Feedback stays
 explicit—a successful process or function return is not automatically proof of
 task success. The CLI must already be installed and available on `PATH`; npm
 installation does not run a binary downloader.
+
+The SDK does not require Jevia's built-in verifier: your application decides how
+to establish the outcome and records it. `manual` evidence means explicitly
+reported by the application or user, not necessarily human-entered. Each
+`route()` automatically loads recent eligible successes/failures from the
+selected JSONL, SQLite, or PostgreSQL history before deciding. No history argument
+or manual cache clearing is needed; the evidence is part of the cache key.
+Unknown, active, and process-only records do not influence routing. The
+`[router].history_limit` setting bounds this context (default 20, maximum 100;
+0 disables it). This supplies evidence to Jev, not model training. See the
+[SDK outcome loop](packages/jevia-node/README.md#recorded-outcomes-inform-the-next-route-automatically)
+for provenance and privacy details.
 
 ## Automatic CLI pipeline (unreleased)
 

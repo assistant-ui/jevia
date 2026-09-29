@@ -48,6 +48,9 @@ const HARNESS_ADAPTER = [
   "  route.run_id,",
   '  verified ? "success" : "failure",',
   ");",
+  "",
+  "// Recorded outcomes are included automatically in the next decision.",
+  'const next = await jevia.route("fix another parser regression");',
 ].join("\n");
 
 const STORAGE_SETUP = [
@@ -98,7 +101,7 @@ const METHODS = [
   },
   {
     signature: "route(task, options?)",
-    description: "Choose a capability tier and return the complete typed route record.",
+    description: "Choose a capability tier using recent eligible recorded outcomes automatically, and return the typed route record.",
   },
   {
     signature: "feedback(runId, outcome, options?)",
@@ -176,7 +179,9 @@ export default function DocsPage() {
             <p className="docs-body-copy">
               A route returns the selected tier, confidence, probabilities, cache source,
               and a traceable run ID. Routing chooses capability; it does not claim the
-              task succeeded.
+              task succeeded. Every call automatically reads recent eligible outcomes
+              from the project&apos;s selected storage before choosing a tier—no history
+              argument or extra fetch is needed.
             </p>
           </section>
 
@@ -296,6 +301,28 @@ export default function DocsPage() {
               Agent, Copilot CLI, Aider, Goose, Amp, or a custom runner. Submit feedback
               only after your verifier determines the actual outcome of this
               SDK-controlled work, not again after a supervised CLI run.
+            </p>
+            <div className="docs-note">
+              <strong>Recorded outcomes inform the next route</strong>
+              <p>
+                The SDK does not require Jevia&apos;s built-in verifier. Your application
+                can use tests, acceptance checks, or a user-approved result and record
+                success or failure. This is labeled <code>manual</code> evidence
+                (application-reported), not CLI verification. Use <code>unknown</code>
+                when the result is uncertain. The next <code>route()</code> automatically
+                includes eligible recorded outcomes from the same JSONL, SQLite, or
+                PostgreSQL history, including CLI-verified results. No manual cache
+                clearing is needed: evidence is part of the cache key.
+              </p>
+            </div>
+            <p className="docs-body-copy">
+              Pending/unknown, active, and process-exit-only records are excluded.
+              <code> [router].history_limit</code> bounds recent evidence: default 20,
+              maximum 100, or 0 to disable it. This is decision context, not model
+              training or a guarantee of better choices. Live requests send eligible
+              historical task text and outcome metadata to Jev; feedback reasons stay
+              in storage. <code>[privacy].store_task_text = false</code> omits task text
+              from new records, not older history or the current routing request.
             </p>
           </section>
 

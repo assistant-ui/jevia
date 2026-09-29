@@ -86,6 +86,11 @@ function assertAutomaticPipelineDocs(content) {
   assert.match(text, /when the agent process\/session finishes/);
   assert.match(text, /SDK routing does not launch an agent or run tests/);
   assert.match(text, /no human feedback prompt is required/);
+  assert.match(text, /Recorded outcomes inform the next route/);
+  assert.match(text, /No manual cache clearing is needed/);
+  assert.match(text, /application-reported/);
+  assert.match(text, /history_limit/);
+  assert.match(text, /feedback reasons stay in storage/);
 }
 
 test("the build includes crawler discovery and social image assets", async () => {

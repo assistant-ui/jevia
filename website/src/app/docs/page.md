@@ -30,10 +30,13 @@ console.log(route.tier, route.confidence, route.run_id);
 
 A route returns the selected tier, confidence, probabilities, cache source, and a traceable run ID. Routing chooses capability; it does not claim the task succeeded.
 
+Every call automatically reads recent eligible outcomes from the project's
+selected storage before choosing a tier—no history argument or extra fetch is needed.
+
 ## Client methods
 
 - `version(options?)` — Return the installed Jevia CLI version after validating its output.
-- `route(task, options?)` — Choose a capability tier and return the complete typed route record.
+- `route(task, options?)` — Choose a capability tier using recent eligible recorded outcomes automatically, and return the typed route record.
 - `feedback(runId, outcome, options?)` — Record an explicit success, failure, or unknown outcome for a run.
 - `runs(options?)` — List recent route records with a configurable positive result limit.
 - `show(runId, options?)` — Read one complete route record, including lifecycle and outcome evidence.
@@ -147,12 +150,32 @@ await jevia.feedback(
   route.run_id,
   verified ? "success" : "failure",
 );
+
+// Recorded outcomes are included automatically in the next decision.
+const next = await jevia.route("fix another parser regression");
 ```
 
 Your adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor Agent,
 Copilot CLI, Aider, Goose, Amp, or a custom runner. Submit feedback only after your
 verifier determines the actual outcome of this SDK-controlled work, not again
 after a supervised CLI run.
+
+### Recorded outcomes inform the next route
+
+The SDK does not require Jevia's built-in verifier. Your application can use
+tests, acceptance checks, or a user-approved result and record success or failure.
+This is labeled `manual` evidence (application-reported), not CLI verification.
+Use `unknown` when the result is uncertain. The next `route()` automatically
+includes eligible recorded outcomes from the same JSONL, SQLite, or PostgreSQL
+history, including CLI-verified results. No manual cache clearing is needed:
+evidence is part of the cache key.
+
+Pending/unknown, active, and process-exit-only records are excluded.
+`[router].history_limit` bounds recent evidence: default 20, maximum 100, or 0 to
+disable it. This is decision context, not model training or a guarantee of better
+choices. Live requests send eligible historical task text and outcome metadata
+to Jev; feedback reasons stay in storage. `[privacy].store_task_text = false`
+omits task text from new records, not older history or the current routing request.
 
 ## Cancellation and errors
 

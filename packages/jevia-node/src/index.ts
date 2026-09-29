@@ -224,6 +224,11 @@ export class JeviaClient {
     return match[1];
   }
 
+  /**
+   * Route using recent eligible outcomes from the project's configured storage.
+   * Recorded feedback is loaded automatically and participates in the cache key;
+   * callers do not need to fetch or resend history. Does not execute the task.
+   */
   async route(task: string, options: RouteOptions = {}): Promise<RouteRecord> {
     requireText(task, "task");
     const args = ["route", "--json"];
@@ -232,6 +237,11 @@ export class JeviaClient {
     return this.record(await this.execute(args, options.signal));
   }
 
+  /**
+   * Record an application-reported outcome for subsequent routing automatically.
+   * No built-in verifier is required; provenance remains manual, not verification.
+   * Use unknown when the result is uncertain (excluded from learning).
+   */
   async feedback(
     runId: string,
     outcome: Outcome,

@@ -57,6 +57,11 @@ The boundary is the launched process/session, not each internal agent message or
 tool call. Harness installation, credentials, model mapping, and project test
 prerequisites are still user setup. `route` and SDK routing methods stop at the
 routing decision; their caller owns execution, verification, and outcome reporting.
+Explicit SDK feedback is application-reported evidence and does not require a
+CLI verifier or external-completion call to become eligible. Every subsequent
+`route` reads eligible history from the selected backend before building its
+cache key and Jev request. The shared evidence filter and `router.history_limit`
+apply equally to SDK and CLI callers; no separate SDK history payload is needed.
 
 ### Routing cache
 

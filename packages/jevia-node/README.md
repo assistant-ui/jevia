@@ -59,6 +59,9 @@ const result = await runYourHarness({
 
 const verified = await verifyResult(result);
 await jevia.feedback(route.run_id, verified ? "success" : "failure");
+
+// Prior recorded outcomes are included automatically; no history argument needed.
+const next = await jevia.route("fix another parser regression");
 ```
 
 `runYourHarness` can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor
@@ -67,6 +70,34 @@ capability tier; your adapter owns the tier-to-model mapping and harness API.
 
 Feedback is explicit. A successful function return is not automatically treated
 as proof that the task succeeded.
+
+### Recorded outcomes inform the next route automatically
+
+The SDK does not require Jevia's built-in verifier. Your application can use
+tests, an acceptance check, or a user-approved result, then record `success` or
+`failure` with `feedback`. The source is labeled `manual` (application-reported),
+not `verification`; it does not mean a person must type the feedback. Record
+`unknown` when you cannot establish the outcome.
+
+On every `route()` call, Jevia loads recent eligible outcomes from that project's
+selected JSONL, SQLite, or PostgreSQL storage before choosing a tier. There is no
+need to fetch history with `runs()` or pass it back to `route()`. CLI-verified
+results and SDK-reported results in the same history can both contribute. The
+unreleased `complete()` method also records an eligible outcome while closing an
+external run, but completion is not required merely to reuse `feedback`.
+
+- Only known successes/failures backed by verification or explicit feedback are
+  included. Pending/unknown, active, and process-exit-only records are excluded.
+- `[router].history_limit` bounds the recent evidence (default 20, maximum 100;
+  0 disables history input). This is context for a decision, not model training
+  or a guarantee that future decisions improve.
+- The evidence is part of the routing-cache key. A changed evidence payload
+  prevents reuse of a decision based on older outcomes; unchanged inputs can
+  still use the cache. No cache clearing or `noCache` flag is needed after feedback.
+- On a live request, eligible historical task text and outcome metadata are
+  supplied to Jev. Feedback reasons stay in storage and are not sent to Jev.
+  `[privacy].store_task_text = false` omits task text from newly recorded history;
+  it does not erase older records or hide the current task sent for routing.
 
 ## API
 
