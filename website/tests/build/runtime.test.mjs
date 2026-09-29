@@ -32,6 +32,9 @@ test("prerendering emits the homepage and the unchanged installer", async () => 
   const source = await readFile(new URL("../../public/install.sh", import.meta.url));
   const built = await readFile(new URL("static/install.sh", output));
   assert.deepEqual(built, source);
+  const powershellSource = await readFile(new URL("../../public/install.ps1", import.meta.url));
+  const builtPowershell = await readFile(new URL("static/install.ps1", output));
+  assert.deepEqual(builtPowershell, powershellSource);
 });
 
 test("prerendering emits the Jevia documentation", async () => {

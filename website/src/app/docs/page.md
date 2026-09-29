@@ -15,6 +15,14 @@ jevia check
 jevia route "fix the flaky integration test"
 ```
 
+On native Windows, install the same checksum-verified CLI with PowerShell 5.1
+or newer, then continue with the commands above:
+
+```powershell
+irm https://jevia.dev/install.ps1 | iex
+jevia --version
+```
+
 `jevia doctor` checks local configuration and storage without calling Jev. `jevia check` performs one live routing round trip without saving a synthetic run.
 
 ## Route, run, and inspect

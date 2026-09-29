@@ -35,6 +35,12 @@ Install the checksum-verified macOS or Linux binary without Rust or Cargo:
 curl -fsSL https://jevia.dev/install.sh | sh
 ```
 
+On Windows, use PowerShell 5.1 or newer:
+
+```powershell
+irm https://jevia.dev/install.ps1 | iex
+```
+
 Initialize a project and check the full routing path:
 
 ```bash

@@ -5,10 +5,18 @@ import ts from "typescript";
 
 const source = readFileSync(new URL("../src/lib/install-guide.ts", import.meta.url), "utf8");
 const installerSource = readFileSync(new URL("../public/install.sh", import.meta.url), "utf8");
+const powershellInstallerSource = readFileSync(
+  new URL("../public/install.ps1", import.meta.url),
+  "utf8",
+);
 const installerVersion = installerSource.match(
   /JEVIA_VERSION="\$\{JEVIA_VERSION:-([^}]+)\}"/,
 )?.[1];
 assert.ok(installerVersion, "installer declares a default version");
+const powershellInstallerVersion = powershellInstallerSource.match(
+  /\$DefaultJeviaVersion = "([^"]+)"/,
+)?.[1];
+assert.equal(powershellInstallerVersion, installerVersion);
 const { outputText } = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
 });
@@ -19,6 +27,7 @@ const { getInstallGuide } = await import(
 test("uses the current origin for localhost and production installers", () => {
   for (const origin of ["http://localhost:3000", "https://example.com"]) {
     assert.ok(getInstallGuide(origin).includes(`curl -fsSL ${origin}/install.sh | sh`));
+    assert.ok(getInstallGuide(origin).includes(`irm ${origin}/install.ps1 | iex`));
   }
   assert.ok(!getInstallGuide("https://example.com").includes("http://localhost:3000"));
 });
@@ -27,7 +36,7 @@ test("includes the complete installation and verification sequence", () => {
   const guide = getInstallGuide("http://localhost:3000");
   assert.ok(guide.startsWith("# Install and verify Jevia\n"));
   assert.match(guide, /prebuilt binary/);
-  assert.match(guide, /does not require Rust or Cargo/);
+  assert.match(guide, /do not require Rust or Cargo/);
   assert.ok(guide.includes(`releases/tag/v${installerVersion}`));
   assert.match(guide, /SHA-256 checksum/);
   const steps = [
