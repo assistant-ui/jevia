@@ -258,6 +258,54 @@ Changing a known outcome requires `--reason`. Jevia retains the prior value in f
 - **SQLite · local database:** Defaults to `.jevia/jevia.db`; choose another project-relative or absolute file with `--path`.
 - **PostgreSQL · shared evidence:** Records live in your configured database under the selected project namespace.
 
+### What a stored run looks like
+
+Every backend preserves the same logical record. JSONL writes one compact JSON object per line to `.jevia/runs.jsonl`; this example is expanded only for readability. SQLite and PostgreSQL store the equivalent fields while keeping the same lifecycle and outcome-evidence semantics.
+
+```json
+{
+  "schema_version": 3,
+  "run_id": "7b65a69a-0a6f-4a89-bd73-88f090954dd9",
+  "tier": "balanced",
+  "suggested_tier": "balanced",
+  "confidence": 0.84,
+  "probabilities": {
+    "fast": 0.1,
+    "balanced": 0.84,
+    "strong": 0.06
+  },
+  "fallback_applied": false,
+  "jev_model": "jev-latest",
+  "created_at_ms": 1790700000000,
+  "source": "live",
+  "task": "fix the flaky integration test",
+  "outcome": "success",
+  "execution": {
+    "harness": "codex",
+    "model": "provider/standard",
+    "duration_ms": 48231,
+    "exit_code": 0,
+    "verification": {
+      "command": "pnpm",
+      "launched": true,
+      "duration_ms": 6842,
+      "exit_code": 0
+    }
+  },
+  "lifecycle": {
+    "state": "completed",
+    "started_at_ms": 1790700001120,
+    "finished_at_ms": 1790700056193
+  },
+  "outcome_evidence": {
+    "source": "verification",
+    "recorded_at_ms": 1790700056193
+  }
+}
+```
+
+Jev selects the tier, but it does not declare its own work successful. In this record, the verifier exited successfully, so `outcome_evidence.source` is `verification`. Set `privacy.store_task_text = false` to persist `task: null` instead of the raw task.
+
 ### Move a project to SQLite
 
 ```bash
