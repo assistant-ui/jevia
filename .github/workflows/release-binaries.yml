@@ -98,15 +98,44 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     permissions:
+      artifact-metadata: write
+      attestations: write
       contents: write
+      id-token: write
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          file: Cargo.lock
+          format: spdx-json
+          output-file: dist/jevia-${{ env.RELEASE_TAG }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Attest release build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            dist/jevia-${{ env.RELEASE_TAG }}-*
+            !dist/*.sha256
+            !dist/*.spdx.json
+      - name: Attest release SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            dist/jevia-${{ env.RELEASE_TAG }}-*
+            !dist/*.sha256
+            !dist/*.spdx.json
+          sbom-path: dist/jevia-${{ env.RELEASE_TAG }}.spdx.json
       - name: Create or update GitHub release
         shell: bash
         run: |
@@ -131,6 +160,7 @@ jobs:
             installer: powershell
     runs-on: ${{ matrix.os }}
     env:
+      GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
@@ -147,6 +177,10 @@ jobs:
           JEVIA_INSTALL_DIR="$install_dir" \
             sh website/public/install.sh
           test "$("$install_dir/jevia" --version)" = "jevia $version"
+          gh attestation verify "$install_dir/jevia" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "$install_dir/jevia" \
+            --repo "$GITHUB_REPOSITORY" \
+            --predicate-type https://spdx.dev/Document/v2.3
           project="$RUNNER_TEMP/jevia-project"
           mkdir -p "$project"
           cd "$project"
@@ -166,6 +200,10 @@ jobs:
           if ((& $binary --version) -ne "jevia $version") {
             throw "installed Jevia version does not match $version"
           }
+          gh attestation verify $binary --repo $env:GITHUB_REPOSITORY
+          gh attestation verify $binary `
+            --repo $env:GITHUB_REPOSITORY `
+            --predicate-type https://spdx.dev/Document/v2.3
           $project = Join-Path $env:RUNNER_TEMP "jevia-project"
           New-Item -ItemType Directory -Path $project -Force | Out-Null
           Push-Location $project
