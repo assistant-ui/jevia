@@ -17,6 +17,27 @@ The npm package does not download or execute an installer during `npm install`.
 By default it finds `jevia` on `PATH`; pass `binary` when the executable lives
 elsewhere.
 
+## Automatic CLI or explicit SDK?
+
+For end-to-end execution, configure your installed harness once and use
+`jevia run codex "fix the failing test"`. Jevia launches the agent, runs its
+verifier after a successful exit, and saves the result automatically. **No manual
+`feedback` or `complete` call is needed after `jevia run`.** Verification happens
+when the launched process/session ends, not after each internal agent message.
+
+Automatic detection of existing root Rust/Node tests is **unreleased**, pending
+the next CLI release after 0.1.3. With CLI 0.1.3, configure a verifier once. If no
+usable verifier is available, Jevia records an unverified, process-only result;
+it does not treat the agent exiting as proof of task success. See the
+[CLI pipeline documentation](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline-unreleased).
+
+Use the SDK when your application should control how agents run and how their
+work is checked. SDK routing does not launch a harness or run project tests.
+Feedback and verification are optional. You can use `route()` on its own, or
+record a known result with `feedback()` without running any verifier. Your
+application may add verification if it wants; no human feedback prompt is
+required. The SDK never infers task success from a successful function return.
+
 ## Route from any harness
 
 ```ts
@@ -38,16 +59,54 @@ const result = await runYourHarness({
   runId: route.run_id,
 });
 
-const verified = await verifyResult(result);
-await jevia.feedback(route.run_id, verified ? "success" : "failure");
+// Optional: your adapter may expose a known outcome; no verifier is required.
+if (result.outcome === "success" || result.outcome === "failure") {
+  await jevia.feedback(route.run_id, result.outcome);
+}
+
+// Prior recorded outcomes are included automatically; no history argument needed.
+const next = await jevia.route("fix another parser regression");
 ```
 
 `runYourHarness` can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor
 Agent, Copilot CLI, Aider, Goose, Amp, or a custom agent. Jevia selects a
 capability tier; your adapter owns the tier-to-model mapping and harness API.
+`result.outcome` above is an optional field on your own adapter's result, not
+something Jevia infers or requires from the agent.
 
-Feedback is explicit. A successful function return is not automatically treated
-as proof that the task succeeded.
+If you skip feedback, the routing decision is still stored with outcome
+`unknown`; later routing continues normally using other eligible recorded
+outcomes. If you report success or failure, it can inform the next route without
+requiring verifier evidence. You can also explicitly record `unknown` when the
+result is inconclusive. The SDK does not generate positive feedback on your behalf.
+
+### Recorded outcomes inform the next route automatically
+
+The SDK does not require Jevia's built-in verifier. Your application can use
+tests, an acceptance check, or a user-approved result, then record `success` or
+`failure` with `feedback`. The source is labeled `manual` (application-reported),
+not `verification`; it does not mean a person must type the feedback. Record
+`unknown` when you cannot establish the outcome.
+
+On every `route()` call, Jevia loads recent eligible outcomes from that project's
+selected JSONL, SQLite, or PostgreSQL storage before choosing a tier. There is no
+need to fetch history with `runs()` or pass it back to `route()`. CLI-verified
+results and SDK-reported results in the same history can both contribute. The
+unreleased `complete()` method also records an eligible outcome while closing an
+external run, but completion is not required merely to reuse `feedback`.
+
+- Only known successes/failures backed by verification or explicit feedback are
+  included. Pending/unknown, active, and process-exit-only records are excluded.
+- `[router].history_limit` bounds the recent evidence (default 20, maximum 100;
+  0 disables history input). This is context for a decision, not model training
+  or a guarantee that future decisions improve.
+- The evidence is part of the routing-cache key. A changed evidence payload
+  prevents reuse of a decision based on older outcomes; unchanged inputs can
+  still use the cache. No cache clearing or `noCache` flag is needed after feedback.
+- On a live request, eligible historical task text and outcome metadata are
+  supplied to Jev. Feedback reasons stay in storage and are not sent to Jev.
+  `[privacy].store_task_text = false` omits task text from newly recorded history;
+  it does not erase older records or hide the current task sent for routing.
 
 ## API
 
@@ -125,13 +184,13 @@ inspect the stored state before retrying; cancellation is not a rollback guarant
 ## External completion (unreleased)
 
 `complete` requires the next CLI release after 0.1.3 and the next npm release;
-it is not available in `jevia@0.1.0`. After your harness and verifier have both
-stopped, use it instead of `feedback` when you also want to finish the run:
+it is not available in `jevia@0.1.0`. After your harness and any optional verifier
+have stopped, use it instead of `feedback` when you also want to finish the run:
 
 ```ts
-const done = await jevia.complete(route.run_id, verified ? "success" : "failure", {
+const done = await jevia.complete(route.run_id, result.outcome ?? "unknown", {
   confirmStopped: true,
-  reason: "External verification finished",
+  reason: "External work finished",
 });
 ```
 

@@ -46,7 +46,7 @@ Add `--json` where supported for stable machine-readable output. Run `jevia <com
 4. **Record:** The verified outcome is attached to the run with its evidence source.
 5. **Adapt:** Eligible outcomes become evidence for later routing decisions.
 
-Jevia does not decide that its own output is good. A completed verifier or explicit human feedback supplies the outcome used as learning evidence.
+Jevia does not decide that its own output is good. A completed verifier or explicit application or human feedback supplies the outcome used as learning evidence.
 
 ## Connect any harness
 
@@ -84,7 +84,39 @@ Changing an existing adapter also requires `--replace`. Extra harness arguments 
 
 The same pattern works with Claude Code, Codex, OpenCode, Gemini CLI, Cursor Agent, Copilot CLI, Aider, Goose, Amp, or a custom runner. Jevia learns from outcomes while the adapter owns the tier-to-model mapping.
 
+### Automatic CLI pipeline
+
+Configure your installed harness, credentials, and model mappings once. Then
+`jevia run` routes the task, launches the agent, runs verification after a
+successful exit, and records the outcome in your selected storage backend.
+**No manual `feedback` or `runs complete` step is needed.** Verifier-backed
+outcomes become evidence for later routing decisions automatically.
+
+```bash
+jevia run codex "fix the failing test"
+```
+
+Automatic test detection is **unreleased**, pending the next CLI release after
+0.1.3. The current installer still installs 0.1.3: configure a verifier once for
+that version. The upcoming CLI detects root Rust workspace tests or Node test
+scripts; an explicit verifier takes precedence. Missing or ambiguous checks stay
+unverified and are excluded from learning. Passing tests is evidence, not proof
+of every requirement.
+
+Verification runs when the agent process/session finishes, not after each internal
+message or tool call. Jevia does not install the agent or test runner, supply
+credentials, bypass agent permission prompts, or retry failed work. Prepare
+project dependencies first. See the
+[CLI setup and verification reference](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline-unreleased)
+for supported tests, deadlines, and opt-out settings.
+
 ## Use the Node.js SDK
+
+Map Jevia's tier to your harness model and let your application run the work.
+Feedback and verification are optional. SDK routing does not launch an agent or
+run tests. If your application knows the result, it can report it without a
+verifier; no human feedback prompt is required. Skipping feedback still records
+the route with an unknown outcome and does not block later routing:
 
 Install the typed package after installing the Jevia CLI:
 
@@ -105,20 +137,45 @@ const result = await runYourHarness({
   runId: route.run_id,
 });
 
-const passed = await verifyResult(result);
-await jevia.feedback(
-  route.run_id,
-  passed ? "success" : "failure",
-);
+// Optional: your adapter may expose a known outcome; no verifier is required.
+if (result.outcome === "success" || result.outcome === "failure") {
+  await jevia.feedback(route.run_id, result.outcome);
+}
+
+// Recorded outcomes are included automatically in the next decision.
+const next = await jevia.route("fix another parser regression");
 ```
 
 The SDK invokes the local CLI through its shell-free JSON interface. The CLI must already be available on `PATH`; npm installation never runs a binary downloader. Pass an `AbortSignal` in method options when the caller needs cancellation.
 
+Your adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor Agent,
+Copilot CLI, Aider, Goose, Amp, or a custom runner. The optional `result.outcome`
+field above comes from your own adapter; Jevia does not infer it from a successful
+function return. Report only known outcomes, and do not submit feedback again
+after a supervised CLI run.
+
+### Recorded outcomes inform the next route
+
+The SDK does not require Jevia's built-in verifier. Your application can use
+tests, acceptance checks, or a user-approved result and record success or failure.
+This is labeled `manual` evidence (application-reported), not CLI verification.
+Use `unknown` when the result is uncertain. The next `route()` automatically
+includes eligible recorded outcomes from the same JSONL, SQLite, or PostgreSQL
+history, including CLI-verified results. No manual cache clearing is needed:
+evidence is part of the cache key.
+
+Unknown, active, and process-exit-only records are excluded.
+`[router].history_limit` bounds recent evidence: default 20, maximum 100, or 0 to
+disable it. This is decision context, not model training or a guarantee of better
+choices. Live requests send eligible historical task text and outcome metadata
+to Jev; feedback reasons stay in storage. `[privacy].store_task_text = false`
+omits task text from new records, not older history or the current routing request.
+
 ### Client methods
 
 - `version(options?)` — Return the installed CLI version after validating its output.
-- `route(task, options?)` — Choose a tier and return the complete typed route record.
-- `feedback(runId, outcome, options?)` — Record success, failure, or unknown.
+- `route(task, options?)` — Choose a tier using recent eligible recorded outcomes automatically and return the complete typed route record.
+- `feedback(runId, outcome, options?)` — Optionally record an application-reported outcome. No verifier is required; omitting feedback leaves the outcome unknown.
 - `runs(options?)` — List recent route records with a configurable positive result limit.
 - `show(runId, options?)` — Read one complete record, including lifecycle and evidence.
 - `setupStorage(target, options?)` — Unreleased: preview SQLite or PostgreSQL setup and apply only with confirmation.
@@ -177,6 +234,10 @@ Log the message, exit code, and signal. Raw command, stdout, and stderr can cont
 
 ## Verify and report outcomes
 
+These commands are for externally executed work or corrections. A supervised
+`jevia run` records its outcome automatically; no manual feedback step is needed
+afterward.
+
 ```bash
 jevia feedback <run-id> success
 jevia feedback <run-id> failure --reason "The integration test still fails"
@@ -184,8 +245,8 @@ jevia feedback <run-id> unknown --reason "No reliable verification result"
 jevia runs show <run-id>
 ```
 
-- `verification` — A configured verifier produced a known result. Eligible for learning.
-- `manual` — A person explicitly recorded success or failure. Eligible for learning.
+- `verification` — A configured or detected verifier produced a known result. Eligible for learning.
+- `manual` — An application or person explicitly recorded success or failure. Eligible for learning.
 - `process_exit` — The harness exited. Visible for diagnosis, but not learning evidence by itself.
 - `unknown` — No trusted result is known, so it stays out of the adaptive evidence set.
 

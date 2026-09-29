@@ -98,11 +98,13 @@ const SDK_EXAMPLE = [
   "  runId: route.run_id,",
   "});",
   "",
-  "const passed = await verifyResult(result);",
-  "await jevia.feedback(",
-  "  route.run_id,",
-  '  passed ? "success" : "failure",',
-  ");",
+  "// Optional: your adapter may expose a known outcome; no verifier is required.",
+  'if (result.outcome === "success" || result.outcome === "failure") {',
+  "  await jevia.feedback(route.run_id, result.outcome);",
+  "}",
+  "",
+  "// Recorded outcomes are included automatically in the next decision.",
+  'const next = await jevia.route("fix another parser regression");',
 ].join("\n");
 
 const SDK_STORAGE_SETUP = [
@@ -151,11 +153,11 @@ const METHODS = [
   },
   {
     signature: "route(task, options?)",
-    description: "Choose a capability tier and return the complete typed route record.",
+    description: "Choose a capability tier using recent eligible recorded outcomes automatically, and return the typed route record.",
   },
   {
     signature: "feedback(runId, outcome, options?)",
-    description: "Record an explicit success, failure, or unknown outcome for a run.",
+    description: "Optionally record an application-reported outcome. No verifier is required; omitting feedback leaves the outcome unknown.",
   },
   {
     signature: "runs(options?)",
@@ -211,11 +213,11 @@ const OUTCOME_COMMANDS = [
 const EVIDENCE_TYPES = [
   {
     signature: "verification",
-    description: "A configured verifier completed and produced a known result. Eligible for learning.",
+    description: "A configured or detected verifier completed and produced a known result. Eligible for learning.",
   },
   {
     signature: "manual",
-    description: "A person explicitly recorded success or failure. Eligible for learning.",
+    description: "An application or person explicitly recorded success or failure. Eligible for learning.",
   },
   {
     signature: "process_exit",
@@ -317,6 +319,12 @@ export default function DocsPage() {
               with the CLI, connect the models and agents you already use, then feed
               verified results back into later routing decisions.
             </p>
+            <p>
+              With <code>jevia run</code>, the CLI handles execution,
+              verification, and outcome recording automatically. No manual feedback
+              step is needed. See <a href="#adapters">automatic CLI execution</a> below
+              for setup, release availability, and verification limits.
+            </p>
           </header>
 
           <section className="docs-section" id="install" aria-labelledby="install-title">
@@ -384,7 +392,7 @@ export default function DocsPage() {
               <strong>Verified, not self-scored</strong>
               <p>
                 Jevia does not decide that its own output is good. A completed verifier
-                or explicit human feedback supplies the outcome used as learning evidence.
+                or explicit application or human feedback supplies the outcome used as learning evidence.
               </p>
             </div>
           </section>
@@ -418,6 +426,38 @@ export default function DocsPage() {
                 outcomes, while the adapter owns the tier-to-model mapping.
               </p>
             </div>
+            <div className="docs-note">
+              <strong>Automatic CLI pipeline</strong>
+              <p>
+                Configure your installed harness, credentials, and model mappings once.
+                Then <code>jevia run</code> routes the task, launches the agent, runs
+                verification after a successful exit, and records the outcome in your
+                selected storage backend. No manual <code>feedback</code> or
+                <code> runs complete</code> step is needed. Verifier-backed outcomes
+                become evidence for later routing decisions automatically.
+              </p>
+            </div>
+            <CommandBlock
+              command={'jevia run codex "fix the failing test"'}
+              label="Run a configured harness"
+            />
+            <p className="docs-body-copy">
+              Automatic test detection is unreleased, pending the next CLI release
+              after 0.1.3. The current installer still installs 0.1.3: configure a
+              verifier once for that version. The upcoming CLI detects root Rust
+              workspace tests or Node test scripts; an explicit verifier takes
+              precedence. Missing or ambiguous checks stay unverified and are excluded
+              from learning. Passing tests is evidence, not proof of every requirement.
+            </p>
+            <p className="docs-body-copy">
+              Verification runs when the agent process/session finishes, not after each
+              internal message or tool call. Jevia does not install the agent or test
+              runner, supply credentials, bypass agent permission prompts, or retry
+              failed work. Prepare project dependencies first. See the{" "}
+              <a href="https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline-unreleased">
+                CLI setup and verification reference
+              </a> for supported tests, deadlines, and opt-out settings.
+            </p>
           </section>
 
           <section className="docs-section" id="methods" aria-labelledby="methods-title">
@@ -430,6 +470,43 @@ export default function DocsPage() {
             </div>
             <CommandBlock command="npm install jevia" label="Install the Node.js SDK" />
             <CodeBlock code={SDK_EXAMPLE} label="Programmatic harness integration" />
+            <p className="docs-body-copy">
+              For SDK integrations, map Jevia&apos;s tier to your harness model and let
+              your application run the work. Feedback and verification are optional.
+              SDK routing does not launch an agent or run tests. If your application
+              knows the result, it can report it without a verifier; no human feedback
+              prompt is required. Skipping feedback still records the route with an
+              unknown outcome and does not block later routing.
+            </p>
+            <p className="docs-body-copy">
+              Your adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor
+              Agent, Copilot CLI, Aider, Goose, Amp, or a custom runner. The optional
+              <code> result.outcome</code> field above comes from your own adapter;
+              Jevia does not infer it from a successful function return. Report only
+              known outcomes, and do not submit feedback again after a supervised CLI run.
+            </p>
+            <div className="docs-note">
+              <strong>Recorded outcomes inform the next route</strong>
+              <p>
+                The SDK does not require Jevia&apos;s built-in verifier. Your application
+                can use tests, acceptance checks, or a user-approved result and record
+                success or failure. This is labeled <code>manual</code> evidence
+                (application-reported), not CLI verification. Use <code>unknown</code>
+                when the result is uncertain. The next <code>route()</code> automatically
+                includes eligible recorded outcomes from the same JSONL, SQLite, or
+                PostgreSQL history, including CLI-verified results. No manual cache
+                clearing is needed: evidence is part of the cache key.
+              </p>
+            </div>
+            <p className="docs-body-copy">
+              Unknown, active, and process-exit-only records are excluded.
+              <code> [router].history_limit</code> bounds recent evidence: default 20,
+              maximum 100, or 0 to disable it. This is decision context, not model
+              training or a guarantee of better choices. Live requests send eligible
+              historical task text and outcome metadata to Jev; feedback reasons stay
+              in storage. <code>[privacy].store_task_text = false</code> omits task text
+              from new records, not older history or the current routing request.
+            </p>
             <p className="docs-body-copy">
               The SDK invokes the local CLI through its shell-free JSON interface. Install
               the CLI first and keep it on <code>PATH</code>; npm installation never runs a
@@ -484,6 +561,11 @@ export default function DocsPage() {
                 <p>Only trusted, known results teach later routing decisions.</p>
               </div>
             </div>
+            <p className="docs-body-copy">
+              These commands are for externally executed work or corrections. A supervised
+              <code> jevia run</code> records its outcome automatically; no manual feedback
+              step is needed afterward.
+            </p>
             <CodeBlock code={OUTCOME_COMMANDS} label="Record and inspect feedback" language="bash" />
             <div className="docs-methods docs-methods-spaced" role="list">
               {EVIDENCE_TYPES.map((evidence) => (

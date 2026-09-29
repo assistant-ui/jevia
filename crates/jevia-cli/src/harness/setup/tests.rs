@@ -20,6 +20,7 @@ fn options() -> Options {
         verify_command: Some("cargo".into()),
         verify_args: vec!["test".into()],
         no_verification: false,
+        auto_verification: false,
         apply: false,
         replace: false,
     }
@@ -77,11 +78,31 @@ fn replacement_preserves_verifier_unless_explicitly_changed_or_removed() {
         verifier
     );
     changed.no_verification = true;
+    assert!(!prepare(&paths, &changed).unwrap().next.harnesses["agent"].auto_verify);
     assert!(
         prepare(&paths, &changed).unwrap().next.harnesses["agent"]
             .verification
             .is_none()
     );
+}
+
+#[test]
+fn automatic_verification_defaults_on_and_explicit_disabling_survives_replacement() {
+    let (_directory, paths) = fixture();
+    let mut opts = options();
+    opts.verify_command = None;
+    opts.verify_args.clear();
+    let automatic = prepare(&paths, &opts).unwrap();
+    assert!(automatic.next.harnesses["agent"].auto_verify);
+    assert!(automatic.next.harnesses["agent"].verification.is_none());
+    automatic.commit().unwrap();
+    opts.no_verification = true;
+    prepare(&paths, &opts).unwrap().commit().unwrap();
+    opts.no_verification = false;
+    opts.command = "changed".into();
+    assert!(!prepare(&paths, &opts).unwrap().next.harnesses["agent"].auto_verify);
+    opts.auto_verification = true;
+    assert!(prepare(&paths, &opts).unwrap().next.harnesses["agent"].auto_verify);
 }
 
 #[test]

@@ -40,6 +40,7 @@ test("prerendering emits the Jevia documentation", async () => {
   assert.match(html, /Route, run, and inspect/);
   assert.match(html, /How adaptive routing works/);
   assert.match(html, /Programmatic harness integration/);
+  assertAutomaticPipelineDocs(html.replace(/<[^>]+>/g, ""));
   assert.match(html, /setupStorage/);
   assert.match(html, /JeviaCommandError/);
   assert.match(html, /Choose and configure storage/);
@@ -53,7 +54,6 @@ test("prerendering emits the Jevia documentation", async () => {
   assert.match(html, /VIEW \.MD/i);
   assert.match(html, /COPY \.MD/i);
   assert.match(html, /Need a portable version of this guide/);
-  assert.doesNotMatch(html, /blob\/main\/docs\/reference\.md/);
   assert.match(html, /<title>Documentation — Jevia<\/title>/);
   assert.match(html, /rel="canonical" href="https:\/\/jevia\.dev\/docs"/);
 });
@@ -76,8 +76,29 @@ test("the packaged runtime serves the Markdown documentation", async () => {
   assert.match(markdown, /jevia storage setup postgres --project my-project/);
   assert.match(markdown, /^## Cache, diagnostics, and recovery$/m);
   assert.match(markdown, /import \{ JeviaClient \} from "jevia";/);
+  assertAutomaticPipelineDocs(markdown.replace(/[`*]/g, ""));
   assert.doesNotMatch(markdown, /View \.mdCOPY \.MD/);
 });
+
+function assertAutomaticPipelineDocs(content) {
+  const text = content.replace(/\s+/g, " ");
+  assert.match(text, /Automatic CLI pipeline/);
+  assert.match(text, /jevia run codex/);
+  assert.match(text, /No manual feedback or runs complete step is needed/);
+  assert.match(text, /next CLI release after 0\.1\.3/);
+  assert.match(text, /Missing or ambiguous checks stay unverified and are excluded from learning/);
+  assert.match(text, /when the agent process\/session finishes/);
+  assert.match(text, /SDK routing does not launch an agent or run tests/);
+  assert.match(text, /no human feedback prompt is required/);
+  assert.match(text, /Recorded outcomes inform the next route/);
+  assert.match(text, /No manual cache clearing is needed/);
+  assert.match(text, /application-reported/);
+  assert.match(text, /history_limit/);
+  assert.match(text, /feedback reasons stay in storage/);
+  assert.match(text, /Feedback and verification are optional/);
+  assert.match(text, /Skipping feedback still records the route with an unknown outcome/);
+  assert.doesNotMatch(text, /useHistory|verifyResult\(result\)/);
+}
 
 test("View .md serves raw Markdown under normal browser headers", async () => {
   const response = await runtime.fetch(

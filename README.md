@@ -5,8 +5,8 @@ harnesses. It chooses a capability tier for each task, applies your safety
 policy, and uses verified outcomes as evidence for future routes.
 
 Use it with Claude Code, Codex, OpenCode, Gemini CLI, Cursor Agent, or a custom
-harness. Jevia learns from the results you report; it is not tied to one model
-provider or agent runtime.
+harness. Jevia uses automatically verified CLI outcomes or results your application
+reports; it is not tied to one model provider or agent runtime.
 
 > Jevia is experimental. The CLI, typed routing contract, local outcome store,
 > harness adapters, and Node.js SDK are available today. A managed control plane
@@ -44,7 +44,8 @@ jevia check
 jevia route "investigate the failing integration test"
 ```
 
-After the task is verified, record its real result:
+For route-only integrations, optionally report a known result after executing the
+work externally. This is not a required step after `jevia run`:
 
 ```bash
 jevia feedback <run-id> success
@@ -77,6 +78,13 @@ then run a routed task:
 jevia run agent "fix the flaky integration test"
 ```
 
+Jevia routes, executes, verifies, and records this run automatically. No manual
+`feedback` or `runs complete` step is needed. Automatic discovery of existing
+Rust/Node tests is **unreleased**, pending the next CLI release after 0.1.3;
+that released version needs the configured verifier shown above. See the
+[automatic CLI pipeline](docs/reference.md#automatic-cli-pipeline-unreleased)
+for detection, opt-out settings, and verification limits.
+
 Harness and verifier processes are launched directly without shell
 interpolation. Credentials remain in the environment instead of the project
 configuration.
@@ -96,14 +104,20 @@ const jevia = new JeviaClient({ cwd: process.cwd() });
 const route = await jevia.route("fix the flaky integration test");
 
 const result = await runYourHarness({ tier: route.tier });
-const passed = await verifyResult(result);
+// Optional: report a known outcome from your own adapter; no verifier required.
+if (result.outcome === "success" || result.outcome === "failure") {
+  await jevia.feedback(route.run_id, result.outcome);
+}
 
-await jevia.feedback(route.run_id, passed ? "success" : "failure");
+// Eligible recorded outcomes inform the next decision automatically.
+const next = await jevia.route("investigate another integration failure");
 ```
 
 The SDK calls Jevia's shell-free JSON interface, so CLI and programmatic usage
 share the same policy, storage, caching, and outcome rules. The CLI must already
-be installed and available on `PATH`.
+be installed and available on `PATH`. Feedback and verification are optional:
+skipping feedback leaves the outcome unknown, while future routes still use
+other eligible recorded outcomes. No history argument or manual fetch is needed.
 
 ## Documentation
 
