@@ -53,6 +53,14 @@ const HARNESS_ADAPTER = [
   'const next = await jevia.route("fix another parser regression");',
 ].join("\n");
 
+const HISTORY_OPTIONS = [
+  "// Default: use eligible recorded outcomes within the project history limit.",
+  "const informed = await jevia.route(task);",
+  "",
+  "// Unreleased: exclude prior outcomes for this decision only.",
+  "const independent = await jevia.route(task, { useHistory: false });",
+].join("\n");
+
 const STORAGE_SETUP = [
   'const target = { backend: "sqlite", path: ".jevia/jevia.db" } as const;',
   "",
@@ -101,7 +109,7 @@ const METHODS = [
   },
   {
     signature: "route(task, options?)",
-    description: "Choose a capability tier using recent eligible recorded outcomes automatically, and return the typed route record.",
+    description: "Choose a tier using recorded outcomes by default; useHistory: false opts out per call (unreleased). Return the typed route record.",
   },
   {
     signature: "feedback(runId, outcome, options?)",
@@ -179,7 +187,7 @@ export default function DocsPage() {
             <p className="docs-body-copy">
               A route returns the selected tier, confidence, probabilities, cache source,
               and a traceable run ID. Routing chooses capability; it does not claim the
-              task succeeded. Every call automatically reads recent eligible outcomes
+              task succeeded. By default, each call reads recent eligible outcomes
               from the project&apos;s selected storage before choosing a tier—no history
               argument or extra fetch is needed.
             </p>
@@ -309,12 +317,25 @@ export default function DocsPage() {
                 can use tests, acceptance checks, or a user-approved result and record
                 success or failure. This is labeled <code>manual</code> evidence
                 (application-reported), not CLI verification. Use <code>unknown</code>
-                when the result is uncertain. The next <code>route()</code> automatically
+                when the result is uncertain. By default, <code>route()</code> automatically
                 includes eligible recorded outcomes from the same JSONL, SQLite, or
                 PostgreSQL history, including CLI-verified results. No manual cache
                 clearing is needed: evidence is part of the cache key.
               </p>
             </div>
+            <CodeBlock code={HISTORY_OPTIONS} label="Optional history (unreleased)" />
+            <p className="docs-body-copy">
+              <code>useHistory</code> defaults to <code>true</code>. Setting it to
+              <code> false</code> excludes prior outcomes for this decision, but still
+              records the route and leaves history and project config untouched.
+              History-enabled and history-disabled decisions use separate cache entries;
+              <code> noCache: true</code> works independently. Explicit
+              <code> useHistory: true</code> still respects the project history limit.
+              This option is pending the next npm release; disabling history requires
+              the next CLI release after 0.1.3. Older CLIs reject the unsupported flag
+              without retrying with history enabled. Verification remains your
+              application&apos;s choice.
+            </p>
             <p className="docs-body-copy">
               Pending/unknown, active, and process-exit-only records are excluded.
               <code> [router].history_limit</code> bounds recent evidence: default 20,

@@ -62,6 +62,11 @@ CLI verifier or external-completion call to become eligible. Every subsequent
 `route` reads eligible history from the selected backend before building its
 cache key and Jev request. The shared evidence filter and `router.history_limit`
 apply equally to SDK and CLI callers; no separate SDK history payload is needed.
+The unreleased SDK `useHistory: false` option maps to `route --no-history`, which
+sets the effective history limit to 0 for that invocation only. It never writes
+config or disables route persistence. The effective router policy is hashed into
+the cache key, preventing reuse of history-informed decisions in opt-out mode.
+The default/explicit `true` uses the configured limit rather than overriding it.
 
 ### Routing cache
 

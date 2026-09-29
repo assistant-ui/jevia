@@ -39,6 +39,20 @@ test("keeps option-like text behind the CLI option boundary", async () => {
   assert.equal((await client().show("--help")).run_id, "--help");
 });
 
+test("history input is optional per route without changing the default", async () => {
+  for (const options of [{}, { useHistory: true }, { useHistory: undefined }]) {
+    const route = await client().route("task", options);
+    assert.deepEqual(route.jev_model.split("|"), ["route", "--json", "--", "task"]);
+  }
+  const route = await client().route("--no-history", { useHistory: false, noCache: true });
+  assert.deepEqual(route.jev_model.split("|"), ["route", "--json", "--no-cache", "--no-history", "--", "--no-history"]);
+  for (const useHistory of [null, "false", 0, 1, {}, []]) {
+    await assert.rejects(client().route("task", { useHistory }), {
+      name: "TypeError", message: "useHistory must be a boolean",
+    });
+  }
+});
+
 test("records explicit feedback with a reason", async () => {
   const updated = await client().feedback("run-42", "failure", {
     reason: "verification failed",

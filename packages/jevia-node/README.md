@@ -79,7 +79,7 @@ tests, an acceptance check, or a user-approved result, then record `success` or
 not `verification`; it does not mean a person must type the feedback. Record
 `unknown` when you cannot establish the outcome.
 
-On every `route()` call, Jevia loads recent eligible outcomes from that project's
+By default, each `route()` call loads recent eligible outcomes from that project's
 selected JSONL, SQLite, or PostgreSQL storage before choosing a tier. There is no
 need to fetch history with `runs()` or pass it back to `route()`. CLI-verified
 results and SDK-reported results in the same history can both contribute. The
@@ -99,11 +99,34 @@ external run, but completion is not required merely to reuse `feedback`.
   `[privacy].store_task_text = false` omits task text from newly recorded history;
   it does not erase older records or hide the current task sent for routing.
 
+### Optional history per route (unreleased)
+
+```ts
+// Default: use eligible recorded outcomes, within the project's history limit.
+const informed = await jevia.route(task);
+
+// Decide without prior outcomes for this call only.
+const independent = await jevia.route(task, { useHistory: false });
+```
+
+`useHistory` defaults to `true`. Setting it to `false` excludes recorded outcomes
+from both the decision input and its cache key. It does not delete history,
+change project config, disable storage, or stop the new route from being recorded.
+History-enabled and history-disabled decisions have separate cache entries, and
+`noCache: true` can be combined with either mode. Explicit `useHistory: true`
+still respects `[router].history_limit`, including a project-wide limit of 0.
+
+This option is pending the next npm release. Disabling history requires the
+next CLI release after 0.1.3 (`jevia route --no-history`). An older CLI rejects the
+unsupported flag; the SDK will not retry with history enabled. Verification and
+feedback remain application-controlled regardless of this option.
+
 ## API
 
 ```ts
 const version = await jevia.version();
 const route = await jevia.route(task, { noCache: true, signal });
+const independent = await jevia.route(task, { useHistory: false, signal }); // Unreleased.
 const runs = await jevia.runs({ limit: 20, signal });
 const run = await jevia.show(route.run_id, { signal });
 const updated = await jevia.feedback(route.run_id, "success", { signal });

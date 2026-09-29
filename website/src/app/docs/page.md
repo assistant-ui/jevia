@@ -30,13 +30,13 @@ console.log(route.tier, route.confidence, route.run_id);
 
 A route returns the selected tier, confidence, probabilities, cache source, and a traceable run ID. Routing chooses capability; it does not claim the task succeeded.
 
-Every call automatically reads recent eligible outcomes from the project's
+By default, each call reads recent eligible outcomes from the project's
 selected storage before choosing a tier—no history argument or extra fetch is needed.
 
 ## Client methods
 
 - `version(options?)` — Return the installed Jevia CLI version after validating its output.
-- `route(task, options?)` — Choose a capability tier using recent eligible recorded outcomes automatically, and return the typed route record.
+- `route(task, options?)` — Choose a tier using recorded outcomes by default; `useHistory: false` opts out per call (unreleased). Return the typed route record.
 - `feedback(runId, outcome, options?)` — Record an explicit success, failure, or unknown outcome for a run.
 - `runs(options?)` — List recent route records with a configurable positive result limit.
 - `show(runId, options?)` — Read one complete route record, including lifecycle and outcome evidence.
@@ -165,10 +165,27 @@ after a supervised CLI run.
 The SDK does not require Jevia's built-in verifier. Your application can use
 tests, acceptance checks, or a user-approved result and record success or failure.
 This is labeled `manual` evidence (application-reported), not CLI verification.
-Use `unknown` when the result is uncertain. The next `route()` automatically
+Use `unknown` when the result is uncertain. By default, `route()` automatically
 includes eligible recorded outcomes from the same JSONL, SQLite, or PostgreSQL
 history, including CLI-verified results. No manual cache clearing is needed:
 evidence is part of the cache key.
+
+```typescript
+// Default: use eligible recorded outcomes within the project history limit.
+const informed = await jevia.route(task);
+
+// Unreleased: exclude prior outcomes for this decision only.
+const independent = await jevia.route(task, { useHistory: false });
+```
+
+`useHistory` defaults to `true`. Setting it to `false` excludes prior outcomes
+for this decision, but still records the route and leaves history and project
+config untouched. History-enabled and history-disabled decisions use separate
+cache entries; `noCache: true` works independently. Explicit `useHistory: true`
+still respects the project history limit. This option is pending the next npm
+release; disabling history requires the next CLI release after 0.1.3. Older CLIs
+reject the unsupported flag without retrying with history enabled. Verification
+remains your application's choice.
 
 Pending/unknown, active, and process-exit-only records are excluded.
 `[router].history_limit` bounds recent evidence: default 20, maximum 100, or 0 to
