@@ -9,7 +9,7 @@ outcome eligibility stay consistent with the Rust implementation.
 Install the Jevia CLI first, then add the Node package:
 
 ```sh
-curl -fsSL https://jevia.vercel.app/install.sh | sh
+curl -fsSL https://jevia.dev/install.sh | sh
 npm install jevia
 ```
 
