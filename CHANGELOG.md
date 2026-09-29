@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.1.5 — 2026-09-29
+
+- Add guided, shell-free harness presets for Codex, Claude Code, OpenCode, and
+  Gemini CLI while keeping model IDs, credentials, and permissions explicit.
+- Add a native Windows release binary and checksum-verifying PowerShell
+  installer alongside the existing macOS and Linux installers.
+- Document persisted run snapshots, default history locations, custom SQLite
+  paths, and the distinction between routing decisions and verified outcomes.
+- Automate real installer smoke tests on Linux, macOS, and Windows before
+  updating the website's pinned release.
+- Publish an SPDX SBOM and signed build-provenance and SBOM attestations for
+  every release binary, then verify both from the installed executables.
+- Add required CodeQL scanning for GitHub Actions, JavaScript/TypeScript, and
+  Rust, and pin third-party workflow actions to immutable commits.
+
+Existing configuration and history formats are unchanged. Rust 1.92 and Node.js
+20 remain the minimum supported versions.
+
 ## 0.1.4 — 2026-09-28
 
 - Validate live and cached routing decisions against the current tier policy

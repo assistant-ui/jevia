@@ -60,7 +60,7 @@ PostgreSQL storage checks do connect to the configured database.
 To install the exact crates.io release with Rust 1.92 or newer:
 
 ```bash
-cargo install jevia --version 0.1.4 --locked
+cargo install jevia --version 0.1.5 --locked
 ```
 
 To try unreleased development changes instead:
