@@ -568,11 +568,13 @@ async fn execute_stored_harness(
             .state(
                 &record.decision.run_id,
                 RunState::Completed,
-                Outcome::Failure,
+                Outcome::Unknown,
                 Some(execution),
             )
             .await?;
-        eprintln!("jevia: outcome=failure duration_ms={duration_ms}");
+        eprintln!(
+            "jevia: process=failed outcome=unknown observations=recorded duration_ms={duration_ms}"
+        );
         return Ok(child_exit_code(&status));
     }
 
@@ -581,12 +583,12 @@ async fn execute_stored_harness(
             .state(
                 &record.decision.run_id,
                 RunState::Completed,
-                Outcome::Success,
+                Outcome::Unknown,
                 Some(execution),
             )
             .await?;
         eprintln!(
-            "jevia: process=success verification=not_run learning=excluded duration_ms={duration_ms}"
+            "jevia: process=success outcome=unknown verification=not_run observations=recorded duration_ms={duration_ms}"
         );
         return Ok(child_exit_code(&status));
     };
@@ -745,7 +747,7 @@ async fn routed_record_in(
     // The lease remains held through the HTTP request and cache insertion, never
     // while holding a global history/cache lock. Reload evidence after each wait.
     let (history, cache_key, _request_lease) = loop {
-        let history = storage.recent(config.router.history_limit, true).await?;
+        let history = storage.routing_history(config.router.history_limit).await?;
         if !config.cache.enabled || no_cache {
             break (history, None, None);
         }
@@ -776,7 +778,7 @@ async fn routed_record_in(
         // Sidecars stay stable without growing once per distinct task forever.
         match lease::try_acquire(&paths.directory.join("cache-leases"), &key[..2]) {
             Ok(Some(guard)) => {
-                let latest = storage.recent(config.router.history_limit, true).await?;
+                let latest = storage.routing_history(config.router.history_limit).await?;
                 let latest_key = route_cache_key(task, harness_name, config, &latest)?;
                 if latest_key != key {
                     continue;
@@ -1201,7 +1203,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn successful_harness_process_records_success() {
+    async fn successful_harness_process_keeps_task_outcome_unknown() {
         let directory = tempdir().expect("temporary directory");
         let paths = ProjectPaths::at(directory.path().to_path_buf());
         fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
@@ -1219,7 +1221,7 @@ mod tests {
             .expect("harness succeeds");
 
         let records = store::load(&paths.runs).expect("records load");
-        assert_eq!(records[0].outcome, Outcome::Success);
+        assert_eq!(records[0].outcome, Outcome::Unknown);
         let execution = records[0]
             .execution
             .as_ref()
@@ -1235,7 +1237,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn failed_harness_process_records_failure() {
+    async fn failed_harness_process_keeps_task_outcome_unknown() {
         let directory = tempdir().expect("temporary directory");
         let paths = ProjectPaths::at(directory.path().to_path_buf());
         fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
@@ -1256,7 +1258,7 @@ mod tests {
             .expect("process failure is a recorded outcome, not a Jevia error");
 
         let records = store::load(&paths.runs).expect("records load");
-        assert_eq!(records[0].outcome, Outcome::Failure);
+        assert_eq!(records[0].outcome, Outcome::Unknown);
         let execution = records[0]
             .execution
             .as_ref()

@@ -224,6 +224,16 @@ pub struct RouteRecord {
 }
 
 impl RouteRecord {
+    /// Finished executions provide operational context, not a quality label.
+    /// Routed-only and active runs must not be mistaken for completed attempts.
+    pub fn is_execution_observation(&self) -> bool {
+        self.execution.is_some()
+            && self
+                .lifecycle
+                .as_ref()
+                .is_some_and(|life| !life.state.is_active() && life.state != RunState::Routed)
+    }
+
     pub fn new(decision: RouteDecision, task: Option<String>) -> Self {
         Self {
             schema_version: RECORD_SCHEMA_VERSION,

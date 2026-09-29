@@ -1,5 +1,20 @@
 # Jevia reference
 
+## Unreleased: passive routing context
+
+Finished `jevia run` executions automatically inform subsequent routing even without
+feedback or a verifier. Jev receives two separate, bounded windows: known outcomes
+and passive execution observations (requested model, harness, elapsed time, process
+exit, and lifecycle state). Each uses `router.history_limit`; pending and active
+runs do not crowd out either window. New observations also invalidate stale routing
+cache entries. Stored task text follows the existing privacy setting.
+
+A process exiting zero or nonzero leaves task `outcome` as `unknown`; its exit code
+is still recorded and returned by the CLI. A known outcome requires optional manual
+feedback or an explicitly requested verifier. Historical process-derived labels
+remain readable but are not promoted into quality evidence. The configured model
+is labeled `requested_model` in passive routing context, not an observed model.
+
 This is the complete CLI and operations reference. Start with the
 [project README](../README.md) or the [product documentation](https://jevia.dev/docs)
 for the shorter installation and integration path.

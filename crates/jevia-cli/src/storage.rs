@@ -65,6 +65,27 @@ impl Storage {
         }
     }
 
+    /// Separate windows prevent passive activity from displacing known outcomes.
+    /// Each window retains append order; the provider consumes them separately.
+    pub async fn routing_history(&self, limit: usize) -> Result<Vec<RouteRecord>> {
+        let mut history = self.recent(limit, true).await?;
+        let observations = match self {
+            Self::Jsonl(paths) => store::recent_observations(&paths.runs, limit)?,
+            Self::Database(db) => db.recent_observations(limit).await?,
+        };
+        // A concurrent feedback write can move a run between the two windows.
+        // Do not duplicate it or credit the same attempt twice.
+        for record in observations {
+            if !history
+                .iter()
+                .any(|known| known.decision.run_id == record.decision.run_id)
+            {
+                history.push(record);
+            }
+        }
+        Ok(history)
+    }
+
     pub async fn append(&self, record: &RouteRecord) -> Result<()> {
         match self {
             Self::Jsonl(paths) => store::append(&paths.runs, record),

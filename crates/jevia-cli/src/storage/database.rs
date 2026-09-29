@@ -276,6 +276,39 @@ impl Database {
         decode(&row.context("run id was not found in this project's history")?)
     }
 
+    pub async fn recent_observations(&self, limit: usize) -> Result<Vec<RouteRecord>> {
+        let mut records = Vec::new();
+        if limit == 0 {
+            return Ok(records);
+        }
+        let mut tx = self.read_snapshot().await?;
+        let mut before = i64::MAX;
+        loop {
+            let rows: Vec<(i64, String)> = db(sqlx::query_as(
+                "SELECT ordinal, record FROM jevia_runs WHERE project = $1 AND ordinal < $2 ORDER BY ordinal DESC LIMIT 128",
+            ).bind(&self.project).bind(before).fetch_all(&mut *tx)).await?;
+            if rows.is_empty() {
+                break;
+            }
+            for (ordinal, encoded) in rows {
+                before = ordinal;
+                let record = decode(&encoded)?;
+                if record.is_execution_observation() && !record.is_learning_evidence() {
+                    records.push(record);
+                    if records.len() == limit {
+                        break;
+                    }
+                }
+            }
+            if records.len() == limit {
+                break;
+            }
+        }
+        db(tx.commit()).await?;
+        records.reverse();
+        Ok(records)
+    }
+
     async fn insert(&self, tx: &mut Transaction<'_, Any>, record: &RouteRecord) -> Result<()> {
         validate_record(record)?;
         let ordinal: i64 = db(sqlx::query_scalar("UPDATE jevia_projects SET next_seq = next_seq + 1 WHERE project = $1 RETURNING next_seq")

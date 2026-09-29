@@ -42,6 +42,22 @@ fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
 /// Validate the full JSONL stream while retaining only the requested tail.
 /// Memory scales with the window, not with the size of the retained history.
 pub fn recent(path: &Path, limit: usize, evidence_only: bool) -> Result<Vec<RouteRecord>> {
+    recent_matching(path, limit, |record| {
+        !evidence_only || record.is_learning_evidence()
+    })
+}
+
+pub fn recent_observations(path: &Path, limit: usize) -> Result<Vec<RouteRecord>> {
+    recent_matching(path, limit, |record| {
+        record.is_execution_observation() && !record.is_learning_evidence()
+    })
+}
+
+fn recent_matching(
+    path: &Path,
+    limit: usize,
+    eligible: impl Fn(&RouteRecord) -> bool,
+) -> Result<Vec<RouteRecord>> {
     let parent = path
         .parent()
         .context("run history path does not have a parent directory")?;
@@ -51,7 +67,7 @@ pub fn recent(path: &Path, limit: usize, evidence_only: bool) -> Result<Vec<Rout
     let _lock = acquire_lock(path, LockMode::Shared)?;
     let mut records = VecDeque::new();
     read_records(path, |record| {
-        if limit != 0 && (!evidence_only || record.is_learning_evidence()) {
+        if limit != 0 && eligible(&record) {
             if records.len() == limit {
                 records.pop_front();
             }

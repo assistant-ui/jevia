@@ -55,6 +55,80 @@ fn postgres_config() -> Config {
     }
 }
 
+async fn observation_history_contract(config: Config) {
+    let directory = tempfile::tempdir().unwrap();
+    let paths = ProjectPaths::at(directory.path().into());
+    let storage = Storage::open(&config, &paths, true).await.unwrap();
+    storage.append(&sample("known")).await.unwrap();
+    storage
+        .outcome("known", Outcome::Success, None)
+        .await
+        .unwrap();
+    for id in ["observed-old", "observed-new"] {
+        storage.append(&sample(id)).await.unwrap();
+        storage
+            .state(id, RunState::Running, Outcome::Unknown, None)
+            .await
+            .unwrap();
+        storage
+            .state(
+                id,
+                RunState::Completed,
+                Outcome::Unknown,
+                Some(ExecutionEvidence {
+                    harness: "agent".into(),
+                    model: "requested".into(),
+                    duration_ms: 42,
+                    exit_code: Some(0),
+                    verification: None,
+                }),
+            )
+            .await
+            .unwrap();
+    }
+    // More than one database page of pending runs must not starve either window.
+    for i in 0..130 {
+        storage
+            .append(&sample(&format!("pending-{i}")))
+            .await
+            .unwrap();
+    }
+    let history = storage.routing_history(1).await.unwrap();
+    assert_eq!(
+        history
+            .iter()
+            .map(|r| r.decision.run_id.as_str())
+            .collect::<Vec<_>>(),
+        ["known", "observed-new"]
+    );
+    assert_eq!(history[1].outcome, Outcome::Unknown);
+    assert!(storage.routing_history(0).await.unwrap().is_empty());
+    storage
+        .outcome("observed-new", Outcome::Failure, None)
+        .await
+        .unwrap();
+    let history = storage.routing_history(1).await.unwrap();
+    assert_eq!(
+        history
+            .iter()
+            .map(|r| r.decision.run_id.as_str())
+            .collect::<Vec<_>>(),
+        ["observed-new", "observed-old"]
+    );
+}
+
+#[tokio::test]
+async fn jsonl_and_sqlite_observation_history() {
+    observation_history_contract(Config::default()).await;
+    observation_history_contract(sqlite_config()).await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL test database"]
+async fn postgres_observation_history() {
+    observation_history_contract(postgres_config()).await;
+}
+
 async fn external_completion_contract(config: Config) {
     let directory = tempfile::tempdir().unwrap();
     let paths = ProjectPaths::at(directory.path().into());
