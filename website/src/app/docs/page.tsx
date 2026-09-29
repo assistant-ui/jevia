@@ -692,8 +692,8 @@ export default function DocsPage() {
             <h3 className="docs-subheading">What a stored run looks like</h3>
             <p className="docs-body-copy">
               Every backend preserves the same logical record. JSONL writes one compact JSON
-              object per line to <code>.jevia/runs.jsonl</code>; this example is expanded only
-              for readability. SQLite and PostgreSQL store the equivalent fields while keeping
+              object per line to <code>.jevia/runs.jsonl</code>; this example uses explicitly
+              enabled verification and is expanded for readability. SQLite and PostgreSQL store the equivalent fields while keeping
               the same lifecycle and outcome-evidence semantics.
             </p>
             <CodeBlock

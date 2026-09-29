@@ -36,6 +36,7 @@ fast = "provider/small"
 balanced = "provider/standard"
 strong = "provider/frontier"
 
-[harnesses.agent.verification]
-command = "cargo"
-args = ["test", "--workspace", "--all-features"]
+# Recording needs no verifier. Uncomment only to opt in to additional checks:
+# [harnesses.agent.verification]
+# command = "cargo"
+# args = ["test", "--workspace", "--all-features"]

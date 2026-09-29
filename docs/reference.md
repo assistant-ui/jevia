@@ -86,8 +86,8 @@ Jevia closes that loop:
 2. ask Jev which tier should handle the current task;
 3. fall back to a configured safe tier when confidence is low;
 4. record the routing decision in the configured history store;
-5. automatically record execution and verification outcomes for `jevia run`;
-6. include recent outcomes as evidence in future routing decisions.
+5. automatically record execution facts and supported native events for `jevia run`;
+6. include passive history and optional known outcomes in future routing decisions.
 
 The application owns the policy. Jev supplies a structured decision signal.
 
@@ -339,8 +339,9 @@ the agent and configured or automatically detected verifier. It requires no
 Jev/provider key or database
 connection, does not read history/cache, and creates no files or locks. It never
 executes even a `--version` probe. Missing executables, model mappings, or valid
-templates produce a failing exit status. An absent verifier is a warning, not a
-failure; process success alone still is not learning evidence.
+templates produce a failing exit status. Verification disabled by choice/default
+is a passing check; an explicitly requested check that cannot be detected is a
+warning. Process success alone is not proof of task correctness.
 
 The human report escapes the requested harness name. JSON reports use
 `schema_version: 1`, `harness`, `scope: "static"`, `ok`, `checks` (stable `id`,
@@ -381,9 +382,10 @@ fast = "provider/small"
 balanced = "provider/standard"
 strong = "provider/frontier"
 
-[harnesses.agent.verification]
-command = "cargo"
-args = ["test", "--workspace", "--all-features"]
+# Optional: uncomment only if you want extra verification after execution.
+# [harnesses.agent.verification]
+# command = "cargo"
+# args = ["test", "--workspace", "--all-features"]
 ~~~
 
 A complete ready-to-copy configuration is available at

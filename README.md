@@ -91,7 +91,7 @@ Setup previews the configuration first. Review it, repeat with `--apply`, then
 run a routed task:
 
 ```bash
-jevia run agent "fix the flaky integration test"
+jevia run codex "fix the flaky integration test"
 ```
 
 Jevia routes, executes, and records this run automatically. No manual `feedback`
