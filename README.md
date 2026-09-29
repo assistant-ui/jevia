@@ -17,7 +17,7 @@ Jevia closes that loop:
 2. ask Jev which tier should handle the current task;
 3. fall back to a configured safe tier when confidence is low;
 4. record the routing decision in the configured history store;
-5. attach success or failure after the task finishes;
+5. automatically record execution and verification outcomes for `jevia run`;
 6. include recent outcomes as evidence in future routing decisions.
 
 The application owns the policy. Jev supplies a structured decision signal.
@@ -54,7 +54,33 @@ To try unreleased development changes instead:
 cargo install --git https://github.com/assistant-ui/jevia --locked jevia
 ```
 
-Record the real result after the task completes:
+### Run an agent: automatic outcome recording
+
+After [configuring your installed harness once](#harness-adapters), use
+`jevia run` for the end-to-end flow:
+
+```bash
+jevia run codex "fix the failing test"
+jevia runs
+```
+
+Jevia routes the task, launches the agent, runs verification after a successful
+agent exit, and saves the outcome automatically. **No manual `feedback` or
+`runs complete` step is needed.** Verifier-backed outcomes become evidence for
+later routing decisions. The name `codex` must match your configured adapter;
+Jevia does not install or authenticate the agent for you.
+
+**Unreleased:** automatic discovery of existing Rust/Node tests is pending the
+next CLI release after 0.1.3. The installer above still installs 0.1.3, which
+needs a configured verifier to verify runs automatically. See
+[automatic CLI pipeline](#automatic-cli-pipeline-unreleased) for detection,
+overrides, and verification limits.
+
+### Route only: your integration owns execution
+
+`jevia route` (used in the connection quickstart above) selects a tier but does
+not execute an agent or verify a task. Only if you run and verify the work
+outside `jevia run` do you need to report its actual result yourself:
 
 ```bash
 jevia feedback <run-id> success
@@ -76,10 +102,10 @@ jevia runs --json
 | `jevia harness setup <name>` | Preview an explicit harness template; back up and save only with `--apply`. |
 | `jevia harness check <name> [--json]` | Inspect configuration and local executable candidates without launching programs or calling APIs. |
 | `jevia route <task>` | Ask Jev for a tier and record the decision. |
-| <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch a configured harness, and record its exit outcome. |
+| <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch, verify, and record automatically; test auto-detection is unreleased. |
 | `jevia runs` | Inspect recent records in the configured backend. |
 | `jevia stats [--limit <records>] [--json]` | Summarize recent routing decisions, verified outcomes, manual feedback, and cache hits. |
-| `jevia feedback <id> <outcome>` | Mark a run as `success`, `failure`, or `unknown`. |
+| `jevia feedback <id> <outcome>` | Report externally verified work or manually correct an outcome; not required after `run`. |
 | `jevia runs complete <id> <outcome> --confirm-stopped` | Explicitly finish external work with manual evidence (unreleased). |
 | `jevia doctor` | Validate configuration, credentials, and configured storage. |
 | `jevia storage setup <sqlite\|postgres>` | Preview database setup; explicitly apply after validation, backup, and optional JSONL import. |
@@ -180,7 +206,9 @@ shown and use `--arg=--flag` / `--verify-arg=--flag` for leading-hyphen argument
 - Changing an existing harness also requires `--replace`. Reapplying identical
   settings does not rewrite the config or make another backup (apply may create
   the config lock sidecar). The selected harness entry is rewritten when changed.
-- Omitted verifier options preserve an existing verifier and automatic-detection
+- Automatic test detection and persistent opt-out behavior are **unreleased**
+  (after 0.1.3).
+  Omitted verifier options preserve an existing verifier and automatic-detection
   setting. New adapters default to automatic project tests. Use `--no-verification`
   to disable both explicit and automatic checks, or `--auto-verification` to remove
   a custom verifier and re-enable detection. Supplying `--verify-command` replaces
@@ -202,7 +230,8 @@ jevia harness check agent --json
 
 Preflight validates the project config and selected adapter, renders its templates
 for every configured tier, rejects NUL arguments, and checks file candidates for
-the agent and optional verifier. It requires no Jev/provider key or database
+the agent and configured verifier (or automatically detected verifier in the
+unreleased CLI). It requires no Jev/provider key or database
 connection, does not read history/cache, and creates no files or locks. It never
 executes even a `--version` probe. Missing executables, model mappings, or valid
 templates produce a failing exit status. An absent verifier is a warning, not a
@@ -272,11 +301,12 @@ Templates support <code>{task}</code>, <code>{model}</code>,
 <code>{tier}</code>, and <code>{run_id}</code>. Jevia requires the task and
 model placeholders, rejects unknown placeholders, launches the configured
 executable directly, and mirrors its exit code. A non-zero harness exit records
-failure and skips verification. Without a configured verifier, a zero harness
-exit records success for backward compatibility.
+failure and skips verification. If neither an explicit nor an automatically
+detected verifier is available, a zero harness exit records process-only success
+for backward compatibility, not verified task success or learning evidence.
 
-When <code>verification</code> is configured, Jevia runs it only after the
-harness succeeds and uses its exit status as the final outcome. A verifier that
+Jevia runs the configured or detected verifier only after the harness succeeds
+and uses its exit status as the final outcome. A verifier that
 cannot start leaves the outcome unknown, preventing an environment problem
 from incorrectly training the router. Verification arguments support the same
 placeholders and are also launched directly without shell interpretation.
@@ -335,6 +365,13 @@ agent exit, and records the lifecycle and result in your selected storage backen
 Verified results are available to subsequent routing automatically. **Do not run
 `feedback` or `runs complete` afterward** for the normal supervised CLI flow.
 Those APIs are for manual corrections and externally executed work, respectively.
+
+Verification runs once when the launched agent process/session finishes
+successfully, not after every message or tool call inside an interactive agent.
+Task execution may still require the agent's normal permission prompts. Installing
+the agent, supplying credentials/model mappings, and preparing project dependencies
+are one-time prerequisites, not per-run feedback tasks. Jevia does not retry or
+repair failed work automatically.
 
 If the adapter has no explicit verifier, `auto_verify = true` (the default)
 detects existing tests at the Jevia project root:
@@ -443,6 +480,10 @@ SIGKILL of Jevia, and machine crashes cannot be handled reliably. Use explicit
 recovery and inspect the workspace in those cases; no work is automatically retried.
 
 ## Outcome provenance
+
+`jevia run` saves this evidence automatically. The manual feedback examples below
+are for externally verified work, corrections, or legacy records—not a required
+step after each CLI run.
 
 Run records distinguish `process_exit`, `verification`, and `manual` evidence.
 Process-only success/failure remains visible, but only known outcomes from a

@@ -39,6 +39,7 @@ test("prerendering emits the Node.js API documentation", async () => {
   assert.match(html, /Get started with Jevia/);
   assert.match(html, /Client methods/);
   assert.match(html, /Harness adapter/);
+  assertAutomaticPipelineDocs(html.replace(/<[^>]+>/g, ""));
   assert.match(html, /JeviaCommandError/);
   assert.match(html, /id="storage"/);
   assert.match(html, /href="#storage"/);
@@ -71,8 +72,21 @@ test("the packaged runtime serves the Markdown documentation", async () => {
   assert.match(markdown, /confirmStopped: true/);
   assert.match(markdown, /urlEnv: "JEVIA_DATABASE_URL"/);
   assert.match(markdown, /import \{ JeviaClient \} from "jevia";/);
+  assertAutomaticPipelineDocs(markdown.replace(/[`*]/g, ""));
   assert.doesNotMatch(markdown, /View \.mdCOPY \.MD/);
 });
+
+function assertAutomaticPipelineDocs(content) {
+  const text = content.replace(/\s+/g, " ");
+  assert.match(text, /Automatic CLI pipeline/);
+  assert.match(text, /jevia run codex/);
+  assert.match(text, /No manual feedback or runs complete step is needed/);
+  assert.match(text, /next CLI release after 0\.1\.3/);
+  assert.match(text, /Missing or ambiguous checks stay unverified and are excluded from learning/);
+  assert.match(text, /when the agent process\/session finishes/);
+  assert.match(text, /SDK routing does not launch an agent or run tests/);
+  assert.match(text, /no human feedback prompt is required/);
+}
 
 test("the build includes crawler discovery and social image assets", async () => {
   const robots = await readFile(new URL("static/robots.txt", output), "utf8");

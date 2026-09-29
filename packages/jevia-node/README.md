@@ -17,6 +17,25 @@ The npm package does not download or execute an installer during `npm install`.
 By default it finds `jevia` on `PATH`; pass `binary` when the executable lives
 elsewhere.
 
+## Automatic CLI or explicit SDK?
+
+For end-to-end execution, configure your installed harness once and use
+`jevia run codex "fix the failing test"`. Jevia launches the agent, runs its
+verifier after a successful exit, and saves the result automatically. **No manual
+`feedback` or `complete` call is needed after `jevia run`.** Verification happens
+when the launched process/session ends, not after each internal agent message.
+
+Automatic detection of existing root Rust/Node tests is **unreleased**, pending
+the next CLI release after 0.1.3. With CLI 0.1.3, configure a verifier once. If no
+usable verifier is available, Jevia records an unverified, process-only result;
+it does not treat the agent exiting as proof of task success. See the
+[CLI pipeline documentation](https://github.com/assistant-ui/jevia#automatic-cli-pipeline-unreleased).
+
+Use the SDK when your application should control how agents run and how their
+work is checked. SDK routing does not launch a harness or run project tests.
+Your integration can automatically call feedback after its own verifier; no
+human feedback prompt is required, but the SDK will not infer task success.
+
 ## Route from any harness
 
 ```ts
@@ -48,12 +67,6 @@ capability tier; your adapter owns the tier-to-model mapping and harness API.
 
 Feedback is explicit. A successful function return is not automatically treated
 as proof that the task succeeded.
-
-This flexibility is for externally executed SDK work. The CLI's `jevia run`
-pipeline already owns execution and records its verifier results automatically;
-it does not need a subsequent `feedback` or `complete` call. Automatic root-project
-test detection for CLI runs is pending the next CLI release after 0.1.3. These
-SDK methods do not automatically launch your harness or run project tests.
 
 ## API
 

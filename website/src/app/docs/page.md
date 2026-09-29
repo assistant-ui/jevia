@@ -2,6 +2,11 @@
 
 Use Jevia from Node.js to route tasks, inspect run records, and report verified outcomes while keeping local policy, storage, and learning behavior in one place.
 
+Using `jevia run` instead? The CLI handles execution, verification, and outcome
+recording automatically. No manual feedback step is needed. See
+[CLI vs. SDK execution](#open-any-harness) below for setup, release availability,
+and verification limits.
+
 ## Install
 
 Install the Node.js package after installing and configuring the Jevia CLI:
@@ -91,7 +96,38 @@ migration, database provisioning, a hosted service, or a no-storage mode. Cache 
 
 ## Open any harness
 
-Map Jevia's tier to the model names your chosen harness accepts:
+### Automatic CLI pipeline
+
+Configure your installed harness, credentials, and model mappings once. Then
+`jevia run` routes the task, launches the agent, runs verification after a
+successful exit, and records the outcome in your selected storage backend.
+**No manual `feedback` or `runs complete` step is needed.** Verifier-backed
+outcomes become evidence for later routing decisions automatically.
+
+```bash
+jevia run codex "fix the failing test"
+```
+
+Automatic test detection is **unreleased**, pending the next CLI release after
+0.1.3. The current installer still installs 0.1.3: configure a verifier once for
+that version. The upcoming CLI detects root Rust workspace tests or Node test
+scripts; an explicit verifier takes precedence. Missing or ambiguous checks stay
+unverified and are excluded from learning. Passing tests is evidence, not proof
+of every requirement.
+
+Verification runs when the agent process/session finishes, not after each internal
+message or tool call. Jevia does not install the agent or test runner, supply
+credentials, bypass agent permission prompts, or retry failed work. Prepare
+project dependencies first. See the
+[CLI setup and verification reference](https://github.com/assistant-ui/jevia#automatic-cli-pipeline-unreleased)
+for supported tests, deadlines, and opt-out settings.
+
+### SDK-controlled execution
+
+Map Jevia's tier to your harness model and let your application run and verify
+the work. SDK routing does not launch an agent or run tests; your integration
+explicitly reports the result. That call can be automatic in your application—no
+human feedback prompt is required:
 
 ```typescript
 const models: Record<string, string> = {
@@ -113,7 +149,10 @@ await jevia.feedback(
 );
 ```
 
-Your adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor Agent, Copilot CLI, Aider, Goose, Amp, or a custom runner. Submit feedback only after your verifier determines the actual outcome.
+Your adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor Agent,
+Copilot CLI, Aider, Goose, Amp, or a custom runner. Submit feedback only after your
+verifier determines the actual outcome of this SDK-controlled work, not again
+after a supervised CLI run.
 
 ## Cancellation and errors
 

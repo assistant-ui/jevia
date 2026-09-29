@@ -137,6 +137,12 @@ export default function DocsPage() {
               Node.js while keeping Jevia&apos;s local policy, storage, and learning
               behavior in one place.
             </p>
+            <p>
+              Using <code>jevia run</code> instead? The CLI handles execution,
+              verification, and outcome recording automatically. No manual feedback
+              step is needed. See <a href="#adapters">CLI vs. SDK execution</a> below
+              for setup, release availability, and verification limits.
+            </p>
           </header>
 
           <section className="docs-section" id="install" aria-labelledby="install-title">
@@ -242,14 +248,54 @@ export default function DocsPage() {
               <span>05</span>
               <div>
                 <h2 id="adapters-title">Open any harness</h2>
-                <p>Map Jevia&apos;s tier to the model names your chosen harness accepts.</p>
+                <p>Use the automatic CLI flow, or control execution from your application.</p>
               </div>
             </div>
-            <CodeBlock code={HARNESS_ADAPTER} label="Harness adapter" />
+            <div className="docs-note">
+              <strong>Automatic CLI pipeline</strong>
+              <p>
+                Configure your installed harness, credentials, and model mappings once.
+                Then <code>jevia run</code> routes the task, launches the agent, runs
+                verification after a successful exit, and records the outcome in your
+                selected storage backend. No manual <code>feedback</code> or
+                <code> runs complete</code> step is needed. Verifier-backed outcomes
+                become evidence for later routing decisions automatically.
+              </p>
+            </div>
+            <CommandBlock
+              command={'jevia run codex "fix the failing test"'}
+              label="Run a configured harness"
+            />
+            <p className="docs-body-copy">
+              Automatic test detection is unreleased, pending the next CLI release
+              after 0.1.3. The current installer still installs 0.1.3: configure a
+              verifier once for that version. The upcoming CLI detects root Rust
+              workspace tests or Node test scripts; an explicit verifier takes
+              precedence. Missing or ambiguous checks stay unverified and are excluded
+              from learning. Passing tests is evidence, not proof of every requirement.
+            </p>
+            <p className="docs-body-copy">
+              Verification runs when the agent process/session finishes, not after each
+              internal message or tool call. Jevia does not install the agent or test
+              runner, supply credentials, bypass agent permission prompts, or retry
+              failed work. Prepare project dependencies first. See the{" "}
+              <a href="https://github.com/assistant-ui/jevia#automatic-cli-pipeline-unreleased">
+                CLI setup and verification reference
+              </a> for supported tests, deadlines, and opt-out settings.
+            </p>
+            <p className="docs-body-copy">
+              For SDK integrations, map Jevia&apos;s tier to your harness model and let
+              your application run and verify the work. SDK routing does not launch
+              an agent or run tests; your integration explicitly reports the result.
+              That call can be automatic in your application—no human feedback prompt
+              is required.
+            </p>
+            <CodeBlock code={HARNESS_ADAPTER} label="Harness adapter (SDK-controlled)" />
             <p className="docs-body-copy">
               Your adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor
               Agent, Copilot CLI, Aider, Goose, Amp, or a custom runner. Submit feedback
-              only after your verifier determines the actual outcome.
+              only after your verifier determines the actual outcome of this
+              SDK-controlled work, not again after a supervised CLI run.
             </p>
           </section>
 

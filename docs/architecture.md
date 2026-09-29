@@ -10,7 +10,7 @@ task
   -> local confidence policy
   -> route decision
   -> configured harness adapter
-  -> optional post-run verifier
+  -> configured or automatically detected post-run verifier
   -> observed outcome
   -> local outcome history
 ```
@@ -46,9 +46,17 @@ Adapters translate a selected capability tier into a harness-specific model
 and argument list. Tier definitions remain stable when individual model
 catalogs change. Templates are rendered into a process and argument vector;
 they are never passed through a shell. Jevia launches the child in the project
-root and mirrors its exit code. An optional shell-free verification process can
-make the final outcome depend on project checks instead of trusting a
-successful harness exit alone.
+root and mirrors its exit code. After a successful harness exit, Jevia runs a
+configured verifier, or the root Rust/Node tests detected by the unreleased
+CLI after 0.1.3. Verification, terminal outcome recording, and inclusion of
+eligible evidence in later routing need no manual feedback/completion call.
+Missing or ambiguous checks remain explicitly unverified: process-only results
+do not enter learning. A passing check is evidence, not proof of every requirement.
+
+The boundary is the launched process/session, not each internal agent message or
+tool call. Harness installation, credentials, model mapping, and project test
+prerequisites are still user setup. `route` and SDK routing methods stop at the
+routing decision; their caller owns execution, verification, and outcome reporting.
 
 ### Routing cache
 
