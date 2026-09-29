@@ -108,7 +108,8 @@ const SDK_EXAMPLE = [
 ].join("\n");
 
 const SDK_STORAGE_SETUP = [
-  'const target = { backend: "sqlite", path: ".jevia/jevia.db" } as const;',
+  "// Relative paths resolve from the client cwd; absolute paths also work.",
+  'const target = { backend: "sqlite", path: ".data/jevia/history.db" } as const;',
   "",
   "// Preview only: no database connection or file changes.",
   "console.log(await jevia.setupStorage(target, { importJsonl: true }));",
@@ -234,13 +235,23 @@ const EVIDENCE_TYPES = [
 ] as const;
 
 const SQLITE_SETUP = [
-  "# Preview the migration; this writes nothing",
-  "jevia storage setup sqlite --import-jsonl",
+  "# Choose a project-relative or absolute SQLite file; preview writes nothing",
+  "jevia storage setup sqlite \\",
+  "  --path .data/jevia/history.db \\",
+  "  --import-jsonl",
   "",
-  "# Stop Jevia writers and supervisors, then apply the reviewed plan",
-  "jevia storage setup sqlite --import-jsonl --apply --confirm-stopped",
+  "# Stop Jevia writers and supervisors, then apply the same reviewed path",
+  "jevia storage setup sqlite \\",
+  "  --path .data/jevia/history.db \\",
+  "  --import-jsonl --apply --confirm-stopped",
   "jevia storage check",
   "jevia stats",
+].join("\n");
+
+const SQLITE_CONFIG = [
+  "[storage]",
+  'backend = "sqlite"',
+  'url = "sqlite://.data/jevia/history.db"',
 ].join("\n");
 
 const POSTGRES_SETUP = [
@@ -261,11 +272,11 @@ const STORAGE_OPTIONS = [
   },
   {
     signature: "SQLite · local database",
-    description: "A bundled, server-free database for larger local histories and indexed queries.",
+    description: "Defaults to .jevia/jevia.db; choose another project-relative or absolute file with --path.",
   },
   {
     signature: "PostgreSQL · shared evidence",
-    description: "Bring a direct or session-pooled database for trusted workspaces that share one project.",
+    description: "Records live in your configured database under the selected project namespace.",
   },
 ] as const;
 
@@ -606,10 +617,20 @@ export default function DocsPage() {
             <h3 className="docs-subheading">Move a project to SQLite</h3>
             <CodeBlock code={SQLITE_SETUP} label="SQLite setup" language="bash" />
             <p className="docs-body-copy">
-              Omit <code>--import-jsonl</code> when the current JSONL history is empty.
-              The source file is never deleted or rewritten, and relative database paths
-              resolve from the discovered project root.
+              Without <code>--path</code>, SQLite uses <code>.jevia/jevia.db</code>. Relative
+              paths resolve from the discovered project root, even when the command runs in
+              a subdirectory; absolute paths are also accepted. Omit <code>--import-jsonl</code>
+              when the current JSONL history is empty. The source file is never deleted or rewritten.
             </p>
+            <CodeBlock code={SQLITE_CONFIG} label="Saved in .jevia/config.toml" language="toml" />
+            <div className="docs-note">
+              <strong>Protect custom locations</strong>
+              <p>
+                Files under <code>.jevia</code> are ignored automatically. If you choose a
+                path elsewhere, add the database, its WAL/SHM sidecars, and run-lock files
+                to your ignore rules and protect the containing directory.
+              </p>
+            </div>
 
             <h3 className="docs-subheading">Share evidence with PostgreSQL</h3>
             <CodeBlock code={POSTGRES_SETUP} label="PostgreSQL setup" language="bash" />
