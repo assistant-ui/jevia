@@ -1,13 +1,13 @@
 "use client";
 
-import { Highlight, type PrismTheme } from "prism-react-renderer";
+import { Highlight, type Language, type PrismTheme } from "prism-react-renderer";
 
 import { CopyButton } from "./copy-button";
 
 interface CodeBlockProps {
   code: string;
   label: string;
-  language?: "typescript";
+  language?: Language;
 }
 
 const CODE_THEME: PrismTheme = {
@@ -48,12 +48,14 @@ const CODE_THEME: PrismTheme = {
 };
 
 export function CodeBlock({ code, label, language = "typescript" }: CodeBlockProps) {
+  const languageLabel = language === "typescript" ? "TS" : language;
+
   return (
     <div className="docs-code-block">
       <div className="docs-code-meta">
         <span>{label}</span>
         <div className="docs-code-actions">
-          <span aria-hidden="true">TS</span>
+          <span aria-hidden="true">{languageLabel}</span>
           <CopyButton value={code} label={label} kind="code" />
         </div>
       </div>

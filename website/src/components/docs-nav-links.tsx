@@ -63,7 +63,7 @@ export function DocsNavLinks<Id extends string>({
       ref={navRef}
       className="docs-nav"
       data-input={keyboard ? "keyboard" : "pointer"}
-      aria-label="Node API sections"
+      aria-label="Documentation sections"
       onPointerLeave={() => setHoveredId(null)}
       onPointerCancel={() => setHoveredId(null)}
       onPointerDown={() => setInput("pointer")}
