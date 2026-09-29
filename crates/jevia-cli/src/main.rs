@@ -9,6 +9,7 @@ mod setup;
 mod stats;
 mod storage;
 mod store;
+mod verification;
 
 use std::{env, fs, io::Write, process::ExitCode, str::FromStr, time::Instant};
 
@@ -159,6 +160,17 @@ enum StorageAction {
 enum RunsAction {
     /// Inspect one complete run record, including its execution lifecycle.
     Show { run_id: String },
+    /// Finish an externally executed pending run with an explicit manual outcome.
+    Complete {
+        run_id: String,
+        outcome: OutcomeArgument,
+        /// Confirm all external work and verification have stopped.
+        #[arg(long, required = true)]
+        confirm_stopped: bool,
+        /// Explanation required when changing a known outcome. Stored in history.
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Mark an execution whose Jevia supervisor exited as interrupted. Never reruns it.
     Recover {
         run_id: String,
@@ -188,6 +200,7 @@ struct RunOptions {
     non_interactive: bool,
     timeout_seconds: Option<u64>,
     verification_timeout_seconds: Option<u64>,
+    automatic_verification: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -261,6 +274,7 @@ async fn run() -> Result<ExitCode> {
                     non_interactive,
                     timeout_seconds,
                     verification_timeout_seconds,
+                    ..Default::default()
                 },
             )
             .await
@@ -273,6 +287,24 @@ async fn run() -> Result<ExitCode> {
             match action {
                 None => runs(limit, json).await?,
                 Some(RunsAction::Show { run_id }) => show_run(&run_id).await?,
+                Some(RunsAction::Complete {
+                    run_id,
+                    outcome,
+                    confirm_stopped,
+                    reason,
+                }) => {
+                    let paths = ProjectPaths::discover()?;
+                    let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
+                    let record = storage
+                        .complete_external(
+                            &run_id,
+                            outcome.into(),
+                            reason.as_deref(),
+                            confirm_stopped,
+                        )
+                        .await?;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                }
                 Some(RunsAction::Recover {
                     run_id,
                     confirm_stopped,
@@ -367,7 +399,7 @@ async fn run_harness(
     task: &str,
     extra_args: &[String],
     no_cache: bool,
-    options: RunOptions,
+    mut options: RunOptions,
 ) -> Result<ExitCode> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
@@ -397,13 +429,29 @@ async fn run_harness(
         &storage,
     )
     .await?;
-    let invocation = harness.invocation(
+    let mut invocation = harness.invocation(
         harness_name,
         &record.decision.tier,
         task,
         &record.decision.run_id,
         extra_args,
     )?;
+    if invocation.verification.is_none() && harness.auto_verify {
+        match verification::detect(&paths.root) {
+            verification::Detection::Found(plan) => {
+                eprintln!(
+                    "jevia: automatic verification: {} {}",
+                    plan.program,
+                    plan.args.join(" ")
+                );
+                invocation.verification = Some(plan);
+                options.automatic_verification = true;
+            }
+            verification::Detection::Unavailable(message) => {
+                eprintln!("jevia: verification unavailable: {message}")
+            }
+        }
+    }
     storage.append(&record).await?;
 
     execute_stored_harness(
@@ -537,7 +585,9 @@ async fn execute_stored_harness(
                 Some(execution),
             )
             .await?;
-        eprintln!("jevia: outcome=success duration_ms={duration_ms}");
+        eprintln!(
+            "jevia: process=success verification=not_run learning=excluded duration_ms={duration_ms}"
+        );
         return Ok(child_exit_code(&status));
     };
 
@@ -551,16 +601,28 @@ async fn execute_stored_harness(
         )
         .await?;
     let verification_started = Instant::now();
-    let verification_status = runner
-        .run(
-            &verification.program,
-            &verification.args,
-            &paths.root,
-            options
-                .verification_timeout_seconds
-                .map(std::time::Duration::from_secs),
-        )
-        .await;
+    // Automatic tests must not open a watch session or inherit interactive stdin.
+    // Own their process tree even when the coding agent itself was interactive.
+    let verification_status = async {
+        let mut automatic_runner = if options.automatic_verification {
+            Some(processes::Runner::automatic_verification()?)
+        } else {
+            None
+        };
+        let verifier = automatic_runner.as_mut().unwrap_or(&mut runner);
+        verifier
+            .run(
+                &verification.program,
+                &verification.args,
+                &paths.root,
+                options
+                    .verification_timeout_seconds
+                    .or(options.automatic_verification.then_some(300))
+                    .map(std::time::Duration::from_secs),
+            )
+            .await
+    }
+    .await;
     let verification_status = match verification_status {
         Ok(processes::ProcessResult::Exited(status)) => status,
         Ok(processes::ProcessResult::Stopped { state, launched }) => {
@@ -616,8 +678,13 @@ async fn execute_stored_harness(
             Some(execution),
         )
         .await?;
+    let evidence = if verification_status.code().is_some() {
+        "verification"
+    } else {
+        "process_exit"
+    };
     eprintln!(
-        "jevia: outcome={outcome} duration_ms={duration_ms} verification_duration_ms={verification_duration_ms}"
+        "jevia: outcome={outcome} evidence={evidence} recorded=true duration_ms={duration_ms} verification_duration_ms={verification_duration_ms}"
     );
 
     Ok(child_exit_code(&verification_status))
@@ -1380,6 +1447,7 @@ mod tests {
                 non_interactive: true,
                 timeout_seconds: Some(1),
                 verification_timeout_seconds: None,
+                ..Default::default()
             },
         )
         .await
@@ -1419,6 +1487,7 @@ mod tests {
                 non_interactive: true,
                 timeout_seconds: Some(5),
                 verification_timeout_seconds: Some(5),
+                ..Default::default()
             },
         )
         .await
@@ -1437,37 +1506,40 @@ mod tests {
 
     #[tokio::test]
     async fn verifier_timeout_preserves_successful_harness_evidence() {
-        let dir = tempdir().unwrap();
-        let paths = ProjectPaths::at(dir.path().to_path_buf());
-        let record = sample_record();
-        store::append(&paths.runs, &record).unwrap();
-        let (program, args) = long_process();
-        let invocation = HarnessInvocation {
-            program: "rustc".into(),
-            args: vec!["--version".into()],
-            model: "test".into(),
-            verification: Some(VerificationInvocation { program, args }),
-        };
-        let code = execute_harness_with_options(
-            &paths,
-            "test",
-            &invocation,
-            &record,
-            RunOptions {
-                non_interactive: true,
-                timeout_seconds: None,
-                verification_timeout_seconds: Some(1),
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(code, ExitCode::from(124));
-        let stored = store::load(&paths.runs).unwrap().remove(0);
-        assert_eq!(stored.outcome, Outcome::Unknown);
-        assert_eq!(stored.lifecycle.unwrap().state, RunState::TimedOut);
-        let execution = stored.execution.unwrap();
-        assert_eq!(execution.exit_code, Some(0));
-        assert!(execution.verification.unwrap().launched);
+        for automatic_verification in [false, true] {
+            let dir = tempdir().unwrap();
+            let paths = ProjectPaths::at(dir.path().to_path_buf());
+            let record = sample_record();
+            store::append(&paths.runs, &record).unwrap();
+            let (program, args) = long_process();
+            let invocation = HarnessInvocation {
+                program: "rustc".into(),
+                args: vec!["--version".into()],
+                model: "test".into(),
+                verification: Some(VerificationInvocation { program, args }),
+            };
+            let code = execute_harness_with_options(
+                &paths,
+                "test",
+                &invocation,
+                &record,
+                RunOptions {
+                    non_interactive: !automatic_verification,
+                    timeout_seconds: None,
+                    verification_timeout_seconds: Some(1),
+                    automatic_verification,
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(code, ExitCode::from(124));
+            let stored = store::load(&paths.runs).unwrap().remove(0);
+            assert_eq!(stored.outcome, Outcome::Unknown);
+            assert_eq!(stored.lifecycle.unwrap().state, RunState::TimedOut);
+            let execution = stored.execution.unwrap();
+            assert_eq!(execution.exit_code, Some(0));
+            assert!(execution.verification.unwrap().launched);
+        }
     }
 
     fn sample_record() -> RouteRecord {

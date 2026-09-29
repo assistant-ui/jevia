@@ -28,9 +28,9 @@ function writeCommand(directory, name, body) {
 function createFixture(directory, target = "x86_64-unknown-linux-musl") {
   const fixtureDirectory = join(directory, "fixtures");
   mkdirSync(fixtureDirectory);
-  const assetName = `jevia-v0.1.2-${target}`;
+  const assetName = `jevia-v0.1.3-${target}`;
   const assetPath = join(fixtureDirectory, assetName);
-  writeFileSync(assetPath, '#!/bin/sh\nprintf "%s\\n" "jevia 0.1.2"\n');
+  writeFileSync(assetPath, '#!/bin/sh\nprintf "%s\\n" "jevia 0.1.3"\n');
   chmodSync(assetPath, 0o755);
   const digest = createHash("sha256").update(readFileSync(assetPath)).digest("hex");
   writeFileSync(join(fixtureDirectory, `${assetName}.sha256`), `${digest}  ${assetName}\n`);
@@ -89,7 +89,7 @@ cp "$JEVIA_FIXTURE_DIR/\${url##*/}" "$output"
     env: {
       ...process.env,
       HOME: directory,
-      JEVIA_DOWNLOAD_BASE_URL: "https://downloads.example.test/v0.1.2",
+      JEVIA_DOWNLOAD_BASE_URL: "https://downloads.example.test/v0.1.3",
       JEVIA_FIXTURE_DIR: fixture.fixtureDirectory,
       JEVIA_INSTALL_DIR: installDirectory,
       PATH: path,
@@ -114,7 +114,7 @@ test("explains the prerequisite when curl is missing", (t) => {
 test("installs the verified Linux release binary without Cargo", (t) => {
   const { installDirectory, result } = runInstaller(t);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Downloading Jevia 0\.1\.2 for x86_64-unknown-linux-musl/);
+  assert.match(result.stdout, /Downloading Jevia 0\.1\.3 for x86_64-unknown-linux-musl/);
   assert.match(result.stdout, /OK/);
   assert.doesNotMatch(result.stdout, /cargo|crates\.io/i);
 
@@ -123,7 +123,7 @@ test("installs the verified Linux release binary without Cargo", (t) => {
   assert.ok((statSync(installed).mode & 0o111) !== 0);
   const version = spawnSync(installed, ["--version"], { encoding: "utf8" });
   assert.equal(version.status, 0);
-  assert.equal(version.stdout.trim(), "jevia 0.1.2");
+  assert.equal(version.stdout.trim(), "jevia 0.1.3");
 });
 
 test("maps Apple Silicon to the published Darwin target", (t) => {

@@ -10,7 +10,7 @@ task
   -> local confidence policy
   -> route decision
   -> configured harness adapter
-  -> optional post-run verifier
+  -> configured or automatically detected post-run verifier
   -> observed outcome
   -> local outcome history
 ```
@@ -46,9 +46,25 @@ Adapters translate a selected capability tier into a harness-specific model
 and argument list. Tier definitions remain stable when individual model
 catalogs change. Templates are rendered into a process and argument vector;
 they are never passed through a shell. Jevia launches the child in the project
-root and mirrors its exit code. An optional shell-free verification process can
-make the final outcome depend on project checks instead of trusting a
-successful harness exit alone.
+root and mirrors its exit code. After a successful harness exit, Jevia runs a
+configured verifier, or the root Rust/Node tests detected by the unreleased
+CLI after 0.1.3. Verification, terminal outcome recording, and inclusion of
+eligible evidence in later routing need no manual feedback/completion call.
+Missing or ambiguous checks remain explicitly unverified: process-only results
+do not enter learning. A passing check is evidence, not proof of every requirement.
+
+The boundary is the launched process/session, not each internal agent message or
+tool call. Harness installation, credentials, model mapping, and project test
+prerequisites are still user setup. `route` and SDK routing methods stop at the
+routing decision; their caller owns execution, verification, and outcome reporting.
+SDK feedback and verification are optional. A route without feedback is still
+recorded with an unknown outcome and does not block subsequent routing. Existing
+eligible outcomes continue to inform those decisions automatically.
+Explicit SDK feedback is application-reported evidence and does not require a
+CLI verifier or external-completion call to become eligible. Every subsequent
+`route` reads eligible history from the selected backend before building its
+cache key and Jev request. The shared evidence filter and `router.history_limit`
+apply equally to SDK and CLI callers; no separate SDK history payload is needed.
 
 ### Routing cache
 
@@ -128,6 +144,17 @@ running/verifying record interrupted; it never reruns work or infers task failur
 The durable phases are routed, running, verifying, completed, launch_failed, and
 interrupted. Start and finish timestamps are distinct from routing time.
 Manual feedback is refused on active runs and never invents harness metadata.
+For CLI-run work, a configured verifier takes precedence; otherwise automatic
+root-project test detection is enabled by default unless the adapter sets
+`auto_verify = false`. Detected checks use the same durable verification state and
+evidence, run with CI semantics and owned process-tree cleanup, and have a default
+five-minute deadline. Missing/ambiguous checks leave process-only evidence; they
+are never silently treated as verification. No manual completion is needed after
+`run`. Route-only/SDK integrations remain explicit and do not execute tests.
+External completion is a separate, explicitly confirmed operation. It holds the
+per-run lease and atomically records manual feedback plus a completed lifecycle
+only for pending, unowned external work. It does not invent a start time or
+execution/verifier evidence. Ordinary feedback never changes lifecycle state.
 
 History maintenance is explicit and preview-first. Apply takes the same exclusive
 history lock, revalidates the complete input, durably saves an exact original-byte

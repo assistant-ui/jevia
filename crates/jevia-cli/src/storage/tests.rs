@@ -28,6 +28,22 @@ fn sqlite_config() -> Config {
     }
 }
 
+#[tokio::test]
+async fn invalid_decisions_are_rejected_before_jsonl_or_sqlite_writes() {
+    for config in [Config::default(), sqlite_config()] {
+        let directory = tempfile::tempdir().unwrap();
+        let paths = ProjectPaths::at(directory.path().into());
+        let storage = Storage::open(&config, &paths, true).await.unwrap();
+        let mut bad = sample("private-run");
+        bad.decision
+            .probabilities
+            .insert("private-tier".into(), 2.0);
+        let error = storage.append(&bad).await.unwrap_err();
+        assert!(!format!("{error:#}").contains("private-"));
+        assert!(storage.recent(10, false).await.unwrap().is_empty());
+    }
+}
+
 fn postgres_config() -> Config {
     Config {
         storage: StorageConfig::Postgres {
@@ -37,6 +53,131 @@ fn postgres_config() -> Config {
         },
         ..Config::default()
     }
+}
+
+async fn external_completion_contract(config: Config) {
+    let directory = tempfile::tempdir().unwrap();
+    let paths = ProjectPaths::at(directory.path().into());
+    let storage = Storage::open(&config, &paths, true).await.unwrap();
+    for id in ["a", "b", "pending", "guarded", "active"] {
+        storage.append(&sample(id)).await.unwrap();
+    }
+    let original = storage.get("a").await.unwrap();
+    assert!(
+        storage
+            .complete_external("a", Outcome::Success, None, false)
+            .await
+            .is_err()
+    );
+    assert_eq!(storage.get("a").await.unwrap(), original);
+    let guard = storage.execution_guard("guarded").await.unwrap();
+    assert!(
+        storage
+            .complete_external("guarded", Outcome::Success, None, true)
+            .await
+            .is_err()
+    );
+    drop(guard);
+    storage
+        .state("active", RunState::Running, Outcome::Unknown, None)
+        .await
+        .unwrap();
+    assert!(
+        storage
+            .complete_external("active", Outcome::Success, None, true)
+            .await
+            .is_err()
+    );
+    storage.outcome("a", Outcome::Failure, None).await.unwrap();
+    let before = storage.get("a").await.unwrap();
+    assert!(
+        storage
+            .complete_external("a", Outcome::Success, None, true)
+            .await
+            .is_err()
+    );
+    assert_eq!(storage.get("a").await.unwrap(), before);
+    let done = storage
+        .complete_external("a", Outcome::Success, Some("external tests passed"), true)
+        .await
+        .unwrap();
+    assert_eq!(done.lifecycle.as_ref().unwrap().state, RunState::Completed);
+    assert!(done.lifecycle.as_ref().unwrap().started_at_ms.is_none());
+    assert!(done.lifecycle.as_ref().unwrap().finished_at_ms.is_some());
+    assert!(done.execution.is_none());
+    assert_eq!(
+        done.outcome_evidence.as_ref().unwrap().source,
+        jevia_core::OutcomeSource::Manual
+    );
+    assert!(done.is_learning_evidence());
+    assert_eq!(done.feedback.len(), 2);
+    assert!(
+        storage
+            .complete_external("a", Outcome::Success, None, true)
+            .await
+            .is_err()
+    );
+    assert_eq!(storage.get("a").await.unwrap(), done);
+    storage
+        .complete_external("b", Outcome::Unknown, None, true)
+        .await
+        .unwrap();
+    assert!(!storage.get("b").await.unwrap().is_learning_evidence());
+    let preview = storage.archive(&paths, 1, false).await.unwrap();
+    assert_eq!(preview.archived_records, 1);
+    assert_eq!(storage.recent(10, false).await.unwrap().len(), 5);
+    assert_eq!(
+        storage
+            .archive(&paths, 1, true)
+            .await
+            .unwrap()
+            .archived_records,
+        1
+    );
+    assert!(storage.get("a").await.is_err());
+    assert_eq!(
+        storage
+            .get("pending")
+            .await
+            .unwrap()
+            .lifecycle
+            .unwrap()
+            .state,
+        RunState::Routed
+    );
+    assert_eq!(
+        storage
+            .get("active")
+            .await
+            .unwrap()
+            .lifecycle
+            .unwrap()
+            .state,
+        RunState::Running
+    );
+    storage.append(&sample("racing")).await.unwrap();
+    let (one, two) = tokio::join!(
+        storage.complete_external("racing", Outcome::Success, None, true),
+        storage.complete_external("racing", Outcome::Success, None, true),
+    );
+    assert_ne!(one.is_ok(), two.is_ok(), "exactly one completion wins");
+    assert_eq!(storage.get("racing").await.unwrap().feedback.len(), 1);
+}
+
+#[tokio::test]
+async fn jsonl_external_completion_contract() {
+    external_completion_contract(Config::default()).await;
+}
+
+#[tokio::test]
+async fn sqlite_external_completion_contract() {
+    external_completion_contract(sqlite_config()).await;
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated PostgreSQL database in JEVIA_TEST_POSTGRES_URL"]
+async fn postgres_external_completion_contract() {
+    external_completion_contract(postgres_config()).await;
 }
 
 #[tokio::test]

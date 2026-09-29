@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "type-check": "tsc --noEmit -p tsconfig.json",
+    "type-check": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
     "test": "pnpm build && node --test test/*.test.mjs",
     "test:cli": "pnpm build && node --test test-cli/*.test.mjs",
     "prepack": "pnpm build"

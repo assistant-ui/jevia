@@ -3,14 +3,18 @@
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 
 import { DocsPageActions } from "./docs-page-actions";
+import { DocsNavLinks } from "./docs-nav-links";
 
 const SECTIONS = [
-  { id: "overview", number: "00", label: "Overview", title: "Get started with Jevia" },
-  { id: "install", number: "01", label: "Install", title: "Install the Node.js package" },
-  { id: "quickstart", number: "02", label: "Quickstart", title: "Create a client and route" },
-  { id: "methods", number: "03", label: "Methods", title: "Client methods" },
-  { id: "adapters", number: "04", label: "Harness adapters", title: "Open any harness" },
-  { id: "errors", number: "05", label: "Errors", title: "Cancellation and errors" },
+  { id: "overview", number: "00", label: "Overview", title: "Jevia documentation" },
+  { id: "install", number: "01", label: "Install", title: "Install and validate" },
+  { id: "quickstart", number: "02", label: "CLI workflow", title: "Route, run, and inspect" },
+  { id: "adaptive", number: "03", label: "Adaptive loop", title: "How routing learns" },
+  { id: "adapters", number: "04", label: "Harnesses", title: "Connect any harness" },
+  { id: "methods", number: "05", label: "Node.js SDK", title: "Embed Jevia in a harness" },
+  { id: "outcomes", number: "06", label: "Outcomes", title: "Verify and report outcomes" },
+  { id: "storage", number: "07", label: "Storage", title: "Choose and configure storage" },
+  { id: "errors", number: "08", label: "Maintenance", title: "Cache, diagnostics, and recovery" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -109,17 +113,21 @@ export function DocsSidebar() {
   }, []);
 
   useEffect(() => {
-    if (window.innerWidth > 800) return;
+    function centerActiveLink() {
+      if (window.innerWidth > 800) return;
+      const anchor = document.querySelector<HTMLAnchorElement>(
+        '.docs-nav-group a[href="#' + activeId + '"]',
+      );
+      const navigation = anchor?.closest<HTMLElement>(".docs-nav-group");
+      if (!anchor || !navigation) return;
 
-    const anchor = document.querySelector<HTMLAnchorElement>(
-      '.docs-nav-group a[href="#' + activeId + '"]',
-    );
-    const navigation = anchor?.closest<HTMLElement>(".docs-nav-group");
-    if (!anchor || !navigation) return;
-
-    const left =
-      anchor.offsetLeft - navigation.clientWidth / 2 + anchor.offsetWidth / 2;
-    navigation.scrollTo({ left, behavior: "auto" });
+      const left = navigation.scrollLeft + anchor.getBoundingClientRect().left -
+        navigation.getBoundingClientRect().left - navigation.clientWidth / 2 + anchor.offsetWidth / 2;
+      navigation.scrollTo({ left, behavior: "auto" });
+    }
+    centerActiveLink();
+    window.addEventListener("resize", centerActiveLink);
+    return () => window.removeEventListener("resize", centerActiveLink);
   }, [activeId]);
 
   const activeSection =
@@ -160,8 +168,8 @@ export function DocsSidebar() {
     }
 
     document.getElementById(id)?.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
+      behavior: event.detail === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
         : "smooth",
       block: "start",
     });
@@ -171,8 +179,8 @@ export function DocsSidebar() {
     <>
       <header className="docs-page-bar">
         <a className="docs-sidebar-title" href="#overview">
-          <span aria-hidden="true">01</span>
-          API reference
+          <span aria-hidden="true">00</span>
+          Documentation
         </a>
         <div className="docs-page-bar-main">
           <h1>{activeSection.title}</h1>
@@ -184,21 +192,7 @@ export function DocsSidebar() {
       <aside className="docs-sidebar" aria-label="Documentation navigation">
         <div className="docs-sidebar-inner">
           <div className="docs-nav-group">
-            <nav aria-label="Node API sections">
-              {SECTIONS.map(({ id, number, label }) => (
-                <a
-                  key={id}
-                  href={"#" + id}
-                  aria-current={activeId === id ? "location" : undefined}
-                  onClick={(event) => beginSectionNavigation(event, id)}
-                >
-                  <span className="docs-nav-index" aria-hidden="true">
-                    {number}
-                  </span>
-                  <span>{label}</span>
-                </a>
-              ))}
-            </nav>
+            <DocsNavLinks sections={SECTIONS} activeId={activeId} onNavigate={beginSectionNavigation} />
           </div>
         </div>
       </aside>

@@ -20,6 +20,16 @@ assert!(config.tiers.contains_key(&config.router.fallback_tier));
 
 Requires Rust 1.92 or newer. The API is experimental.
 
+## Unreleased error privacy changes
+
+Provider and transport errors retain only safe categories, JSON locations, and
+HTTP status codes. They no longer retain raw response values, endpoint URLs, or
+underlying parser/network error sources. `JevError::Request` now carries a static
+category, `InvalidJson` carries `line`/`column`, and `CacheKey`, `InvalidConfidence`,
+`UnexpectedAnswerType`, and `UnknownTier` are unit variants. Callers matching
+these experimental variants must update their patterns. Configuration validation
+errors are separate and should not be logged with untrusted configuration values.
+
 ## Upgrading from 0.1.1
 
 Version 0.1.2 adds `Config::storage` for opt-in SQL history backends. Despite the

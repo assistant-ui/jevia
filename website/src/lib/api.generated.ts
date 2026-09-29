@@ -5,12 +5,19 @@
  * Server modules are imported only as types. Runtime data contains paths and methods only.
  */
 
-
+import type { GET as GET_docs_markdown } from "../app/api/docs-markdown/route";
 
 // Type-only representation of your API routes
 export type APIRouter = {
-
+  "docs-markdown": {
+    get: typeof GET_docs_markdown;
+  };
 };
 
 // Pass this schema-free manifest to createApiClients({ routes: apiRoutes }).
-export const apiRoutes = [] as const;
+export const apiRoutes = [
+  {
+    path: "/api/docs-markdown",
+    methods: ["GET"],
+  },
+] as const;

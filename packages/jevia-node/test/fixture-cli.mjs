@@ -57,6 +57,10 @@ if (args[0] === "--version") {
       }),
     ),
   );
+} else if (args[0] === "runs" && args[1] === "complete") {
+  console.log(JSON.stringify(record({ run_id: positionals[0], outcome: positionals[1],
+    jev_model: args.join("|"), lifecycle: { state: "completed", started_at_ms: null, finished_at_ms: 2 },
+  })));
 } else if (args[0] === "runs" && args[1] === "show") {
   console.log(JSON.stringify(record({ run_id: positionals[0] })));
 } else if (args[0] === "runs") {
