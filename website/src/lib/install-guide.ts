@@ -24,7 +24,7 @@ export function getInstallGuide(origin: string) {
     "",
     "## 2. Install the CLI",
     "",
-    `Review the shell installer at ${installer} or the Windows installer at ${powershellInstaller} before running it. The selected installer downloads the matching Jevia 0.1.4 binary from https://github.com/assistant-ui/jevia/releases/tag/v0.1.4, and verifies its SHA-256 checksum before installing it.`,
+    `Review the shell installer at ${installer} or the Windows installer at ${powershellInstaller} before running it. The selected installer downloads the matching Jevia 0.1.5 binary from https://github.com/assistant-ui/jevia/releases/tag/v0.1.5, and verifies its SHA-256 checksum before installing it.`,
     "",
     "```bash",
     "set -euo pipefail",
