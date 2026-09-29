@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 use jevia_core::{
     ExecutionEvidence, FeedbackEvent, Outcome, OutcomeEvidence, OutcomeSource,
-    RECORD_SCHEMA_VERSION, RouteRecord, RunState,
+    RECORD_SCHEMA_VERSION, RouteRecord, RunLifecycle, RunState,
 };
 use tempfile::NamedTempFile;
 
@@ -237,6 +237,48 @@ pub(super) fn apply_outcome(
     record.outcome_evidence = Some(OutcomeEvidence {
         source: OutcomeSource::Manual,
         recorded_at_ms,
+    });
+    Ok(())
+}
+
+pub fn complete_external(
+    path: &Path,
+    run_id: &str,
+    outcome: Outcome,
+    reason: Option<&str>,
+) -> Result<RouteRecord> {
+    update(path, run_id, |record| {
+        apply_external_completion(record, outcome, reason)
+    })
+}
+
+pub(super) fn apply_external_completion(
+    record: &mut RouteRecord,
+    outcome: Outcome,
+    reason: Option<&str>,
+) -> Result<()> {
+    if record.execution.is_some()
+        || record.lifecycle.as_ref().is_some_and(|life| {
+            life.state != RunState::Routed
+                || life.started_at_ms.is_some()
+                || life.finished_at_ms.is_some()
+        })
+        || record
+            .outcome_evidence
+            .as_ref()
+            .is_some_and(|evidence| evidence.source != OutcomeSource::Manual)
+    {
+        bail!(
+            "only pending, externally executed runs can be completed; inspect or recover supervised runs instead"
+        );
+    }
+    // Preserve manual provenance and correction rules. No invented harness,
+    // verifier, start time, or process-exit evidence for work we did not observe.
+    apply_outcome(record, outcome, reason)?;
+    record.lifecycle = Some(RunLifecycle {
+        state: RunState::Completed,
+        started_at_ms: None,
+        finished_at_ms: Some(now_ms()),
     });
     Ok(())
 }
@@ -790,6 +832,32 @@ mod tests {
             fs::read(&path).expect("history remains readable"),
             malformed
         );
+    }
+
+    #[test]
+    fn external_completion_rejects_nonpending_states_without_mutation() {
+        for state in [
+            RunState::Running,
+            RunState::Verifying,
+            RunState::Completed,
+            RunState::Interrupted,
+            RunState::LaunchFailed,
+            RunState::Cancelled,
+            RunState::TimedOut,
+        ] {
+            let mut record = sample_record();
+            record.lifecycle = Some(RunLifecycle {
+                state,
+                ..Default::default()
+            });
+            let before = record.clone();
+            assert!(apply_external_completion(&mut record, Outcome::Success, None).is_err());
+            assert_eq!(record, before);
+        }
+        let mut legacy = sample_record();
+        apply_external_completion(&mut legacy, Outcome::Unknown, None).unwrap();
+        assert_eq!(legacy.lifecycle.unwrap().state, RunState::Completed);
+        assert!(legacy.execution.is_none());
     }
 
     fn sample_record() -> RouteRecord {

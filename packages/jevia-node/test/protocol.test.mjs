@@ -76,7 +76,7 @@ test("validates every optional evidence object and nested field", () => {
 
 test("all record-returning methods reject invalid CLI output without exposing it", async () => {
   const invalid = { ...record, lifecycle: "PRIVATE_RESPONSE_SENTINEL" };
-  for (const method of ["route", "feedback", "show", "runs"]) {
+  for (const method of ["route", "feedback", "show", "runs", "complete"]) {
     const output = JSON.stringify(method === "runs" ? [record, invalid] : invalid);
     const client = new JeviaClient({
       binary: process.execPath,
@@ -84,6 +84,7 @@ test("all record-returning methods reject invalid CLI output without exposing it
       env: { TEST_RESPONSE: output },
     });
     const pending = method === "feedback" ? client.feedback("id", "success")
+      : method === "complete" ? client.complete("id", "success", { confirmStopped: true })
       : method === "runs" ? client.runs() : client[method]("id");
     await assert.rejects(pending, (error) => {
       assert.ok(error instanceof JeviaProtocolError);

@@ -365,6 +365,31 @@ Older CLI versions refuse version 3 rather than silently discard new metadata.
 The ignored `run-leases/` sidecars are retained so concurrent processes always
 coordinate on the same lock file.
 
+### Complete work from an external harness (unreleased)
+
+When you use `route` and run your own agent, ordinary `feedback` updates the
+outcome but deliberately leaves the run pending. After **all external work and
+verification have stopped**, explicitly finish it:
+
+```sh
+jevia runs complete <run-id> success --confirm-stopped
+# A changed known outcome requires an explanation:
+jevia runs complete <run-id> failure --confirm-stopped --reason "Tests still fail"
+```
+
+This command is pending the next CLI release after 0.1.3. It atomically records
+manual feedback and a completed lifecycle in JSONL, SQLite, or PostgreSQL. The
+finish timestamp is when completion was recorded; start time and harness evidence
+remain absent because Jevia did not observe execution. `unknown` is also accepted
+when work stopped but the result is inconclusive; it does not become learning evidence.
+
+Only pending external records qualify. Active/terminal runs, supervised evidence,
+held execution leases, and SQL supervisor ownership are refused. This command
+does not stop processes, verify work, retry tasks, or bypass recovery. Repeated
+completion is refused; after an uncertain response, inspect `runs show` before
+retrying. Completed records become eligible for normal preview-first archival;
+other pending and active records remain protected.
+
 ### Bounded non-interactive execution
 
 For a headless harness, opt into owned process-tree supervision:

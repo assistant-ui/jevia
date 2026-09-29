@@ -84,3 +84,14 @@ test("validates inputs before starting the CLI", async () => {
   await assert.rejects(client().route("  "), /task cannot be empty/);
   await assert.rejects(client().runs({ limit: 0 }), /limit must be a positive safe integer/);
 });
+
+test("completion is explicit and preserves option-like identifiers and reasons", async () => {
+  for (const options of [undefined, {}, { confirmStopped: false }, { confirmStopped: "true" }]) {
+    await assert.rejects(client().complete("id", "success", options), /confirmStopped/);
+  }
+  const done = await client().complete("--help", "success", { confirmStopped: true, reason: "--tests passed" });
+  assert.equal(done.lifecycle.state, "completed");
+  assert.deepEqual(done.jev_model.split("|"), ["runs", "complete", "--json", "--confirm-stopped", "--reason=--tests passed", "--", "--help", "success"]);
+  await assert.rejects(client().complete("id", "invalid", { confirmStopped: true }), TypeError);
+  await assert.rejects(client().complete("id", "success", { confirmStopped: true, reason: "private\0" }), TypeError);
+});

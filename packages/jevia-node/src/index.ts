@@ -84,6 +84,11 @@ export interface FeedbackOptions extends CommandOptions {
   reason?: string;
 }
 
+export interface CompleteOptions extends FeedbackOptions {
+  /** Confirm your external harness and verification have both stopped. */
+  confirmStopped: true;
+}
+
 export interface ListRunsOptions extends CommandOptions {
   limit?: number;
 }
@@ -222,6 +227,24 @@ export class JeviaClient {
     }
 
     const args = ["feedback", "--json"];
+    if (options.reason !== undefined) {
+      requireText(options.reason, "reason");
+      args.push(`--reason=${options.reason}`);
+    }
+    args.push("--", runId, outcome);
+    return this.record(await this.execute(args, options.signal));
+  }
+
+  /** Explicitly finish external work; ordinary feedback does not close a run. */
+  async complete(runId: string, outcome: Outcome, options: CompleteOptions): Promise<RouteRecord> {
+    requireText(runId, "runId");
+    if (options?.confirmStopped !== true) {
+      throw new TypeError("external completion requires confirmStopped: true");
+    }
+    if (!(["success", "failure", "unknown"] as const).includes(outcome)) {
+      throw new TypeError("outcome must be success, failure, or unknown");
+    }
+    const args = ["runs", "complete", "--json", "--confirm-stopped"];
     if (options.reason !== undefined) {
       requireText(options.reason, "reason");
       args.push(`--reason=${options.reason}`);
