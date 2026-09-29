@@ -49,7 +49,7 @@
   "author": "assistant-ui",
   "packageManager": "pnpm@10.9.0",
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.3",
     "typescript": "^5.9.3"
   }
 }
