@@ -297,7 +297,7 @@ pub struct HarnessConfig {
     pub command: String,
     pub args: Vec<String>,
     pub models: BTreeMap<String, String>,
-    /// Discover root project tests when no explicit verifier is configured.
+    /// Opt in to root project tests when no explicit verifier is configured.
     #[serde(default = "default_auto_verify")]
     pub auto_verify: bool,
     #[serde(default)]
@@ -305,7 +305,7 @@ pub struct HarnessConfig {
 }
 
 fn default_auto_verify() -> bool {
-    true
+    false
 }
 
 /// Optional process that verifies a successful harness run.
@@ -689,10 +689,12 @@ mod tests {
     }
 
     #[test]
-    fn automatic_verification_is_default_but_can_be_disabled() {
+    fn additional_verification_is_opt_in() {
         let raw = "command='agent'\nargs=['{model}', '{task}']\nmodels={fast='test'}\n";
         let harness: HarnessConfig = toml::from_str(raw).unwrap();
-        assert!(harness.auto_verify);
+        assert!(!harness.auto_verify);
+        let enabled: HarnessConfig = toml::from_str(&format!("{raw}auto_verify=true\n")).unwrap();
+        assert!(enabled.auto_verify);
         let disabled: HarnessConfig = toml::from_str(&format!("{raw}auto_verify=false\n")).unwrap();
         assert!(!disabled.auto_verify);
         assert!(toml::from_str::<HarnessConfig>(&format!("{raw}auto_verify='false'\n")).is_err());
