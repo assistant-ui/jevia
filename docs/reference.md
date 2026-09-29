@@ -49,7 +49,7 @@ PostgreSQL storage checks do connect to the configured database.
 To install the exact crates.io release with Rust 1.92 or newer:
 
 ```bash
-cargo install jevia --version 0.1.3 --locked
+cargo install jevia --version 0.1.4 --locked
 ```
 
 To try unreleased development changes instead:
@@ -74,11 +74,9 @@ agent exit, and saves the outcome automatically. **No manual `feedback` or
 later routing decisions. The name `codex` must match your configured adapter;
 Jevia does not install or authenticate the agent for you.
 
-**Unreleased:** automatic discovery of existing Rust/Node tests is pending the
-next CLI release after 0.1.3. The installer above still installs 0.1.3, which
-needs a configured verifier to verify runs automatically. See
-[automatic CLI pipeline](#automatic-cli-pipeline-unreleased) for detection,
-overrides, and verification limits.
+CLI 0.1.4 automatically discovers existing root Rust or Node tests when no
+verifier is configured. See [automatic CLI pipeline](#automatic-cli-pipeline)
+for detection, overrides, and verification limits.
 
 ### Route only: your integration owns execution
 
@@ -106,11 +104,11 @@ jevia runs --json
 | `jevia harness setup <name>` | Preview an explicit harness template; back up and save only with `--apply`. |
 | `jevia harness check <name> [--json]` | Inspect configuration and local executable candidates without launching programs or calling APIs. |
 | `jevia route <task>` | Ask Jev for a tier and record the decision. |
-| <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch, verify, and record automatically; test auto-detection is unreleased. |
+| <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch, verify, and record automatically, including root Rust/Node test discovery when no verifier is configured. |
 | `jevia runs` | Inspect recent records in the configured backend. |
 | `jevia stats [--limit <records>] [--json]` | Summarize recent routing decisions, verified outcomes, manual feedback, and cache hits. |
 | `jevia feedback <id> <outcome>` | Report externally verified work or manually correct an outcome; not required after `run`. |
-| `jevia runs complete <id> <outcome> --confirm-stopped` | Explicitly finish external work with manual evidence (unreleased). |
+| `jevia runs complete <id> <outcome> --confirm-stopped` | Explicitly finish external work with manual evidence. |
 | `jevia doctor` | Validate configuration, credentials, and configured storage. |
 | `jevia storage setup <sqlite\|postgres>` | Preview database setup; explicitly apply after validation, backup, and optional JSONL import. |
 | `jevia storage init` | Explicitly initialize an opt-in database schema and project. |
@@ -210,9 +208,8 @@ shown and use `--arg=--flag` / `--verify-arg=--flag` for leading-hyphen argument
 - Changing an existing harness also requires `--replace`. Reapplying identical
   settings does not rewrite the config or make another backup (apply may create
   the config lock sidecar). The selected harness entry is rewritten when changed.
-- Automatic test detection and persistent opt-out behavior are **unreleased**
-  (after 0.1.3).
-  Omitted verifier options preserve an existing verifier and automatic-detection
+- Automatic test detection and persistent opt-out behavior are available in
+  CLI 0.1.4. Omitted verifier options preserve an existing verifier and automatic-detection
   setting. New adapters default to automatic project tests. Use `--no-verification`
   to disable both explicit and automatic checks, or `--auto-verification` to remove
   a custom verifier and re-enable detection. Supplying `--verify-command` replaces
@@ -234,8 +231,8 @@ jevia harness check agent --json
 
 Preflight validates the project config and selected adapter, renders its templates
 for every configured tier, rejects NUL arguments, and checks file candidates for
-the agent and configured verifier (or automatically detected verifier in the
-unreleased CLI). It requires no Jev/provider key or database
+the agent and configured or automatically detected verifier. It requires no
+Jev/provider key or database
 connection, does not read history/cache, and creates no files or locks. It never
 executes even a `--version` probe. Missing executables, model mappings, or valid
 templates produce a failing exit status. An absent verifier is a warning, not a
@@ -382,9 +379,9 @@ probabilities, timestamps, lifecycle state, execution evidence, and feedback.
 Malformed or unsupported responses raise `JeviaProtocolError` without including
 their contents.
 
-Unreleased `setupStorage(target, options?)` and `checkStorage(options?)` methods
+`setupStorage(target, options?)` and `checkStorage(options?)` in `jevia@0.1.1`
 provide the same explicit, preview-first SQLite and PostgreSQL administration as
-the CLI. They are not in `jevia@0.1.0`; they require CLI 0.1.2 or newer. Apply
+the CLI. They require CLI 0.1.2 or newer. Apply
 requires `confirmStopped: true`, JSONL import remains explicit, PostgreSQL accepts
 an environment variable name rather than a URL, and deep checks do not write or
 repair. See the [Node.js package reference](../packages/jevia-node/README.md) for
@@ -395,7 +392,7 @@ logging. Raw command, stdout, and stderr are available only through explicit
 getters for private debugging and may contain tasks or credentials; do not send
 them to logs or telemetry.
 
-## Automatic CLI pipeline (unreleased)
+## Automatic CLI pipeline
 
 After configuring your harness once, use the normal command:
 
@@ -438,8 +435,8 @@ Configure a suitable check once for such projects. `harness check <name>` previe
 detection and executable availability without running tests. Passing tests means
 the selected checks passed—not a guarantee that every requirement was satisfied.
 
-This behavior is pending the next CLI release after 0.1.3. Existing adapters
-without a verifier also gain detection. To preserve process-only behavior, set
+This behavior is available in CLI 0.1.4. Existing adapters without a verifier
+also gain detection. To preserve process-only behavior, set
 `auto_verify = false` in that adapter; the older `--no-verification` removed the
 verifier without storing an explicit opt-out. The new flag persists that opt-out.
 The Node SDK's `route`, `feedback`, and `complete` remain explicit and flexible;
@@ -468,7 +465,7 @@ Older CLI versions refuse version 3 rather than silently discard new metadata.
 The ignored `run-leases/` sidecars are retained so concurrent processes always
 coordinate on the same lock file.
 
-### Complete work from an external harness (unreleased)
+### Complete work from an external harness
 
 When you use `route` and run your own agent, ordinary `feedback` updates the
 outcome but deliberately leaves the run pending. After **all external work and
@@ -480,8 +477,8 @@ jevia runs complete <run-id> success --confirm-stopped
 jevia runs complete <run-id> failure --confirm-stopped --reason "Tests still fail"
 ```
 
-This command is pending the next CLI release after 0.1.3. It atomically records
-manual feedback and a completed lifecycle in JSONL, SQLite, or PostgreSQL. The
+Available in CLI 0.1.4, this command atomically records manual feedback and a
+completed lifecycle in JSONL, SQLite, or PostgreSQL. The
 finish timestamp is when completion was recorded; start time and harness evidence
 remain absent because Jevia did not observe execution. `unknown` is also accepted
 when work stopped but the result is inconclusive; it does not become learning evidence.

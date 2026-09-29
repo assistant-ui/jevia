@@ -25,11 +25,10 @@ verifier after a successful exit, and saves the result automatically. **No manua
 `feedback` or `complete` call is needed after `jevia run`.** Verification happens
 when the launched process/session ends, not after each internal agent message.
 
-Automatic detection of existing root Rust/Node tests is **unreleased**, pending
-the next CLI release after 0.1.3. With CLI 0.1.3, configure a verifier once. If no
-usable verifier is available, Jevia records an unverified, process-only result;
-it does not treat the agent exiting as proof of task success. See the
-[CLI pipeline documentation](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline-unreleased).
+CLI 0.1.4 automatically detects existing root Rust or Node tests when no verifier
+is configured. If no usable verifier is available, Jevia records an unverified,
+process-only result; it does not treat the agent exiting as proof of task success.
+See the [CLI pipeline documentation](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline).
 
 Use the SDK when your application should control how agents run and how their
 work is checked. SDK routing does not launch a harness or run project tests.
@@ -92,7 +91,7 @@ On every `route()` call, Jevia loads recent eligible outcomes from that project'
 selected JSONL, SQLite, or PostgreSQL storage before choosing a tier. There is no
 need to fetch history with `runs()` or pass it back to `route()`. CLI-verified
 results and SDK-reported results in the same history can both contribute. The
-unreleased `complete()` method also records an eligible outcome while closing an
+`complete()` method also records an eligible outcome while closing an
 external run, but completion is not required merely to reuse `feedback`.
 
 - Only known successes/failures backed by verification or explicit feedback are
@@ -142,9 +141,9 @@ responses raise `JeviaProtocolError` without their contents. Legacy records can
 omit optional evidence; the SDK never invents it. Additive unknown fields remain
 compatible within a supported schema.
 
-## Error categories (unreleased)
+## Error categories
 
-In the next npm release, `JeviaCommandError.kind` provides an allowlisted category
+In `jevia@0.1.1`, `JeviaCommandError.kind` provides an allowlisted category
 without requiring access to private stderr, arguments, or raw system errors:
 
 | Kind | Meaning |
@@ -181,11 +180,11 @@ try {
 Categories do not imply retry safety. After a timeout, abort, or failed mutation,
 inspect the stored state before retrying; cancellation is not a rollback guarantee.
 
-## External completion (unreleased)
+## External completion
 
-`complete` requires the next CLI release after 0.1.3 and the next npm release;
-it is not available in `jevia@0.1.0`. After your harness and any optional verifier
-have stopped, use it instead of `feedback` when you also want to finish the run:
+`complete` is available in `jevia@0.1.1` and requires CLI 0.1.4 or newer. After
+your harness and any optional verifier have stopped, use it instead of `feedback`
+when you also want to finish the run:
 
 ```ts
 const done = await jevia.complete(route.run_id, result.outcome ?? "unknown", {
@@ -205,7 +204,7 @@ Ordinary `feedback` keeps its existing behavior and does not close a run.
 
 ## Development tests
 
-See [opt-in storage](#opt-in-storage-unreleased) below for the new storage methods.
+See [opt-in storage](#opt-in-storage) below for the storage methods.
 
 Run `pnpm test` for the SDK unit tests. To check argument handling against the
 real Rust CLI, build it from the repository root with `cargo build --locked -p jevia`,
@@ -216,10 +215,10 @@ Set `JEVIA_TEST_POSTGRES_URL` only to an isolated test database to include the
 PostgreSQL SDK integration test. It creates a uniquely named project and records;
 the disposable CI service is discarded afterward.
 
-## Opt-in storage (unreleased)
+## Opt-in storage
 
-The following methods are pending the next npm release; they are not in `jevia@0.1.0`.
-They require Jevia CLI 0.1.2 or newer and an existing `jevia init` project.
+The following methods are available in `jevia@0.1.1`. They require Jevia CLI
+0.1.2 or newer and an existing `jevia init` project.
 
 JSONL remains the default. Every client method reads the project's existing
 `.jevia/config.toml`; constructing a client never initializes, connects to, or

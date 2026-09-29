@@ -20,7 +20,7 @@ assert!(config.tiers.contains_key(&config.router.fallback_tier));
 
 Requires Rust 1.92 or newer. The API is experimental.
 
-## Unreleased error privacy changes
+## Error privacy in 0.1.4
 
 Provider and transport errors retain only safe categories, JSON locations, and
 HTTP status codes. They no longer retain raw response values, endpoint URLs, or
