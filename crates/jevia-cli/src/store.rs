@@ -726,6 +726,7 @@ mod tests {
         let path = directory.path().join("runs.jsonl");
         append(&path, &sample_record()).expect("record appends");
         let execution = ExecutionEvidence {
+            observations: None,
             harness: "agent".to_owned(),
             model: "provider/model".to_owned(),
             duration_ms: 42,

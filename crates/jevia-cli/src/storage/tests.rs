@@ -76,6 +76,7 @@ async fn observation_history_contract(config: Config) {
                 RunState::Completed,
                 Outcome::Unknown,
                 Some(ExecutionEvidence {
+                    observations: None,
                     harness: "agent".into(),
                     model: "requested".into(),
                     duration_ms: 42,

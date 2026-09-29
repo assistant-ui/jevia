@@ -144,7 +144,12 @@ fn build_request<'a>(
                 "confidence": record.decision.confidence,
                 "outcome": record.outcome,
                 "outcome_source": record.outcome_evidence.as_ref().map(|evidence| evidence.source),
-                "execution": record.execution,
+                "execution": record.execution.as_ref().map(|execution| json!({
+                    "harness": execution.harness, "model": execution.model,
+                    "duration_ms": execution.duration_ms, "exit_code": execution.exit_code,
+                    "verification": execution.verification,
+                    "harness_observations": execution.observations.as_ref().map(|o| o.routing_summary()),
+                })),
             })
         })
         .collect();
@@ -165,6 +170,7 @@ fn build_request<'a>(
                 "requested_model": execution.model,
                 "duration_ms": execution.duration_ms,
                 "process_exit_code": execution.exit_code,
+                "harness_observations": execution.observations.as_ref().map(|o| o.routing_summary()),
             })
         })
         .collect();
@@ -403,6 +409,7 @@ mod tests {
         config.router.history_limit = 1;
         let mut completed = record("last", "strong", Outcome::Failure);
         completed.execution = Some(ExecutionEvidence {
+            observations: None,
             harness: "agent".to_owned(),
             model: "provider/frontier".to_owned(),
             duration_ms: 42,
@@ -447,6 +454,7 @@ mod tests {
             finished_at_ms: Some(2),
         });
         observed.execution = Some(ExecutionEvidence {
+            observations: None,
             harness: "agent".into(),
             model: "requested-model".into(),
             duration_ms: 42,

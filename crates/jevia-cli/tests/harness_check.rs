@@ -50,6 +50,7 @@ fn fixture(root: &Path) -> Config {
         "agent".into(),
         HarnessConfig {
             auto_verify: true,
+            observations: Default::default(),
             command: program.clone(),
             args: vec!["{model}".into(), "{task}".into(), "private-argument".into()],
             models: config

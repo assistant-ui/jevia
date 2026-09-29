@@ -2,6 +2,56 @@
 
 ## Unreleased: passive routing context
 
+### Native harness observations
+
+`jevia run` enables passive native capture by default for direct `claude` or
+`claude.exe` commands on Claude Code 2.1.251+. It probes `--version` with a two-second
+deadline, then adds session-local, silent command hooks. Compatible wrappers can
+set `observations = "claude_hooks"` in their harness table explicitly; this mode
+assumes the wrapper supports the same hook contract. No global or project Claude
+settings are edited. Custom `--settings`, `--bare`, and `--safe-mode` arguments are
+preserved and native injection is skipped. Managed settings can also disable hooks.
+
+Set `observations = "off"` to disable native capture; process recording stays on.
+Other harnesses (including Codex, OpenCode, and Gemini) currently record process
+facts only. They are not advertised as having native event adapters yet.
+
+`execution.observations` contains a source, coverage status, and up to 256
+allowlisted events. Supported events include session/turn boundaries, tool
+success/failure, reported task completion, subagent boundaries, and session model
+changes. A model is saved only when explicitly present in an event; configured
+`execution.model` remains the requested model. No outcome is inferred from these
+events. Tool success and an agent marking a task complete are not proof of a fix.
+
+The [Claude hook contract](https://code.claude.com/docs/en/hooks#postmodelswitch)
+does not report temporary per-turn fallback-chain substitutions via model-switch
+hooks. Do not treat these observations as a complete model-attempt ledger, token
+accounting, or proof of which model solved a task. `recorded` means some events
+arrived, not that all activity was captured. `unsupported`, `disabled`,
+`unavailable`, `no_events`, and `partial` expose other coverage states.
+
+Hook inputs are capped at 64 KiB. Only bounded identifiers, event kinds, and
+ingestion timestamps are retained. Prompts, assistant messages, tool arguments,
+tool output, transcript paths/files, and error bodies are not stored. Malformed or
+oversized inputs are discarded; event caps and detected gaps mark capture partial.
+Hooks never return agent instructions or deny permission. Lock contention, hook
+timeouts, and asynchronous events after session exit can lose events: capture is
+best-effort, not an audit log.
+
+A private journal under `.jevia/jevia-events-<run-id>-*.jsonl` is merged into the
+selected JSONL/SQLite/PostgreSQL run record when the supervised process stops.
+Successful terminal persistence removes that journal. A supervisor crash or failed
+write can leave it for inspection; it is **not automatically recovered or replayed**
+by `runs recover`, and active events are not streamed into SQL. Orphan journals
+need manual review/removal after confirming their run is stopped. Routing receives
+bounded event counts and reported model summaries, not session IDs or raw events.
+
+New records use schema 4 (older schemas stay readable). Older CLI versions reject
+schema 4 rather than silently erasing observations. Upgrade all clients sharing a
+store together; the paired SDK accepts schema 4.
+
+### History and task outcomes
+
 Finished `jevia run` executions automatically inform subsequent routing even without
 feedback or a verifier. Jev receives two separate, bounded windows: known outcomes
 and passive execution observations (requested model, harness, elapsed time, process

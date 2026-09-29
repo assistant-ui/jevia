@@ -37,7 +37,7 @@ const isFeedback: Guard = (value) => Array.isArray(value) && value.every(isFeedb
 export function isRouteRecord(value: unknown): value is RouteRecord {
   if (!isObject(value)) return false;
   return (
-    (value.schema_version === 1 || value.schema_version === 2 || value.schema_version === 3) &&
+    (value.schema_version === 1 || value.schema_version === 2 || value.schema_version === 3 || value.schema_version === 4) &&
     isText(value.run_id) && isText(value.tier) && isText(value.suggested_tier) &&
     isProbability(value.confidence) && isObject(value.probabilities) &&
     Object.values(value.probabilities).every(isProbability) &&

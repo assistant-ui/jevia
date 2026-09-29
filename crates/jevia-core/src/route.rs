@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Current version of a persisted run record.
-pub const RECORD_SCHEMA_VERSION: u32 = 3;
+pub const RECORD_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -190,6 +190,9 @@ pub struct ExecutionEvidence {
     /// Present when a configured verifier ran after the harness succeeded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification: Option<VerificationEvidence>,
+    /// Best-effort native activity; never a task-success assertion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observations: Option<crate::HarnessObservations>,
 }
 
 /// Observable facts from a configured post-run verifier.
