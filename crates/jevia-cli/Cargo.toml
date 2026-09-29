@@ -26,7 +26,7 @@ sha2.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 toml_edit = { version = "0.25.15", default-features = false, features = ["parse", "display"] }
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "sqlite", "postgres", "any"] }
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "sqlite", "postgres", "any"] }
 url = "2.5"
 uuid.workspace = true
 
