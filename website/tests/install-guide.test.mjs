@@ -77,9 +77,14 @@ test("preserves configuration, protects credentials, and distinguishes routing f
 test("distinguishes automatic CLI recording from explicit SDK feedback and versioned detection", () => {
   const guide = getInstallGuide("https://example.com");
   assert.match(guide, /No manual `feedback` or `runs complete` step is needed after `jevia run`/);
-  assert.match(guide, /CLI 0\.1\.4 automatically detects existing root Rust or Node tests/);
+  assert.match(guide, /CLI 0\.1\.4–0\.1\.5 enabled test discovery by default/);
+  assert.match(guide, /additional verification is opt-in/);
+  assert.match(guide, /passive observations inform later routing/);
+  assert.match(guide, /Claude Code 2\.1\.251/);
+  assert.match(guide, /Other harnesses currently supply process-level observations/);
+  assert.match(guide, /Do not promise these features from the current published installer/);
   assert.match(guide, /when the launched process\/session finishes/);
-  assert.match(guide, /unverified and is excluded from learning/);
+  assert.match(guide, /not proof of task success/);
   assert.match(guide, /do not fill this gap by submitting guessed feedback/);
   assert.match(guide, /SDK-controlled work outside `jevia run`/);
   assert.match(guide, /no human feedback prompt is required/);
