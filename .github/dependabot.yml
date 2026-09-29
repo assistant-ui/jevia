@@ -14,6 +14,13 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
+    ignore:
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
   - package-ecosystem: cargo
     directory: /
     schedule:
@@ -21,6 +28,10 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
+    ignore:
+      - dependency-name: sqlx
+        update-types:
+          - version-update:semver-major
   - package-ecosystem: github-actions
     directory: /
     schedule:
