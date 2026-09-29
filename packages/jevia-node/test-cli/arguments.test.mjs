@@ -190,7 +190,7 @@ test("real CLI completes external work and makes it eligible for archival", asyn
 });
 
 test("CLI run records by default and only adds Node tests after opting in", async (t) => {
-  const { client, cwd } = await fixture(t);
+  const { client, cwd, requests } = await fixture(t);
   const configPath = join(cwd, ".jevia", "config.toml");
   const initial = await readFile(configPath, "utf8");
   const adapter = `\n[harnesses.agent]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ["agent.cjs", "{model}", "{task}"]\n[harnesses.agent.models]\nfast = "test"\nbalanced = "test"\nstrong = "test"\n`;
@@ -209,6 +209,11 @@ test("CLI run records by default and only adds Node tests after opting in", asyn
   let [record] = await client.runs({ limit: 1 });
   assert.equal(record.execution.verification, undefined);
   assert.equal(record.lifecycle.state, "completed");
+  assert.equal(record.outcome, "unknown");
+  await client.route("use passive history");
+  assert.deepEqual(requests.at(-1).state.recent_completed_outcomes, []);
+  assert.equal(requests.at(-1).state.recent_execution_observations[0].requested_model, "test");
+  assert.equal(requests.at(-1).state.recent_execution_observations[0].process_exit_code, 0);
   await assert.rejects(readFile(join(cwd, "verified")), { code: "ENOENT" });
   await writeFile(configPath, initial + adapter.replace('[harnesses.agent]\n', '[harnesses.agent]\nauto_verify = true\n'));
   await run();

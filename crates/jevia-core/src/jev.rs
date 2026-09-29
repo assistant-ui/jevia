@@ -150,12 +150,34 @@ fn build_request<'a>(
         .collect();
     completed.reverse();
 
+    let mut observations: Vec<_> = history
+        .iter()
+        .rev()
+        .filter(|record| record.is_execution_observation() && !record.is_learning_evidence())
+        .take(config.router.history_limit)
+        .map(|record| {
+            let execution = record.execution.as_ref().expect("observed execution");
+            json!({
+                "task": record.task,
+                "tier": record.decision.tier,
+                "state": record.lifecycle.as_ref().map(|life| life.state),
+                "harness": execution.harness,
+                "requested_model": execution.model,
+                "duration_ms": execution.duration_ms,
+                "process_exit_code": execution.exit_code,
+            })
+        })
+        .collect();
+    observations.reverse();
+
     let state = json!({
         "current_task": task,
         "recent_completed_outcomes": completed,
+        "recent_execution_observations": observations,
         "policy": {
             "goal": "Select the least expensive capability tier likely to complete the task successfully.",
-            "use_outcomes": "Treat relevant successes and failures as evidence, not absolute rules. Prefer the safer tier when evidence conflicts."
+            "use_outcomes": "Treat relevant successes and failures as evidence, not absolute rules. Prefer the safer tier when evidence conflicts.",
+            "use_observations": "Execution observations are operational context, not task-success labels. A process exit, duration, or agent-reported completion does not prove correctness. The requested model is not proof of which models actually executed. Do not infer quality or model capability from missing feedback."
         }
     });
 
@@ -413,6 +435,44 @@ mod tests {
         assert_eq!(outcomes[0]["execution"]["verification"]["command"], "cargo");
         assert_eq!(outcomes[0]["execution"]["verification"]["exit_code"], 1);
         assert_eq!(outcomes[0]["execution"]["verification"]["launched"], true);
+    }
+
+    #[test]
+    fn passive_history_changes_routing_context_without_inventing_success() {
+        let config = Config::default();
+        let mut observed = record("passive", "fast", Outcome::Unknown);
+        observed.lifecycle = Some(crate::RunLifecycle {
+            state: crate::RunState::Completed,
+            started_at_ms: Some(1),
+            finished_at_ms: Some(2),
+        });
+        observed.execution = Some(ExecutionEvidence {
+            harness: "agent".into(),
+            model: "requested-model".into(),
+            duration_ms: 42,
+            exit_code: Some(0),
+            verification: None,
+        });
+        let baseline = route_cache_key("task", None, &config, &[]).unwrap();
+        let with_history = route_cache_key("task", None, &config, &[observed.clone()]).unwrap();
+        assert_ne!(baseline, with_history);
+        let request = build_request("task", &config, &[observed.clone()]);
+        assert_eq!(request.state["recent_completed_outcomes"], json!([]));
+        let facts = &request.state["recent_execution_observations"][0];
+        assert_eq!(facts["requested_model"], "requested-model");
+        assert_eq!(facts["process_exit_code"], 0);
+        assert!(facts.get("outcome").is_none());
+        observed.lifecycle.as_mut().unwrap().state = crate::RunState::Running;
+        assert_eq!(
+            baseline,
+            route_cache_key("task", None, &config, &[observed.clone()]).unwrap()
+        );
+        observed.lifecycle.as_mut().unwrap().state = crate::RunState::Cancelled;
+        observed.task = None;
+        let mut disabled = config;
+        disabled.router.history_limit = 0;
+        let request = build_request("task", &disabled, &[observed]);
+        assert_eq!(request.state["recent_execution_observations"], json!([]));
     }
 
     #[test]
