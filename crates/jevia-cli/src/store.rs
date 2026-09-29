@@ -347,7 +347,9 @@ pub(super) fn apply_observations(
         if previous.source != observations.source {
             bail!("observation source does not match the run");
         }
-        if observations.events.len() < previous.events.len() {
+        if observations.event_count() < previous.event_count()
+            || observations.counts().discarded_inputs < previous.counts().discarded_inputs
+        {
             bail!("refusing an older observation snapshot");
         }
     }

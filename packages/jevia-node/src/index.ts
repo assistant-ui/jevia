@@ -72,6 +72,17 @@ export interface HarnessObservations {
   /** recorded means some events arrived, not complete coverage. */
   status: ObservationStatus;
   events: HarnessEvent[];
+  totals?: ObservationTotals;
+}
+
+/** Counts across the session, including events no longer in the recent sample. */
+export interface ObservationTotals {
+  event_counts: Partial<Record<HarnessEventKind, number>>;
+  models: Record<string, Partial<Record<HarnessEventKind, number>>>;
+  unattributed_event_counts: Partial<Record<HarnessEventKind, number>>;
+  omitted_model_event_counts: Partial<Record<HarnessEventKind, number>>;
+  models_truncated: boolean;
+  discarded_inputs: number;
 }
 
 export interface RouteDecision {

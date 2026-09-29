@@ -15,7 +15,7 @@ const evidence = { source: "manual", recorded_at_ms: 3 };
 const feedback = { previous_outcome: "unknown", previous_source: null, outcome: "success", recorded_at_ms: 3, reason: null };
 
 test("accepts supported legacy records without inventing optional evidence", () => {
-  for (const schema_version of [1, 2, 3, 4]) {
+  for (const schema_version of [1, 2, 3, 4, 5]) {
     assert.ok(isRouteRecord({ ...record, schema_version }));
   }
   assert.ok(isRouteRecord({ ...record, execution: { ...execution, verification }, lifecycle, outcome_evidence: evidence, feedback: [feedback], future_metadata: {} }));
@@ -24,7 +24,7 @@ test("accepts supported legacy records without inventing optional evidence", () 
 
 test("rejects invalid scalar, schema, timestamp, and probability fields", () => {
   for (const [field, values] of Object.entries({
-    schema_version: [0, 5, 999, 1.5, "3"], run_id: ["", 1], tier: ["", null],
+    schema_version: [0, 6, 999, 1.5, "3"], run_id: ["", 1], tier: ["", null],
     suggested_tier: [[], ""], jev_model: [true, ""], task: [false, {}], outcome: ["done", null],
     source: ["remote", null], fallback_applied: [1, null],
     confidence: [-1, 1.1, NaN, Infinity, "0.9"],
@@ -72,6 +72,21 @@ test("validates every optional evidence object and nested field", () => {
   assert.equal(isRouteRecord({ ...record, lifecycle: { ...lifecycle, state: "done" } }), false);
   assert.equal(isRouteRecord({ ...record, outcome_evidence: { ...evidence, source: "guessed" } }), false);
   assert.equal(isRouteRecord({ ...record, feedback: [{ ...feedback, reason: 1 }] }), false);
+});
+
+test("validates whole-session totals separately from the bounded sample", () => {
+  const event = { kind: "tool_failed", recorded_at_ms: 1, model: "actual-model" };
+  const totals = { event_counts: { tool_failed: 300 }, models: { "actual-model": { tool_failed: 290 } },
+    unattributed_event_counts: { tool_failed: 10 }, omitted_model_event_counts: {}, models_truncated: false, discarded_inputs: 0 };
+  const observations = { source: "claude_hooks", status: "recorded", events: [event], totals };
+  const wrap = (totals) => ({ ...record, schema_version: 5, execution: { ...execution, observations: { ...observations, totals } } });
+  assert.ok(isRouteRecord(wrap(totals)));
+  for (const invalid of [null, {}, { ...totals, event_counts: { tool_failed: 299 } },
+    { ...totals, discarded_inputs: 1 }, { ...totals, discarded_inputs: Number.MAX_SAFE_INTEGER + 1 },
+    { ...totals, models: { "PRIVATE CONTENT": { tool_failed: 290 } } },
+    { ...totals, omitted_model_event_counts: { tool_failed: 1 } },
+    { ...totals, models: Object.fromEntries(Array.from({ length: 33 }, (_, n) => [`m${n}`, {}])) },
+  ]) assert.equal(isRouteRecord(wrap(invalid)), false);
 });
 
 test("validates bounded passive observations without requiring verification or known outcomes", () => {

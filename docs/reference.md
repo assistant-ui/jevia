@@ -16,8 +16,15 @@ Set `observations = "off"` to disable native capture; process recording stays on
 Other harnesses (including Codex, OpenCode, and Gemini) currently record process
 facts only. They are not advertised as having native event adapters yet.
 
-`execution.observations` contains a source, coverage status, and up to 256
-allowlisted events. Supported events include session/turn boundaries, tool
+`execution.observations` contains a source, coverage status, the most recent 256
+allowlisted events, and whole-session `totals`. Counters continue after the event
+sample fills. `totals.models` attributes event counts only to models explicitly
+reported on those events; missing models stay in `unattributed_event_counts`.
+At most 32 model identifiers are retained. Further models contribute to
+`omitted_model_event_counts` and set `models_truncated`, without unbounded growth.
+Model switches are observations, not failures. Counts are observed activity, not
+task scores; partial capture/legacy truncated journals provide lower bounds.
+Supported events include session/turn boundaries, tool
 success/failure, reported task completion, subagent boundaries, and session model
 changes. A model is saved only when explicitly present in an event; configured
 `execution.model` remains the requested model. No outcome is inferred from these
@@ -33,7 +40,11 @@ arrived, not that all activity was captured. `unsupported`, `disabled`,
 Hook inputs are capped at 64 KiB. Only bounded identifiers, event kinds, and
 ingestion timestamps are retained. Prompts, assistant messages, tool arguments,
 tool output, transcript paths/files, and error bodies are not stored. Malformed or
-oversized inputs are discarded; event caps and detected gaps mark capture partial.
+oversized inputs are discarded and counted; detected gaps mark capture partial.
+The raw event sample rolling over does not stop aggregation. Routing receives the
+whole-session counts and bounded model identifiers, with `summary_truncated` when
+the raw sample or model details were bounded. Journals are atomically replaced
+under stable striped locks, so a torn replacement leaves the previous checkpoint.
 Hooks never return agent instructions or deny permission. Lock contention, hook
 timeouts, and asynchronous events after session exit can lose events: capture is
 best-effort, not an audit log.
@@ -54,9 +65,9 @@ Replay scans at most 4,096 directory entries/128 candidate runs per invocation,
 with a two-second total budget before routing; it is not an unbounded repair job.
 Routing receives bounded event counts and model summaries, not session IDs/raw events.
 
-New records use schema 4 (older schemas stay readable). Older CLI versions reject
-schema 4 rather than silently erasing observations. Upgrade all clients sharing a
-store together; the paired SDK accepts schema 4.
+New records use schema 5 (schemas 1–4 stay readable). Older CLI versions reject
+schema 5 rather than silently erasing whole-session counters. Upgrade all clients
+sharing a store together; the paired SDK accepts schema 5.
 
 ### History and task outcomes
 

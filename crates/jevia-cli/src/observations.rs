@@ -8,6 +8,7 @@ use jevia_core::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
@@ -53,6 +54,7 @@ impl Capture {
                 source: None,
                 status: Status::Unsupported,
                 events: vec![],
+                totals: None,
             },
         };
         if mode == ObservationMode::Off {
@@ -127,8 +129,8 @@ impl Capture {
             return self.initial.clone();
         };
         let result = (|| -> Result<HarnessObservations> {
+            let _guard = journal_guard(path)?;
             let mut file = open_journal(path)?;
-            file.lock()?;
             read_journal(&mut file)
         })();
         result.unwrap_or_else(|_| HarnessObservations {
@@ -206,8 +208,8 @@ pub async fn replay(paths: &ProjectPaths, storage: &Storage, only: Option<&str>)
         };
         let path = &files[0];
         let result = async {
+            let _journal_guard = journal_guard(path)?;
             let mut file = open_journal(path)?;
-            file.try_lock()?;
             let snapshot = read_journal(&mut file)?;
             let record = storage.get(&id).await?;
             if record
@@ -278,6 +280,43 @@ enum Entry {
     Event(HarnessEvent),
     Discarded,
     Truncated,
+    Snapshot(HarnessObservations),
+}
+
+/// Stable striped locks survive atomic journal replacement and are never
+/// unlinked. At most 256 sidecars per project, independent of session length.
+fn journal_guard(path: &Path) -> Result<File> {
+    let parent = path.parent().context("invalid journal directory")?;
+    let name = path.file_name().context("invalid journal name")?;
+    let stripe = format!("{:02x}", Sha256::digest(name.as_encoded_bytes())[0]);
+    let deadline = std::time::Instant::now() + Duration::from_secs(1);
+    loop {
+        if let Some(guard) = crate::lease::try_acquire(&parent.join("event-leases"), &stripe)? {
+            return Ok(guard);
+        }
+        if std::time::Instant::now() >= deadline {
+            bail!("observation lock unavailable");
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+fn save_journal(path: &Path, observations: HarnessObservations) -> Result<()> {
+    let mut bytes = serde_json::to_vec(&Entry::Snapshot(observations))?;
+    bytes.push(b'\n');
+    if bytes.len() as u64 > JOURNAL_LIMIT {
+        bail!("journal limit exceeded");
+    }
+    let parent = path.parent().context("invalid journal directory")?;
+    let mut temp = tempfile::Builder::new()
+        .prefix(".jevia-event-checkpoint-")
+        .tempfile_in(parent)?;
+    temp.write_all(&bytes)?;
+    temp.as_file().sync_all()?;
+    temp.persist(path).map_err(|e| e.error)?;
+    #[cfg(unix)]
+    File::open(parent)?.sync_all()?;
+    Ok(())
 }
 
 fn open_journal(path: &Path) -> Result<File> {
@@ -316,9 +355,15 @@ fn read_journal(file: &mut File) -> Result<HarnessObservations> {
         source: Some(ObservationSource::ClaudeHooks),
         status: Status::NoEvents,
         events: vec![],
+        totals: None,
     };
-    for line in bytes.split(|b| *b == b'\n').filter(|line| !line.is_empty()) {
+    let lines: Vec<_> = bytes
+        .split(|b| *b == b'\n')
+        .filter(|line| !line.is_empty())
+        .collect();
+    for line in &lines {
         match serde_json::from_slice::<Entry>(line) {
+            Ok(Entry::Snapshot(snapshot)) if lines.len() == 1 => return Ok(snapshot),
             Ok(Entry::Event(event))
                 if event.validate().is_ok() && observations.events.len() < MAX_HARNESS_EVENTS =>
             {
@@ -346,33 +391,17 @@ fn receive_inner(path: &Path, input: impl Read) -> Result<()> {
         .then(|| serde_json::from_slice::<Value>(&bytes).ok())
         .flatten()
         .and_then(|input| normalize(&input));
-    let mut file = open_journal(path)?;
-    // Serialize concurrent tool hooks; try_lock would silently drop ordinary
-    // parallel activity. The harness bounds hook execution with a two-second deadline.
-    file.lock()?;
-    let current = read_journal(&mut file)?;
-    let entry = if current.events.len() >= MAX_HARNESS_EVENTS {
-        if current.status == Status::Partial {
-            return Ok(());
-        }
-        Entry::Truncated
-    } else if let Some(event) = event {
-        Entry::Event(event)
+    let _guard = journal_guard(path)?;
+    let mut current = read_journal(&mut open_journal(path)?)?;
+    if let Some(event) = event {
+        current.observe(event);
     } else {
-        if current.status == Status::Partial {
-            return Ok(());
-        }
-        Entry::Discarded
-    };
-    let mut encoded = serde_json::to_vec(&entry)?;
-    encoded.push(b'\n');
-    if file.metadata()?.len() + encoded.len() as u64 > JOURNAL_LIMIT {
-        return Ok(());
+        let mut totals = current.counts();
+        totals.discarded_inputs = totals.discarded_inputs.saturating_add(1);
+        current.totals = Some(totals);
+        current.status = Status::Partial;
     }
-    file.write_all(&encoded)?;
-    file.sync_data()?;
-    file.unlock()?;
-    Ok(())
+    save_journal(path, current)
 }
 
 fn normalize(input: &Value) -> Option<HarnessEvent> {
@@ -609,7 +638,12 @@ mod tests {
         assert_eq!(hook["args"][0], "capture-event");
         assert!(hook["args"][2].as_str().unwrap().contains(&id));
         capture.persisted();
-        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+        assert!(
+            !fs::read_dir(dir.path())
+                .unwrap()
+                .flatten()
+                .any(|e| e.file_name().to_string_lossy().starts_with("jevia-events-"))
+        );
         fs::write(&program, "#!/bin/sh\nprintf '2.1.100 (Claude Code)\\n'\n").unwrap();
         let capture = Capture::prepare(ObservationMode::Auto, &invocation, dir.path(), &id).await;
         assert_eq!(capture.args, invocation.args);
@@ -658,9 +692,11 @@ mod tests {
             vec![b'x'; INPUT_LIMIT as usize + 1].as_slice(),
         );
         let bytes = fs::read_to_string(journal.path()).unwrap();
-        assert_eq!(bytes, "{\"type\":\"discarded\"}\n");
+        assert!(!bytes.contains("PRIVATE_"));
         let mut file = open_journal(journal.path()).unwrap();
-        assert_eq!(read_journal(&mut file).unwrap().status, Status::Partial);
+        let snapshot = read_journal(&mut file).unwrap();
+        assert_eq!(snapshot.status, Status::Partial);
+        assert_eq!(snapshot.counts().discarded_inputs, 2);
     }
 
     #[test]
@@ -705,9 +741,33 @@ mod tests {
             receive_inner(journal.path(), raw.as_bytes()).unwrap();
         }
         receive(journal.path(), b"malformed PRIVATE_INPUT".as_slice());
-        let summary = read_journal(&mut file).unwrap();
+        let summary = read_journal(&mut open_journal(journal.path()).unwrap()).unwrap();
         assert_eq!(summary.events.len(), MAX_HARNESS_EVENTS);
         assert_eq!(summary.status, Status::Partial);
-        assert!(file.metadata().unwrap().len() < JOURNAL_LIMIT);
+        assert_eq!(summary.event_count(), MAX_HARNESS_EVENTS as u64 + 4);
+        receive(
+            journal.path(),
+            br#"{"hook_event_name":"PostModelSwitch","from_model":"early","to_model":"late"}"#
+                .as_slice(),
+        );
+        let summary = read_journal(&mut open_journal(journal.path()).unwrap()).unwrap();
+        assert_eq!(
+            summary.events.last().unwrap().model.as_deref(),
+            Some("late")
+        );
+        assert_eq!(
+            summary.routing_summary()["event_counts"]["turn_completed"],
+            MAX_HARNESS_EVENTS + 4
+        );
+        assert_eq!(
+            summary.routing_summary()["model_event_counts"]["late"]["model_changed"],
+            1
+        );
+        assert!(fs::metadata(journal.path()).unwrap().len() < JOURNAL_LIMIT);
+        assert!(
+            summary.routing_summary()["summary_truncated"]
+                .as_bool()
+                .unwrap()
+        );
     }
 }

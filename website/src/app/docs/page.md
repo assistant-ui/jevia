@@ -114,7 +114,7 @@ Codex, OpenCode, Gemini, and other harnesses currently provide process-level
 observations. Capture is best-effort: reported models, switches, and tool activity
 do not prove which model solved a task. Raw prompts, tool contents, and transcripts
 are not retained. Inspect `execution.observations` for coverage and recorded events.
-Upgrade the CLI and SDK together for schema 4. See the
+Upgrade the CLI and SDK together for schema 5. See the
 [capture contract and limits](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#native-harness-observations).
 
 Optional verification runs when the agent process/session finishes, not after each internal
@@ -284,7 +284,7 @@ Every backend preserves the same logical record. JSONL writes one compact JSON o
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "run_id": "7b65a69a-0a6f-4a89-bd73-88f090954dd9",
   "tier": "balanced",
   "suggested_tier": "balanced",
