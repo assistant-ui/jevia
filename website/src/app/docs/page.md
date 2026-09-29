@@ -1,6 +1,6 @@
 # Jevia for Node.js
 
-Use Jevia from Node.js to route tasks, inspect run records, and report verified outcomes while keeping local policy, storage, and learning behavior in one place.
+Use Jevia from Node.js to route tasks, inspect run records, and optionally report outcomes while keeping local policy, storage, and learning behavior in one place.
 
 Using `jevia run` instead? The CLI handles execution, verification, and outcome
 recording automatically. No manual feedback step is needed. See
@@ -30,14 +30,14 @@ console.log(route.tier, route.confidence, route.run_id);
 
 A route returns the selected tier, confidence, probabilities, cache source, and a traceable run ID. Routing chooses capability; it does not claim the task succeeded.
 
-By default, each call reads recent eligible outcomes from the project's
+Every call automatically reads recent eligible outcomes from the project's
 selected storage before choosing a tier—no history argument or extra fetch is needed.
 
 ## Client methods
 
 - `version(options?)` — Return the installed Jevia CLI version after validating its output.
-- `route(task, options?)` — Choose a tier using recorded outcomes by default; `useHistory: false` opts out per call (unreleased). Return the typed route record.
-- `feedback(runId, outcome, options?)` — Record an explicit success, failure, or unknown outcome for a run.
+- `route(task, options?)` — Choose a capability tier using recent eligible recorded outcomes automatically, and return the typed route record.
+- `feedback(runId, outcome, options?)` — Optionally record an application-reported outcome. No verifier is required; omitting feedback leaves the outcome unknown.
 - `runs(options?)` — List recent route records with a configurable positive result limit.
 - `show(runId, options?)` — Read one complete route record, including lifecycle and outcome evidence.
 - `setupStorage(target, options?)` — Unreleased: preview opt-in SQLite or PostgreSQL setup; apply only with confirmation.
@@ -127,10 +127,11 @@ for supported tests, deadlines, and opt-out settings.
 
 ### SDK-controlled execution
 
-Map Jevia's tier to your harness model and let your application run and verify
-the work. SDK routing does not launch an agent or run tests; your integration
-explicitly reports the result. That call can be automatic in your application—no
-human feedback prompt is required:
+Map Jevia's tier to your harness model and let your application run the work.
+Feedback and verification are optional. SDK routing does not launch an agent or
+run tests. If your application knows the result, it can report it without a
+verifier; no human feedback prompt is required. Skipping feedback still records
+the route with an unknown outcome and does not block later routing:
 
 ```typescript
 const models: Record<string, string> = {
@@ -145,19 +146,19 @@ const result = await runYourHarness({
   runId: route.run_id,
 });
 
-const verified = await verifyResult(result);
-await jevia.feedback(
-  route.run_id,
-  verified ? "success" : "failure",
-);
+// Optional: your adapter may expose a known outcome; no verifier is required.
+if (result.outcome === "success" || result.outcome === "failure") {
+  await jevia.feedback(route.run_id, result.outcome);
+}
 
 // Recorded outcomes are included automatically in the next decision.
 const next = await jevia.route("fix another parser regression");
 ```
 
 Your adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor Agent,
-Copilot CLI, Aider, Goose, Amp, or a custom runner. Submit feedback only after your
-verifier determines the actual outcome of this SDK-controlled work, not again
+Copilot CLI, Aider, Goose, Amp, or a custom runner. The optional `result.outcome`
+field above comes from your own adapter; Jevia does not infer it from a successful
+function return. Report only known outcomes, and do not submit feedback again
 after a supervised CLI run.
 
 ### Recorded outcomes inform the next route
@@ -165,27 +166,10 @@ after a supervised CLI run.
 The SDK does not require Jevia's built-in verifier. Your application can use
 tests, acceptance checks, or a user-approved result and record success or failure.
 This is labeled `manual` evidence (application-reported), not CLI verification.
-Use `unknown` when the result is uncertain. By default, `route()` automatically
+Use `unknown` when the result is uncertain. The next `route()` automatically
 includes eligible recorded outcomes from the same JSONL, SQLite, or PostgreSQL
 history, including CLI-verified results. No manual cache clearing is needed:
 evidence is part of the cache key.
-
-```typescript
-// Default: use eligible recorded outcomes within the project history limit.
-const informed = await jevia.route(task);
-
-// Unreleased: exclude prior outcomes for this decision only.
-const independent = await jevia.route(task, { useHistory: false });
-```
-
-`useHistory` defaults to `true`. Setting it to `false` excludes prior outcomes
-for this decision, but still records the route and leaves history and project
-config untouched. History-enabled and history-disabled decisions use separate
-cache entries; `noCache: true` works independently. Explicit `useHistory: true`
-still respects the project history limit. This option is pending the next npm
-release; disabling history requires the next CLI release after 0.1.3. Older CLIs
-reject the unsupported flag without retrying with history enabled. Verification
-remains your application's choice.
 
 Pending/unknown, active, and process-exit-only records are excluded.
 `[router].history_limit` bounds recent evidence: default 20, maximum 100, or 0 to

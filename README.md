@@ -101,7 +101,7 @@ jevia runs --json
 | `jevia init` | Create `.jevia/config.toml` and local store rules. |
 | `jevia harness setup <name>` | Preview an explicit harness template; back up and save only with `--apply`. |
 | `jevia harness check <name> [--json]` | Inspect configuration and local executable candidates without launching programs or calling APIs. |
-| `jevia route <task>` | Ask Jev for a tier and record the decision; `--no-history` excludes prior outcomes for this call (unreleased). |
+| `jevia route <task>` | Ask Jev for a tier and record the decision. |
 | <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch, verify, and record automatically; test auto-detection is unreleased. |
 | `jevia runs` | Inspect recent records in the configured backend. |
 | `jevia stats [--limit <records>] [--json]` | Summarize recent routing decisions, verified outcomes, manual feedback, and cache hits. |
@@ -341,8 +341,10 @@ const model = {
 }[route.tier];
 
 const result = await runYourHarness({ task, model, runId: route.run_id });
-const verified = await verifyResult(result);
-await jevia.feedback(route.run_id, verified ? "success" : "failure");
+// Optional: report a known result from your own adapter, without a verifier.
+if (result.outcome === "success" || result.outcome === "failure") {
+  await jevia.feedback(route.run_id, result.outcome);
+}
 
 // Automatically uses eligible outcomes already in the project's storage.
 const next = await jevia.route("investigate another integration failure");
@@ -350,14 +352,17 @@ const next = await jevia.route("investigate another integration failure");
 
 The adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor Agent,
 Copilot CLI, Aider, Goose, Amp, or a custom harness. Jevia returns a capability
-tier; the application maps that tier to a harness-specific model. Feedback stays
-explicit—a successful process or function return is not automatically proof of
-task success. The CLI must already be installed and available on `PATH`; npm
-installation does not run a binary downloader.
+tier; the application maps that tier to a harness-specific model. Feedback and
+verification are optional: `route()` works without either. If feedback is omitted,
+the decision stays recorded with outcome `unknown`, and later routing still uses
+other eligible outcomes. The optional `result.outcome` field above comes from your
+own adapter; Jevia does not infer task success from a process or function return.
+The CLI must already be installed and available on `PATH`; npm installation does
+not run a binary downloader.
 
 The SDK does not require Jevia's built-in verifier: your application decides how
 to establish the outcome and records it. `manual` evidence means explicitly
-reported by the application or user, not necessarily human-entered. By default,
+reported by the application or user, not necessarily human-entered. Each
 `route()` automatically loads recent eligible successes/failures from the
 selected JSONL, SQLite, or PostgreSQL history before deciding. No history argument
 or manual cache clearing is needed; the evidence is part of the cache key.
@@ -366,13 +371,6 @@ Unknown, active, and process-only records do not influence routing. The
 0 disables it). This supplies evidence to Jev, not model training. See the
 [SDK outcome loop](packages/jevia-node/README.md#recorded-outcomes-inform-the-next-route-automatically)
 for provenance and privacy details.
-
-**Unreleased SDK option:** use `jevia.route(task, { useHistory: false })` to exclude
-prior outcomes for just that decision. It still records the route and leaves
-history/config untouched. The default is `true`, respecting the project history
-limit. Cache entries are separated by effective history policy; `noCache` remains
-independent. Opting out requires the next CLI release after 0.1.3, which adds
-`jevia route --no-history`; older CLIs reject the option without an automatic retry.
 
 ## Automatic CLI pipeline (unreleased)
 

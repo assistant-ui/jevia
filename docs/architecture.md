@@ -57,16 +57,14 @@ The boundary is the launched process/session, not each internal agent message or
 tool call. Harness installation, credentials, model mapping, and project test
 prerequisites are still user setup. `route` and SDK routing methods stop at the
 routing decision; their caller owns execution, verification, and outcome reporting.
+SDK feedback and verification are optional. A route without feedback is still
+recorded with an unknown outcome and does not block subsequent routing. Existing
+eligible outcomes continue to inform those decisions automatically.
 Explicit SDK feedback is application-reported evidence and does not require a
 CLI verifier or external-completion call to become eligible. Every subsequent
 `route` reads eligible history from the selected backend before building its
 cache key and Jev request. The shared evidence filter and `router.history_limit`
 apply equally to SDK and CLI callers; no separate SDK history payload is needed.
-The unreleased SDK `useHistory: false` option maps to `route --no-history`, which
-sets the effective history limit to 0 for that invocation only. It never writes
-config or disables route persistence. The effective router policy is hashed into
-the cache key, preventing reuse of history-informed decisions in opt-out mode.
-The default/explicit `true` uses the configured limit rather than overriding it.
 
 ### Routing cache
 

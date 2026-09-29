@@ -70,4 +70,6 @@ test("distinguishes automatic CLI recording from explicit SDK feedback and unrel
   assert.match(guide, /do not fill this gap by submitting guessed feedback/);
   assert.match(guide, /SDK-controlled work outside `jevia run`/);
   assert.match(guide, /no human feedback prompt is required/);
+  assert.match(guide, /feedback and verification are optional/);
+  assert.match(guide, /Skipping feedback leaves the recorded outcome unknown/);
 });

@@ -57,9 +57,6 @@ enum Command {
         /// Bypass the local routing-decision cache.
         #[arg(long)]
         no_cache: bool,
-        /// Exclude recorded outcomes from this decision; still record the route.
-        #[arg(long)]
-        no_history: bool,
     },
     /// Route a task and launch a configured coding-agent harness.
     Run {
@@ -255,9 +252,8 @@ async fn run() -> Result<ExitCode> {
             task,
             json,
             no_cache,
-            no_history,
         } => {
-            route(&task, json, no_cache, no_history).await?;
+            route(&task, json, no_cache).await?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Run {
@@ -383,14 +379,9 @@ fn init(force: bool) -> Result<()> {
     Ok(())
 }
 
-async fn route(task: &str, print_json: bool, no_cache: bool, no_history: bool) -> Result<()> {
+async fn route(task: &str, print_json: bool, no_cache: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
-    let mut config = load_config(&paths)?;
-    // A per-call override, never a config write. The effective limit is already
-    // part of the cache key, keeping evidence-free decisions separate.
-    if no_history {
-        config.router.history_limit = 0;
-    }
+    let config = load_config(&paths)?;
     let storage = Storage::open(&config, &paths, false).await?;
     let record = routed_record_in(task, None, no_cache, &config, &paths, &storage).await?;
     storage.append(&record).await?;

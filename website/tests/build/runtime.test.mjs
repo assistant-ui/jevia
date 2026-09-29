@@ -91,9 +91,9 @@ function assertAutomaticPipelineDocs(content) {
   assert.match(text, /application-reported/);
   assert.match(text, /history_limit/);
   assert.match(text, /feedback reasons stay in storage/);
-  assert.match(text, /useHistory: false/);
-  assert.match(text, /still records the route/);
-  assert.match(text, /without retrying with history enabled/);
+  assert.match(text, /Feedback and verification are optional/);
+  assert.match(text, /Skipping feedback still records the route with an unknown outcome/);
+  assert.doesNotMatch(text, /useHistory|verifyResult\(result\)/);
 }
 
 test("the build includes crawler discovery and social image assets", async () => {

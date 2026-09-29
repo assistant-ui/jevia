@@ -10,7 +10,7 @@ export const dynamic = "force-static";
 export const metadata: Metadata = {
   title: "Node.js API documentation — Jevia",
   description:
-    "Use Jevia's Node.js API to route tasks, inspect run records, and report verified outcomes.",
+    "Use Jevia's Node.js API to route tasks, inspect run records, and optionally report outcomes.",
   alternates: { canonical: "/docs" },
   openGraph: {
     title: "Node.js API documentation — Jevia",
@@ -43,22 +43,13 @@ const HARNESS_ADAPTER = [
   "  runId: route.run_id,",
   "});",
   "",
-  "const verified = await verifyResult(result);",
-  "await jevia.feedback(",
-  "  route.run_id,",
-  '  verified ? "success" : "failure",',
-  ");",
+  "// Optional: your adapter may expose a known outcome; no verifier is required.",
+  'if (result.outcome === "success" || result.outcome === "failure") {',
+  "  await jevia.feedback(route.run_id, result.outcome);",
+  "}",
   "",
   "// Recorded outcomes are included automatically in the next decision.",
   'const next = await jevia.route("fix another parser regression");',
-].join("\n");
-
-const HISTORY_OPTIONS = [
-  "// Default: use eligible recorded outcomes within the project history limit.",
-  "const informed = await jevia.route(task);",
-  "",
-  "// Unreleased: exclude prior outcomes for this decision only.",
-  "const independent = await jevia.route(task, { useHistory: false });",
 ].join("\n");
 
 const STORAGE_SETUP = [
@@ -109,11 +100,11 @@ const METHODS = [
   },
   {
     signature: "route(task, options?)",
-    description: "Choose a tier using recorded outcomes by default; useHistory: false opts out per call (unreleased). Return the typed route record.",
+    description: "Choose a capability tier using recent eligible recorded outcomes automatically, and return the typed route record.",
   },
   {
     signature: "feedback(runId, outcome, options?)",
-    description: "Record an explicit success, failure, or unknown outcome for a run.",
+    description: "Optionally record an application-reported outcome. No verifier is required; omitting feedback leaves the outcome unknown.",
   },
   {
     signature: "runs(options?)",
@@ -144,7 +135,7 @@ export default function DocsPage() {
         <article className="docs-content">
           <header className="docs-hero" id="overview">
             <p>
-              Route tasks, inspect run records, and report verified outcomes from
+              Route tasks, inspect run records, and optionally report outcomes from
               Node.js while keeping Jevia&apos;s local policy, storage, and learning
               behavior in one place.
             </p>
@@ -187,7 +178,7 @@ export default function DocsPage() {
             <p className="docs-body-copy">
               A route returns the selected tier, confidence, probabilities, cache source,
               and a traceable run ID. Routing chooses capability; it does not claim the
-              task succeeded. By default, each call reads recent eligible outcomes
+              task succeeded. Every call automatically reads recent eligible outcomes
               from the project&apos;s selected storage before choosing a tier—no history
               argument or extra fetch is needed.
             </p>
@@ -298,17 +289,19 @@ export default function DocsPage() {
             </p>
             <p className="docs-body-copy">
               For SDK integrations, map Jevia&apos;s tier to your harness model and let
-              your application run and verify the work. SDK routing does not launch
-              an agent or run tests; your integration explicitly reports the result.
-              That call can be automatic in your application—no human feedback prompt
-              is required.
+              your application run the work. Feedback and verification are optional.
+              SDK routing does not launch an agent or run tests. If your application
+              knows the result, it can report it without a verifier; no human feedback
+              prompt is required. Skipping feedback still records the route with an
+              unknown outcome and does not block later routing.
             </p>
             <CodeBlock code={HARNESS_ADAPTER} label="Harness adapter (SDK-controlled)" />
             <p className="docs-body-copy">
               Your adapter can call Codex, Claude Code, OpenCode, Gemini CLI, Cursor
-              Agent, Copilot CLI, Aider, Goose, Amp, or a custom runner. Submit feedback
-              only after your verifier determines the actual outcome of this
-              SDK-controlled work, not again after a supervised CLI run.
+              Agent, Copilot CLI, Aider, Goose, Amp, or a custom runner. The optional
+              <code> result.outcome</code> field above comes from your own adapter;
+              Jevia does not infer it from a successful function return. Report only
+              known outcomes, and do not submit feedback again after a supervised CLI run.
             </p>
             <div className="docs-note">
               <strong>Recorded outcomes inform the next route</strong>
@@ -317,25 +310,12 @@ export default function DocsPage() {
                 can use tests, acceptance checks, or a user-approved result and record
                 success or failure. This is labeled <code>manual</code> evidence
                 (application-reported), not CLI verification. Use <code>unknown</code>
-                when the result is uncertain. By default, <code>route()</code> automatically
+                when the result is uncertain. The next <code>route()</code> automatically
                 includes eligible recorded outcomes from the same JSONL, SQLite, or
                 PostgreSQL history, including CLI-verified results. No manual cache
                 clearing is needed: evidence is part of the cache key.
               </p>
             </div>
-            <CodeBlock code={HISTORY_OPTIONS} label="Optional history (unreleased)" />
-            <p className="docs-body-copy">
-              <code>useHistory</code> defaults to <code>true</code>. Setting it to
-              <code> false</code> excludes prior outcomes for this decision, but still
-              records the route and leaves history and project config untouched.
-              History-enabled and history-disabled decisions use separate cache entries;
-              <code> noCache: true</code> works independently. Explicit
-              <code> useHistory: true</code> still respects the project history limit.
-              This option is pending the next npm release; disabling history requires
-              the next CLI release after 0.1.3. Older CLIs reject the unsupported flag
-              without retrying with history enabled. Verification remains your
-              application&apos;s choice.
-            </p>
             <p className="docs-body-copy">
               Pending/unknown, active, and process-exit-only records are excluded.
               <code> [router].history_limit</code> bounds recent evidence: default 20,

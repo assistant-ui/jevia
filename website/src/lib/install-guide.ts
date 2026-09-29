@@ -86,7 +86,7 @@ export function getInstallGuide(origin: string) {
     "",
     "Verification happens when the launched process/session finishes, not after each agent message or tool call. Without a usable verifier, the result stays unverified and is excluded from learning; do not fill this gap by submitting guessed feedback. Prepare project dependencies first. Jevia does not install an agent or test runner, supply credentials, bypass agent permission prompts, or automatically retry failed work. Passing tests is evidence, not proof of every requirement.",
     "",
-    "For route-only or SDK-controlled work outside `jevia run`, the application owns execution and verification and explicitly reports the result. It can automate this call after its own checks; no human feedback prompt is required. These are separate integration choices, not extra steps after the automatic CLI pipeline. Details: https://github.com/assistant-ui/jevia#automatic-cli-pipeline-unreleased.",
+    "For route-only or SDK-controlled work outside `jevia run`, feedback and verification are optional. The application owns execution and may report a known outcome without a verifier; no human feedback prompt is required. Skipping feedback leaves the recorded outcome unknown. Later routes still use other eligible recorded outcomes automatically. These are separate integration choices, not extra steps after the automatic CLI pipeline. Details: https://github.com/assistant-ui/jevia#automatic-cli-pipeline-unreleased.",
     "",
   ].join("\n");
 }

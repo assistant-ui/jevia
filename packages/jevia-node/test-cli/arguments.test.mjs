@@ -77,6 +77,9 @@ for (const backend of ["jsonl", "sqlite", "postgres"]) {
     const task = "fix the parser";
     const outcomes = () => requests.at(-1).state.recent_completed_outcomes;
     const first = await client.route(task);
+    assert.equal(first.outcome, "unknown");
+    assert.equal(first.feedback, undefined);
+    assert.equal(first.execution, undefined);
     assert.deepEqual(outcomes(), [], "a routed task is not an observed outcome");
     assert.equal((await client.route(task)).source, "cache");
     assert.equal(requests.length, 1, "pending records do not invalidate the cache");
@@ -95,26 +98,20 @@ for (const backend of ["jsonl", "sqlite", "postgres"]) {
     assert.equal((await client.route(task)).source, "cache");
     assert.equal(requests.length, 2, "unchanged evidence still permits caching");
 
-    const configPath = join(cwd, ".jevia", "config.toml");
-    const originalConfig = await readFile(configPath, "utf8");
-    const withoutHistory = await client.route(task, { useHistory: false });
-    assert.equal(withoutHistory.source, "live", "opt-out must not reuse the history-enabled cache entry");
-    assert.deepEqual(outcomes(), [], "recorded outcomes must not be sent when history is disabled");
-    assert.equal(requests.length, 3);
-    assert.equal((await client.show(withoutHistory.run_id)).task, task, "opt-out still records the new route");
-    assert.equal((await client.show(first.run_id)).outcome, "success", "existing evidence is not deleted");
-    assert.equal((await client.route(task, { useHistory: false })).source, "cache");
-    assert.equal((await client.route(task, { useHistory: true })).source, "cache");
-    assert.equal(requests.length, 3, "both cache entries remain reusable independently");
+    // Skip both feedback and verification: routing still records the task and
+    // includes the known outcome from other work automatically.
+    const unreported = await client.route("a task with no feedback or verifier");
+    const saved = await client.show(unreported.run_id);
+    assert.equal(saved.outcome, "unknown");
+    assert.equal(saved.feedback, undefined);
+    assert.equal(saved.execution, undefined);
+    assert.deepEqual(outcomes().map(({ outcome }) => outcome), ["success"]);
 
     await client.feedback(afterSuccess.run_id, "failure");
-    assert.equal((await client.route(task, { useHistory: false })).source, "cache");
-    assert.equal(requests.length, 3, "new outcomes do not affect history-disabled decisions");
-    assert.equal((await client.route(task, { useHistory: false, noCache: true })).source, "live");
-    assert.deepEqual(outcomes(), [], "cache bypass must still respect history opt-out");
     const afterFailure = await client.route(task);
     assert.equal(afterFailure.source, "live");
     assert.deepEqual(outcomes().map(({ outcome }) => outcome), ["success", "failure"]);
+    assert.ok(!outcomes().some(({ task }) => task === unreported.task));
 
     // Explicit external completion also supplies evidence, without inventing verifier provenance.
     await client.complete(afterFailure.run_id, "success", { confirmStopped: true });
@@ -126,17 +123,12 @@ for (const backend of ["jsonl", "sqlite", "postgres"]) {
     assert.equal((await client.route(task)).source, "live");
     assert.deepEqual(outcomes().map(({ outcome }) => outcome), ["failure", "success"]);
 
+    const configPath = join(cwd, ".jevia", "config.toml");
     const config = await readFile(configPath, "utf8");
-    assert.equal(config, originalConfig, "per-call history preferences never change project config");
     assert.match(config, /history_limit = 20/);
     await writeFile(configPath, config.replace("history_limit = 20", "history_limit = 1"));
     assert.equal((await client.route(task)).source, "live");
     assert.deepEqual(outcomes().map(({ outcome }) => outcome), ["success"], "only the latest eligible record is included");
-
-    await writeFile(configPath, config.replace("history_limit = 20", "history_limit = 0"));
-    await client.route("history disabled by project", { useHistory: true });
-    assert.deepEqual(outcomes(), [], "useHistory: true still respects the project history limit");
-    await writeFile(configPath, config.replace("history_limit = 20", "history_limit = 1"));
 
     const limited = await readFile(configPath, "utf8");
     assert.match(limited, /store_task_text = true/);
@@ -154,7 +146,7 @@ for (const backend of ["jsonl", "sqlite", "postgres"]) {
 
 test("real CLI receives option-like tasks literally and still honors cache bypass", async (t) => {
   const { client, tasks } = await fixture(t);
-  for (const task of ["- fix the parser", "--help", "--json", "--no-cache", "--no-history", "--", "-"]) {
+  for (const task of ["- fix the parser", "--help", "--json", "--no-cache", "--", "-"]) {
     const record = await client.route(task);
     assert.equal(record.tier, "fast");
     assert.equal(tasks.at(-1), task);

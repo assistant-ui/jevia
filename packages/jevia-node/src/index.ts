@@ -78,8 +78,6 @@ export interface CommandOptions {
 
 export interface RouteOptions extends CommandOptions {
   noCache?: boolean;
-  /** Include eligible recorded outcomes. Defaults to true; false still records this route. */
-  useHistory?: boolean;
 }
 
 export interface FeedbackOptions extends CommandOptions {
@@ -87,7 +85,7 @@ export interface FeedbackOptions extends CommandOptions {
 }
 
 export interface CompleteOptions extends FeedbackOptions {
-  /** Confirm your external harness and verification have both stopped. */
+  /** Confirm your external harness and any optional verification have stopped. */
   confirmStopped: true;
 }
 
@@ -229,24 +227,19 @@ export class JeviaClient {
   /**
    * Route using recent eligible outcomes from the project's configured storage.
    * Recorded feedback is loaded automatically and participates in the cache key;
-   * callers do not need to fetch or resend history. Set useHistory: false to
-   * exclude prior outcomes for this call without changing config or persistence.
-   * Does not execute the task.
+   * callers do not need to fetch or resend history. Does not execute the task.
    */
   async route(task: string, options: RouteOptions = {}): Promise<RouteRecord> {
     requireText(task, "task");
-    if (options.useHistory !== undefined && typeof options.useHistory !== "boolean") {
-      throw new TypeError("useHistory must be a boolean");
-    }
     const args = ["route", "--json"];
     if (options.noCache) args.push("--no-cache");
-    if (options.useHistory === false) args.push("--no-history");
     args.push("--", task);
     return this.record(await this.execute(args, options.signal));
   }
 
   /**
    * Record an application-reported outcome for subsequent routing automatically.
+   * Optional: omitting this call leaves the recorded route's outcome unknown.
    * No built-in verifier is required; provenance remains manual, not verification.
    * Use unknown when the result is uncertain (excluded from learning).
    */
