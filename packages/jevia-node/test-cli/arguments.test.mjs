@@ -344,6 +344,105 @@ for (const backend of ["jsonl", "sqlite", "postgres"]) {
   });
 }
 
+for (const source of ["codex_hooks", "opencode_plugin"]) {
+  for (const backend of ["jsonl", "sqlite", "postgres"]) {
+    test(`session-local ${source} records facts and reuses history (${backend})`, {
+      skip: (source === "codex_hooks" && process.platform === "win32" && "Codex native hooks currently support Unix") ||
+        (backend === "postgres" && !process.env.JEVIA_TEST_POSTGRES_URL && "requires isolated PostgreSQL"),
+    }, async (t) => {
+      const { client, cwd, requests } = await fixture(t, {
+        SDK_TEST_DB: process.env.JEVIA_TEST_POSTGRES_URL,
+        OPENCODE_CONFIG_CONTENT: JSON.stringify({ plugin: ["existing-plugin"], permission: { bash: "ask" }, model: "unchanged/model" }),
+      });
+      if (backend !== "jsonl") await client.setupStorage(backend === "sqlite"
+        ? { backend, path: ".jevia/native.db" }
+        : { backend, project: `native-${randomUUID()}`, urlEnv: "SDK_TEST_DB", allowInsecureLocalhost: true },
+      { apply: true, confirmStopped: true });
+      const configPath = join(cwd, ".jevia", "config.toml");
+      const initial = await readFile(configPath, "utf8");
+      await writeFile(configPath, initial + `\n[harnesses.agent]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ["native.mjs", "{model}", "{task}"]\nobservations = "${source}"\n[harnesses.agent.models]\nfast = "requested-alias"\nbalanced = "requested-alias"\nstrong = "requested-alias"\n`);
+      await writeFile(join(cwd, "native.mjs"), String.raw`
+        import assert from 'node:assert/strict';
+        import { spawnSync } from 'node:child_process';
+        const source = process.env.FIXTURE_SOURCE;
+        assert.ok(process.env.JEVIA_OBSERVATION_JOURNAL);
+        if (source === 'codex_hooks') {
+          assert.ok(process.argv.includes('--no-daemon'));
+          assert.ok(!process.argv.some(arg => arg.includes('bypass')));
+          for (const hook_event_name of ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'Interrupt', 'Stop', 'SessionEnd']) {
+            const config = process.argv.find(arg => arg.startsWith('hooks.' + hook_event_name + '='));
+            const command = JSON.parse(/command=("(?:[^"\\]|\\.)*")/.exec(config)[1]);
+            const result = spawnSync('/bin/sh', ['-c', command], { encoding: 'utf8', input: JSON.stringify({
+              hook_event_name, model: 'observed-native', session_id: 'private-native-session', tool_name: 'Bash',
+              prompt: 'PRIVATE_PROMPT', tool_response: 'PRIVATE_OUTPUT', transcript_path: '/PRIVATE_PATH',
+            }) });
+            assert.equal(result.status, 0); assert.equal(result.stdout, ''); assert.equal(result.stderr, '');
+          }
+        } else {
+          const config = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT);
+          assert.deepEqual(config.permission, { bash: 'ask' });
+          assert.equal(config.model, 'unchanged/model');
+          assert.equal(config.plugin[0], 'existing-plugin');
+          const plugin = await import(config.plugin.at(-1));
+          const hooks = await plugin.default({});
+          await hooks.event({ event: { type: 'session.created', properties: { info: { id: 'private-native-session' } } } });
+          await hooks['chat.message']({ sessionID: 'private-native-session', model: { providerID: 'private', modelID: 'do-not-attribute' } }, { message: 'PRIVATE_PROMPT' });
+          await hooks['chat.params']({ sessionID: 'private-native-session', model: { providerID: 'provider', id: 'observed-native' }, message: 'PRIVATE_PROMPT' }, {});
+          await hooks['tool.execute.after']({ sessionID: 'private-native-session', tool: 'bash', args: 'PRIVATE_COMMAND' }, { output: 'PRIVATE_OUTPUT' });
+          await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'private-native-session' } } });
+          await hooks.event({ event: { type: 'session.error', properties: { sessionID: 'private-native-session', error: 'PRIVATE_ERROR' } } });
+          // Repeated streaming updates are not counted as independent attempts.
+          await hooks.event({ event: { type: 'message.updated', properties: { info: 'PRIVATE_OUTPUT' } } });
+          // A missing collector is silent and must not fail a tool or session.
+          process.env.JEVIA_OBSERVATION_EXECUTABLE = '/missing-jevia-collector';
+          const unavailable = await plugin.default({});
+          await unavailable['tool.execute.after']({ tool: 'bash', sessionID: 'private-native-session' }, {});
+        }
+        process.stdout.write('unchanged native output');
+      `);
+      const beforeParent = process.env.JEVIA_OBSERVATION_JOURNAL;
+      for (const supervised of [false, true]) {
+        const args = ["run", "agent", `native task ${supervised}`];
+        if (supervised) args.push("--non-interactive", "--timeout-seconds", "20");
+        const result = await execute(binary, args, { cwd, env: { ...client.env, FIXTURE_SOURCE: source }, timeout: 30000 });
+        assert.equal(result.stdout, "unchanged native output");
+        const [record] = await client.runs({ limit: 1 });
+        assert.equal(record.outcome, "unknown");
+        assert.equal(record.feedback, undefined);
+        assert.equal(record.execution.verification, undefined);
+        assert.equal(record.execution.model, "requested-alias");
+        const facts = record.execution.observations;
+        assert.equal(facts.source, source);
+        assert.equal(facts.status, "recorded");
+        assert.equal(facts.events.length, 6);
+        assert.equal(facts.totals.event_counts.tool_completed, 1);
+        assert.equal(facts.totals.event_counts.tool_succeeded, undefined);
+        assert.ok(!JSON.stringify(record).includes("PRIVATE_"));
+        await client.route(`after native ${supervised}`);
+        const state = requests.at(-1).state;
+        const observed = state.recent_execution_observations.at(-1).harness_observations;
+        assert.deepEqual(observed.observed_models, [source === "codex_hooks" ? "observed-native" : "provider/observed-native"]);
+        assert.deepEqual(state.recent_completed_outcomes, []);
+        assert.ok(!JSON.stringify(state).includes("private-native-session"));
+        assert.ok(!JSON.stringify(state).includes("do-not-attribute"));
+      }
+      assert.equal(process.env.JEVIA_OBSERVATION_JOURNAL, beforeParent);
+      await writeFile(join(cwd, "verify.mjs"), String.raw`
+        import assert from 'node:assert/strict';
+        assert.equal(process.env.JEVIA_OBSERVATION_JOURNAL, undefined);
+        assert.equal(process.env.JEVIA_OBSERVATION_EXECUTABLE, undefined);
+        assert.deepEqual(JSON.parse(process.env.OPENCODE_CONFIG_CONTENT).plugin, ['existing-plugin']);
+      `);
+      await writeFile(configPath, (await readFile(configPath, "utf8")) + `\n[harnesses.agent.verification]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ["verify.mjs"]\n`);
+      await execute(binary, ["run", "agent", "explicit verification"], { cwd, env: { ...client.env, FIXTURE_SOURCE: source }, timeout: 30000 });
+      const [verified] = await client.runs({ limit: 1 });
+      assert.equal(verified.outcome_evidence.source, "verification");
+      assert.equal(verified.outcome, "success");
+      assert.ok(!(await readdir(join(cwd, ".jevia"))).some(name => name.startsWith("jevia-events-") || name.startsWith("jevia-observer-")));
+    });
+  }
+}
+
 test("real CLI looks up option-like imported run IDs literally", async (t) => {
   const { client, cwd } = await fixture(t);
   const record = await client.route("a normal task");

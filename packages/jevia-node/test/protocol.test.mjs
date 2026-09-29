@@ -106,6 +106,15 @@ test("validates bounded passive observations without requiring verification or k
   ]) assert.equal(isRouteRecord(wrap(invalid)), false);
 });
 
+test("accepts native adapter facts without assigning outcomes", () => {
+  for (const source of ["codex_hooks", "opencode_plugin"]) {
+    for (const kind of ["tool_completed", "turn_interrupted", "model_observed"]) {
+      const observations = { source, status: "recorded", events: [{ kind, recorded_at_ms: 1, model: "provider/model" }] };
+      assert.ok(isRouteRecord({ ...record, schema_version: 5, execution: { ...execution, observations } }));
+    }
+  }
+});
+
 test("all record-returning methods reject invalid CLI output without exposing it", async () => {
   const invalid = { ...record, lifecycle: "PRIVATE_RESPONSE_SENTINEL" };
   for (const method of ["route", "feedback", "show", "runs", "complete"]) {

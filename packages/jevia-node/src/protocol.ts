@@ -19,7 +19,8 @@ const optional = (value: unknown, guard: Guard): boolean => value === undefined 
 
 const isIdentifier: Guard = (value) => typeof value === "string" && value.length > 0 && value.length <= 256 && !/[^a-zA-Z0-9._:/@+-]/.test(value);
 const isEventKind = oneOf("session_started", "session_ended", "turn_started", "turn_completed", "turn_failed",
-  "tool_succeeded", "tool_failed", "task_reported_complete", "model_changed", "subagent_started", "subagent_stopped");
+  "tool_succeeded", "tool_failed", "tool_completed", "turn_interrupted", "model_observed",
+  "task_reported_complete", "model_changed", "subagent_started", "subagent_stopped");
 const isHarnessEvent: Guard = (value) => isObject(value) && isEventKind(value.kind) && isUnsigned(value.recorded_at_ms) &&
   ["session_id", "agent_id", "model", "previous_model", "tool_name"].every((key) => optional(value[key], isIdentifier));
 const isEventCounts = (value: unknown): value is Record<string, number> => isObject(value) &&
@@ -50,7 +51,7 @@ const matchesTotals = (value: Record<string, unknown>): boolean => {
     (totals.discarded_inputs === 0 || value.status === "partial") &&
     Object.entries(sample).every(([kind, n]) => n <= (totals.event_counts[kind] ?? 0));
 };
-const isObservations: Guard = (value) => isObject(value) && nullable(oneOf("claude_hooks"))(value.source) &&
+const isObservations: Guard = (value) => isObject(value) && nullable(oneOf("claude_hooks", "codex_hooks", "opencode_plugin"))(value.source) &&
   oneOf("unsupported", "disabled", "unavailable", "no_events", "recorded", "partial")(value.status) &&
   Array.isArray(value.events) && value.events.length <= 256 && value.events.every(isHarnessEvent) &&
   (value.events.length === 0 || (value.source !== null && (value.status === "recorded" || value.status === "partial"))) &&

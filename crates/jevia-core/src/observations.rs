@@ -89,6 +89,8 @@ pub enum ObservationMode {
     #[default]
     Auto,
     ClaudeHooks,
+    CodexHooks,
+    OpencodePlugin,
     Off,
 }
 
@@ -97,6 +99,8 @@ impl ObservationMode {
         match self {
             Self::Auto => "auto",
             Self::ClaudeHooks => "claude_hooks",
+            Self::CodexHooks => "codex_hooks",
+            Self::OpencodePlugin => "opencode_plugin",
             Self::Off => "off",
         }
     }
@@ -117,6 +121,8 @@ pub enum ObservationStatus {
 #[serde(rename_all = "snake_case")]
 pub enum ObservationSource {
     ClaudeHooks,
+    CodexHooks,
+    OpencodePlugin,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -127,10 +133,15 @@ pub enum HarnessEventKind {
     TurnStarted,
     TurnCompleted,
     TurnFailed,
+    TurnInterrupted,
+    /// A tool returned; its result does not establish success or failure.
+    ToolCompleted,
     ToolSucceeded,
     ToolFailed,
     TaskReportedComplete,
     ModelChanged,
+    /// The harness reported a model for a request, not proof of provider execution.
+    ModelObserved,
     SubagentStarted,
     SubagentStopped,
 }

@@ -22,17 +22,49 @@ remain supported). No feedback or extra verification is needed for these metrics
 
 ### Native harness observations
 
-`jevia run` enables passive native capture by default for direct `claude` or
-`claude.exe` commands on Claude Code 2.1.251+. It probes `--version` with a two-second
-deadline, then adds session-local, silent command hooks. Compatible wrappers can
-set `observations = "claude_hooks"` in their harness table explicitly; this mode
-assumes the wrapper supports the same hook contract. No global or project Claude
-settings are edited. Custom `--settings`, `--bare`, and `--safe-mode` arguments are
-preserved and native injection is skipped. Managed settings can also disable hooks.
+Unreleased `jevia run` enables native capture automatically for supported direct
+executables (including `.exe` names). It probes `--version` with a two-second
+deadline before adding a session-local adapter. No user/project harness config is
+rewritten. Set `observations = "off"` to disable native capture; process recording
+stays on. Other harnesses, including Gemini, retain process facts only.
 
-Set `observations = "off"` to disable native capture; process recording stays on.
-Other harnesses (including Codex, OpenCode, and Gemini) currently record process
-facts only. They are not advertised as having native event adapters yet.
+| Harness | Auto-detection contract | Capture and limits |
+| --- | --- | --- |
+| Claude Code | 2.1.251+ | Silent exec-form hooks; preserves custom `--settings`, `--bare`, and `--safe-mode` by skipping injection. Managed settings may disable hooks. |
+| Codex | 0.158.x stable or the tested 0.158.0-alpha.2, macOS/Linux | Inline session hook overrides. `exec`/`review` run locally; interactive launches get `--no-daemon` to isolate the journal environment. Existing `-c`/`--config`, `--disable`, remote/attach/server arguments skip injection. Windows stays process-only. |
+| OpenCode | v1 >= 1.18.33, < 2 | Private dependency-free `.mjs` plugin appended through `OPENCODE_CONFIG_CONTENT`; existing valid JSON overrides and plugin entries are preserved. Invalid/JSONC inline overrides and remote/attach/server launches stay process-only. |
+
+Compatible wrappers can explicitly set `observations = "claude_hooks"`,
+`"codex_hooks"`, or `"opencode_plugin"` in their harness table. These bypass the
+version probe, not platform/config safety checks; the wrapper must honor the same
+arguments, environment, and event contract. Unknown future Codex minors are
+deliberately not auto-enabled until checked against the adapter contract.
+
+**Codex hook trust:** review Jevia's hooks using `/hooks` before expecting native
+events. Jevia never bypasses trust, enables disabled hooks, changes approval
+policy, or installs global configuration. The command definition stays stable
+across runs; changing Jevia's executable path can require renewed trust. Skipped
+hooks can leave `no_events` even when process recording works. The
+[official hook contract](https://learn.chatgpt.com/docs/hooks) describes trust and
+event fields. Codex `PostToolUse` becomes neutral `tool_completed`, because it can
+also fire for nonzero shell exits. `Interrupt` is `turn_interrupted`, not task
+failure. Reported model IDs attach only to the event that contains them; no
+cross-subagent model-switch inference is made.
+
+OpenCode uses its [plugin API](https://opencode.ai/docs/plugins/) and
+[runtime config override](https://opencode.ai/docs/config/). The adapter contract
+is covered by fixtures against the
+[v1.18.33 hook types](https://github.com/anomalyco/opencode/blob/v1.18.33/packages/plugin/src/index.ts).
+`chat.params` produces `model_observed` for the model selected for that request,
+not proof of a provider completion. `tool.execute.after` produces neutral
+`tool_completed`; tool output is never interpreted. Session created/idle/error
+events and submitted messages provide activity boundaries; streaming message
+updates are ignored to avoid counting each update as an attempt. There is no
+guarantee of tool-error, subagent-completion, model-switch, or session-end coverage.
+Private plugin files are removed after terminal persistence. A crash may leave
+an inert `jevia-observer-*.mjs` file alongside the retained journal; replay does not
+execute it. Native adapters are contract-tested with local fixtures, not a claim
+of exhaustive live-provider coverage.
 
 `execution.observations` contains a source, coverage status, the most recent 256
 allowlisted events, and whole-session `totals`. Counters continue after the event
@@ -43,7 +75,7 @@ At most 32 model identifiers are retained. Further models contribute to
 Model switches are observations, not failures. Counts are observed activity, not
 task scores; partial capture/legacy truncated journals provide lower bounds.
 Supported events include session/turn boundaries, tool
-success/failure, reported task completion, subagent boundaries, and session model
+success/failure or neutral completion, reported task completion, subagent boundaries, and session model
 changes. A model is saved only when explicitly present in an event; configured
 `execution.model` remains the requested model. No outcome is inferred from these
 events. Tool success and an agent marking a task complete are not proof of a fix.

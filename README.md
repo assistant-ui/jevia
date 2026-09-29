@@ -99,9 +99,10 @@ or `runs complete` step is needed. Extra verification is opt-in: a process exit
 remains an observed fact, not proof of task success. Existing explicitly enabled
 checks are preserved. See the [automatic CLI pipeline](docs/reference.md#automatic-cli-pipeline).
 
-Native event capture currently supports direct Claude Code 2.1.251+ launches.
-It records reported models/switches and tool/turn activity without storing prompts
-or tool contents. Other harnesses currently provide process-level observations.
+Unreleased native capture supports Claude Code 2.1.251+, tested Codex 0.158.x
+on macOS/Linux, and OpenCode v1 >= 1.18.33. Codex hooks require normal `/hooks`
+trust review. It records reported models and tool/turn activity without storing
+prompts or tool contents. Unsupported versions/remote sessions keep process facts.
 Coverage is best-effort, not a claim that every model attempt or successful fix is
 known. See [native capture limits](docs/reference.md#native-harness-observations).
 

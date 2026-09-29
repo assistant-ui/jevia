@@ -133,18 +133,22 @@ impl Observations {
         .unwrap();
         writeln!(
             output,
-            "{:<28} {:>6} {:>15}",
-            "Reported model", "Runs", "Tool ok/error"
+            "{:<28} {:>6} {:>24}",
+            "Reported model", "Runs", "Tool neutral/ok/error"
         )
         .unwrap();
         for (model, facts) in &self.models {
             writeln!(
                 output,
-                "{:<28} {:>6} {:>15}",
+                "{:<28} {:>6} {:>24}",
                 model,
                 facts.runs,
                 format!(
-                    "{}/{}",
+                    "{}/{}/{}",
+                    facts
+                        .event_counts
+                        .get(&HarnessEventKind::ToolCompleted)
+                        .unwrap_or(&0),
                     facts
                         .event_counts
                         .get(&HarnessEventKind::ToolSucceeded)

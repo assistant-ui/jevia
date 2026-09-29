@@ -81,7 +81,10 @@ test("distinguishes automatic CLI recording from explicit SDK feedback and versi
   assert.match(guide, /additional verification is opt-in/);
   assert.match(guide, /passive observations inform later routing/);
   assert.match(guide, /Claude Code 2\.1\.251/);
-  assert.match(guide, /Other harnesses currently supply process-level observations/);
+  assert.match(guide, /Unsupported versions and remote sessions keep process-level observations/);
+  assert.match(guide, /Codex 0\.158\.x/);
+  assert.match(guide, /OpenCode v1 >= 1\.18\.33/);
+  assert.match(guide, /normal \/hooks trust review/);
   assert.match(guide, /Do not promise these features from the current published installer/);
   assert.match(guide, /when the launched process\/session finishes/);
   assert.match(guide, /not proof of task success/);

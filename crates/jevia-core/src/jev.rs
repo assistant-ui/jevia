@@ -183,7 +183,7 @@ fn build_request<'a>(
         "policy": {
             "goal": "Select the least expensive capability tier likely to complete the task successfully.",
             "use_outcomes": "Treat relevant successes and failures as evidence, not absolute rules. Prefer the safer tier when evidence conflicts.",
-            "use_observations": "Execution observations are operational context, not task-success labels. A process exit, duration, or agent-reported completion does not prove correctness. The requested model is not proof of which models actually executed. Do not infer quality or model capability from missing feedback."
+            "use_observations": "Execution observations are operational context, not task-success labels. A process exit, duration, or agent-reported completion does not prove correctness. The requested model is not proof of which models actually executed. A model_observed event reports request selection, not a provider completion. tool_completed is neutral and does not establish tool success. Do not infer quality or model capability from missing feedback."
         }
     });
 
