@@ -21,7 +21,7 @@ test("prerendering emits the homepage and the unchanged installer", async () => 
   assert.match(html, /Open any harness/);
   assert.match(html, /Codex, Claude Code, OpenCode, Gemini CLI/);
   assert.match(html, /Node\.js API/);
-  assert.match(html.replace(/<[^>]+>/g, ""), /npm install jevia/);
+  assert.match(visibleText(html), /npm install jevia/);
   assert.match(html, /href="\/docs"/);
   assert.doesNotMatch(html, /From task to evidence/);
   assert.match(html, /COPY: Launch/);
@@ -43,7 +43,7 @@ test("prerendering emits the Jevia documentation", async () => {
   assert.match(html, /Route, run, and inspect/);
   assert.match(html, /How adaptive routing works/);
   assert.match(html, /Programmatic harness integration/);
-  assertAutomaticPipelineDocs(html.replace(/<[^>]+>/g, ""));
+  assertAutomaticPipelineDocs(visibleText(html));
   assert.match(html, /setupStorage/);
   assert.match(html, /JeviaCommandError/);
   assert.match(html, /Choose and configure storage/);
@@ -105,6 +105,25 @@ function assertAutomaticPipelineDocs(content) {
   assert.match(text, /Feedback and verification are optional/);
   assert.match(text, /Skipping feedback still records the route with an unknown outcome/);
   assert.doesNotMatch(text, /useHistory|verifyResult\(result\)/);
+}
+
+function visibleText(html) {
+  let text = "";
+  let insideTag = false;
+
+  for (const character of html) {
+    if (character === "<") {
+      insideTag = true;
+      text += " ";
+    } else if (character === ">") {
+      insideTag = false;
+      text += " ";
+    } else if (!insideTag) {
+      text += character;
+    }
+  }
+
+  return text.replace(/\s+/g, " ");
 }
 
 test("View .md serves raw Markdown under normal browser headers", async () => {
