@@ -83,6 +83,15 @@ jobs:
       - name: Test built website
         run: pnpm test:build
 
+  windows-installer:
+    name: Windows installer checks
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test PowerShell installer
+        shell: pwsh
+        run: ./website/tests/install-powershell.test.ps1
+
   check:
     name: Rust checks
     runs-on: ubuntu-24.04

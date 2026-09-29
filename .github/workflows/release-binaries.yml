@@ -26,15 +26,28 @@ jobs:
           - runner: ubuntu-22.04
             target: x86_64-unknown-linux-musl
             install_musl: true
+            binary: jevia
+            asset_suffix: ""
           - runner: ubuntu-22.04-arm
             target: aarch64-unknown-linux-musl
             install_musl: true
+            binary: jevia
+            asset_suffix: ""
           - runner: macos-15-intel
             target: x86_64-apple-darwin
             install_musl: false
+            binary: jevia
+            asset_suffix: ""
           - runner: macos-15
             target: aarch64-apple-darwin
             install_musl: false
+            binary: jevia
+            asset_suffix: ""
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            install_musl: false
+            binary: jevia.exe
+            asset_suffix: .exe
     runs-on: ${{ matrix.runner }}
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -62,9 +75,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          asset="jevia-${RELEASE_TAG}-${{ matrix.target }}"
-          cp "target/${{ matrix.target }}/release/jevia" "$asset"
-          chmod 755 "$asset"
+          asset="jevia-${RELEASE_TAG}-${{ matrix.target }}${{ matrix.asset_suffix }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "$asset"
+          if [ "${{ runner.os }}" != "Windows" ]; then
+            chmod 755 "$asset"
+          fi
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "$asset" > "$asset.sha256"
           else
@@ -74,8 +89,8 @@ jobs:
         with:
           name: jevia-${{ matrix.target }}
           path: |
-            jevia-${{ env.RELEASE_TAG }}-${{ matrix.target }}
-            jevia-${{ env.RELEASE_TAG }}-${{ matrix.target }}.sha256
+            jevia-${{ env.RELEASE_TAG }}-${{ matrix.target }}${{ matrix.asset_suffix }}
+            jevia-${{ env.RELEASE_TAG }}-${{ matrix.target }}${{ matrix.asset_suffix }}.sha256
           if-no-files-found: error
 
   publish:
@@ -107,7 +122,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15]
+        include:
+          - os: ubuntu-24.04
+            installer: shell
+          - os: macos-15
+            installer: shell
+          - os: windows-latest
+            installer: powershell
     runs-on: ${{ matrix.os }}
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -116,6 +137,7 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
       - name: Install from published release assets
+        if: matrix.installer == 'shell'
         shell: bash
         run: |
           set -euo pipefail
@@ -131,6 +153,29 @@ jobs:
           "$install_dir/jevia" init
           "$install_dir/jevia" runs --json
           "$install_dir/jevia" cache status
+      - name: Install from published Windows release asset
+        if: matrix.installer == 'powershell'
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_TAG.TrimStart("v")
+          $installDirectory = Join-Path $env:RUNNER_TEMP "jevia-bin"
+          $env:JEVIA_VERSION = $version
+          $env:JEVIA_INSTALL_DIR = $installDirectory
+          & website/public/install.ps1
+          $binary = Join-Path $installDirectory "jevia.exe"
+          if ((& $binary --version) -ne "jevia $version") {
+            throw "installed Jevia version does not match $version"
+          }
+          $project = Join-Path $env:RUNNER_TEMP "jevia-project"
+          New-Item -ItemType Directory -Path $project -Force | Out-Null
+          Push-Location $project
+          try {
+            & $binary init
+            & $binary runs --json
+            & $binary cache status
+          } finally {
+            Pop-Location
+          }
 
   sync-installer:
     name: Open installer version PR
@@ -182,7 +227,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
-          git add website/public/install.sh website/src/lib/install-guide.ts
+          git add website/public/install.sh website/public/install.ps1 website/src/lib/install-guide.ts
           git commit -m "chore(website): pin installer to ${RELEASE_TAG}"
           git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch" || true
           git push --force-with-lease origin "$branch"
@@ -193,6 +238,6 @@ jobs:
               --base main \
               --head "$branch" \
               --title "chore(website): pin installer to ${RELEASE_TAG}" \
-              --body "Updates the public installer and install guide after the ${RELEASE_TAG} release assets passed real macOS and Linux smoke tests."
+              --body "Updates the public installers and install guide after the ${RELEASE_TAG} release assets passed real macOS, Linux, and Windows smoke tests."
           fi
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"

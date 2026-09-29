@@ -30,6 +30,15 @@ const CLI_SETUP = [
   'jevia route "fix the flaky integration test"',
 ].join("\n");
 
+const WINDOWS_CLI_SETUP = [
+  "irm https://jevia.dev/install.ps1 | iex",
+  "jevia --version",
+  "jevia init",
+  '$env:TYPESAFE_API_KEY = "your-key"',
+  "jevia check",
+  'jevia route "fix the flaky integration test"',
+].join("\n");
+
 const CLI_WORKFLOW = [
   'jevia route "investigate the failing integration test"',
   'jevia route --json "investigate the failing integration test"',
@@ -393,6 +402,11 @@ export default function DocsPage() {
               </div>
             </div>
             <CodeBlock code={CLI_SETUP} label="CLI quickstart" language="bash" />
+            <CodeBlock
+              code={WINDOWS_CLI_SETUP}
+              label="Windows PowerShell quickstart"
+              language="powershell"
+            />
             <div className="docs-note">
               <strong>Two diagnostics</strong>
               <p>

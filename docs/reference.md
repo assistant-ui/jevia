@@ -28,16 +28,27 @@ The application owns the policy. Jev supplies a structured decision signal.
 
 ## Quick start
 
-Use the copyable `/install.sh` command on the
-[Jevia landing page](https://jevia.dev). It downloads a
-checksum-verified binary for macOS or Linux on Intel or ARM; Rust and Cargo are
-not required.
+Use the copyable installer on the [Jevia landing page](https://jevia.dev). It
+downloads a checksum-verified prebuilt binary; Rust and Cargo are not required.
+On macOS, Linux, or WSL:
 
 ```bash
 curl -fsSL https://jevia.dev/install.sh | sh
 jevia --version
 jevia init
 export TYPESAFE_API_KEY="your-key"
+jevia check
+jevia route "investigate an intermittent distributed-lock failure"
+```
+
+On native Windows, use PowerShell 5.1 or newer, then run the same `jevia`
+commands:
+
+```powershell
+irm https://jevia.dev/install.ps1 | iex
+jevia --version
+jevia init
+$env:TYPESAFE_API_KEY = "your-key"
 jevia check
 jevia route "investigate an intermittent distributed-lock failure"
 ```
