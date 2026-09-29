@@ -44,7 +44,9 @@ test("prerendering emits the Jevia documentation", async () => {
   assert.match(html, /setupStorage/);
   assert.match(html, /JeviaCommandError/);
   assert.match(html, /Choose and configure storage/);
-  assert.match(html, /storage setup sqlite --import-jsonl/);
+  assert.match(html, /\.jevia\/runs\.jsonl/);
+  assert.match(html, /\.jevia\/jevia\.db/);
+  assert.match(html, /--path \.data\/jevia\/history\.db/);
   assert.match(html, /Cache, diagnostics, and recovery/);
   assert.match(html, /token keyword/);
   assert.match(html, /aria-label="Documentation navigation"/);
