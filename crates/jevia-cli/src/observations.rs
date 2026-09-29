@@ -735,6 +735,7 @@ mod tests {
         assert!(!saved.contains("PRIVATE_"));
         let mut file = open_journal(&journal).unwrap();
         let summary = read_journal(&mut file).unwrap();
+        drop(file);
         assert_eq!(summary.events[0].kind, Kind::TurnCompleted);
         assert_eq!(summary.events[0].model, None);
         assert!(!summary.routing_summary().to_string().contains("session-1"));
