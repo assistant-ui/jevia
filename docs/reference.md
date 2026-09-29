@@ -2,6 +2,24 @@
 
 ## Unreleased: passive routing context
 
+### Passive model reporting
+
+The unreleased `jevia stats` / `jevia stats --json` includes a separate
+`observations` section over the same bounded history window. It reports coverage
+(`recorded`, `partial`, `no_events`, `unavailable`, `disabled`, `unsupported`, or
+legacy `not_reported`), active checkpoints, whole-session event counts, sampled
+runs, and per-observed-model run/event counts. Requested aliases are never used
+as attribution. Events lacking a reported model remain unattributed; models beyond
+the 128-group report limit contribute to omitted-model counts. The report signals
+group truncation and counters saturated at JavaScript's maximum safe integer.
+
+Tool errors and model switches are operational facts, **not task failure rates**.
+Existing verified/manual outcome metrics are unchanged; there is no inferred
+per-model success score or latency attribution. No task text, session/agent IDs,
+commands, or transcripts enter the report. Reporting is read-only, including for
+live checkpoints, and uses whole-session totals when present (legacy samples
+remain supported). No feedback or extra verification is needed for these metrics.
+
 ### Native harness observations
 
 `jevia run` enables passive native capture by default for direct `claude` or
