@@ -17,7 +17,16 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const installer = fileURLToPath(new URL("../public/install.sh", import.meta.url));
+const installerSource = readFileSync(installer, "utf8");
+const installerVersion = installerSource.match(
+  /JEVIA_VERSION="\$\{JEVIA_VERSION:-([^}]+)\}"/,
+)?.[1];
+assert.ok(installerVersion, "installer declares a default version");
 const systemPath = process.env.PATH ?? "/usr/bin:/bin";
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function writeCommand(directory, name, body) {
   const path = join(directory, name);
@@ -28,9 +37,9 @@ function writeCommand(directory, name, body) {
 function createFixture(directory, target = "x86_64-unknown-linux-musl") {
   const fixtureDirectory = join(directory, "fixtures");
   mkdirSync(fixtureDirectory);
-  const assetName = `jevia-v0.1.4-${target}`;
+  const assetName = `jevia-v${installerVersion}-${target}`;
   const assetPath = join(fixtureDirectory, assetName);
-  writeFileSync(assetPath, '#!/bin/sh\nprintf "%s\\n" "jevia 0.1.4"\n');
+  writeFileSync(assetPath, `#!/bin/sh\nprintf "%s\\n" "jevia ${installerVersion}"\n`);
   chmodSync(assetPath, 0o755);
   const digest = createHash("sha256").update(readFileSync(assetPath)).digest("hex");
   writeFileSync(join(fixtureDirectory, `${assetName}.sha256`), `${digest}  ${assetName}\n`);
@@ -89,7 +98,7 @@ cp "$JEVIA_FIXTURE_DIR/\${url##*/}" "$output"
     env: {
       ...process.env,
       HOME: directory,
-      JEVIA_DOWNLOAD_BASE_URL: "https://downloads.example.test/v0.1.4",
+      JEVIA_DOWNLOAD_BASE_URL: `https://downloads.example.test/v${installerVersion}`,
       JEVIA_FIXTURE_DIR: fixture.fixtureDirectory,
       JEVIA_INSTALL_DIR: installDirectory,
       PATH: path,
@@ -114,7 +123,10 @@ test("explains the prerequisite when curl is missing", (t) => {
 test("installs the verified Linux release binary without Cargo", (t) => {
   const { installDirectory, result } = runInstaller(t);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Downloading Jevia 0\.1\.4 for x86_64-unknown-linux-musl/);
+  assert.match(
+    result.stdout,
+    new RegExp(`Downloading Jevia ${escapeRegExp(installerVersion)} for x86_64-unknown-linux-musl`),
+  );
   assert.match(result.stdout, /OK/);
   assert.doesNotMatch(result.stdout, /cargo|crates\.io/i);
 
@@ -123,7 +135,7 @@ test("installs the verified Linux release binary without Cargo", (t) => {
   assert.ok((statSync(installed).mode & 0o111) !== 0);
   const version = spawnSync(installed, ["--version"], { encoding: "utf8" });
   assert.equal(version.status, 0);
-  assert.equal(version.stdout.trim(), "jevia 0.1.4");
+  assert.equal(version.stdout.trim(), `jevia ${installerVersion}`);
 });
 
 test("maps Apple Silicon to the published Darwin target", (t) => {
