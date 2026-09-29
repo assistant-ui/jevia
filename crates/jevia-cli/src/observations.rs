@@ -1,4 +1,5 @@
 //! Session-local Claude hooks. Raw input is never written to disk or forwarded.
+use crate::{paths::ProjectPaths, storage::Storage};
 use anyhow::{Context, Result, bail};
 use jevia_core::{
     HarnessEvent, HarnessEventKind as Kind, HarnessInvocation, HarnessObservations,
@@ -31,6 +32,7 @@ const HOOKS: &[&str] = &[
     "SubagentStop",
 ];
 
+#[derive(Clone)]
 pub struct Capture {
     journal: Option<PathBuf>,
     pub args: Vec<String>,
@@ -135,6 +137,26 @@ impl Capture {
         })
     }
 
+    pub async fn checkpoint(
+        &self,
+        storage: &Storage,
+        run_id: &str,
+        previous: &mut HarnessObservations,
+    ) -> Result<()> {
+        if self.journal.is_none() {
+            return Ok(());
+        }
+        let capture = self.clone();
+        let snapshot = tokio::task::spawn_blocking(move || capture.snapshot()).await?;
+        if snapshot != *previous {
+            storage
+                .checkpoint_observations(run_id, snapshot.clone(), true)
+                .await?;
+            *previous = snapshot;
+        }
+        Ok(())
+    }
+
     /// Called only after the supervisor has successfully persisted terminal state.
     /// On persistence failure/crash the bounded journal remains for inspection.
     pub fn persisted(&self) {
@@ -142,6 +164,76 @@ impl Capture {
             && fs::remove_file(path).is_err()
         {
             eprintln!("jevia: observation journal retained; terminal run record was saved");
+        }
+    }
+}
+
+/// Bounded best-effort replay. Never infer that a child stopped because its
+/// supervisor/DB connection disappeared. Active records remain active.
+pub async fn replay(paths: &ProjectPaths, storage: &Storage, only: Option<&str>) {
+    let Ok(entries) = fs::read_dir(&paths.directory) else {
+        return;
+    };
+    let mut candidates = std::collections::BTreeMap::<String, Vec<PathBuf>>::new();
+    for entry in entries.take(4096).flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(rest) = name.strip_prefix("jevia-events-") else {
+            continue;
+        };
+        let Some(id) = rest.get(..36) else {
+            continue;
+        };
+        if uuid::Uuid::parse_str(id).is_err()
+            || !rest
+                .get(36..)
+                .is_some_and(|s| s.starts_with('-') && s.ends_with(".jsonl"))
+            || only.is_some_and(|expected| expected != id)
+        {
+            continue;
+        }
+        candidates.entry(id.into()).or_default().push(entry.path());
+    }
+    for (id, files) in candidates.into_iter().take(128) {
+        // Ambiguous journals need inspection; never combine different attempts.
+        if files.len() != 1 {
+            continue;
+        }
+        let Ok(_guard) = storage.execution_guard(&id).await else {
+            continue;
+        };
+        let path = &files[0];
+        let result = async {
+            let mut file = open_journal(path)?;
+            file.try_lock()?;
+            let snapshot = read_journal(&mut file)?;
+            let record = storage.get(&id).await?;
+            if record
+                .execution
+                .as_ref()
+                .and_then(|e| e.observations.as_ref())
+                != Some(&snapshot)
+            {
+                storage
+                    .checkpoint_observations(&id, snapshot, false)
+                    .await?;
+            }
+            // Keep the journal for active runs: surviving children can still emit.
+            if record
+                .lifecycle
+                .as_ref()
+                .is_some_and(|l| !l.state.is_active())
+            {
+                drop(file);
+                fs::remove_file(path)?;
+            }
+            Ok::<_, anyhow::Error>(())
+        }
+        .await;
+        if result.is_err() {
+            eprintln!("jevia: observation replay deferred; journal retained (details redacted)");
         }
     }
 }
@@ -338,6 +430,161 @@ fn normalize(input: &Value) -> Option<HarnessEvent> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use jevia_core::{
+        Config, DecisionSource, ExecutionEvidence, Outcome, RouteDecision, RouteRecord, RunState,
+        StorageConfig,
+    };
+
+    async fn replay_contract(config: Config) {
+        let directory = tempfile::tempdir().unwrap();
+        let paths = ProjectPaths::at(directory.path().into());
+        fs::create_dir_all(&paths.directory).unwrap();
+        let storage = Storage::open(&config, &paths, true).await.unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        storage
+            .append(&RouteRecord::new(
+                RouteDecision {
+                    run_id: id.clone(),
+                    tier: "fast".into(),
+                    suggested_tier: "fast".into(),
+                    confidence: 0.9,
+                    probabilities: Default::default(),
+                    fallback_applied: false,
+                    jev_model: "test".into(),
+                    created_at_ms: 1,
+                    source: DecisionSource::Live,
+                },
+                None,
+            ))
+            .await
+            .unwrap();
+        let capture = Capture::prepare(
+            ObservationMode::ClaudeHooks,
+            &HarnessInvocation {
+                program: "wrapper".into(),
+                args: vec![],
+                model: "requested".into(),
+                verification: None,
+            },
+            &paths.directory,
+            &id,
+        )
+        .await;
+        let journal = capture.journal.as_ref().unwrap();
+        let guard = storage.execution_guard(&id).await.unwrap();
+        storage
+            .state(
+                &id,
+                RunState::Running,
+                Outcome::Unknown,
+                Some(ExecutionEvidence {
+                    observations: Some(capture.snapshot()),
+                    harness: "claude".into(),
+                    model: "requested".into(),
+                    duration_ms: 0,
+                    exit_code: None,
+                    verification: None,
+                }),
+            )
+            .await
+            .unwrap();
+        receive(
+            journal,
+            br#"{"hook_event_name":"Stop","model":"observed","prompt":"PRIVATE"}"#.as_slice(),
+        );
+        replay(&paths, &storage, None).await;
+        assert!(
+            storage
+                .get(&id)
+                .await
+                .unwrap()
+                .execution
+                .unwrap()
+                .observations
+                .unwrap()
+                .events
+                .is_empty(),
+            "live supervisor must not be replayed"
+        );
+        let mut previous = storage
+            .get(&id)
+            .await
+            .unwrap()
+            .execution
+            .unwrap()
+            .observations
+            .unwrap();
+        capture
+            .checkpoint(&storage, &id, &mut previous)
+            .await
+            .unwrap();
+        assert_eq!(previous.events.len(), 1);
+        // Simulate loss of the supervisor, not proof that its child stopped.
+        drop(guard);
+        receive(
+            journal,
+            br#"{"hook_event_name":"PostToolUseFailure","model":"observed"}"#.as_slice(),
+        );
+        replay(&paths, &storage, None).await;
+        let record = storage.get(&id).await.unwrap();
+        assert_eq!(record.lifecycle.unwrap().state, RunState::Running);
+        assert_eq!(record.outcome, Outcome::Unknown);
+        assert!(record.outcome_evidence.is_none());
+        assert_eq!(
+            record.execution.unwrap().observations.unwrap().events.len(),
+            2
+        );
+        assert!(journal.exists());
+        replay(&paths, &storage, None).await;
+        assert_eq!(storage.recent(100, false).await.unwrap().len(), 1);
+        assert!(
+            storage
+                .checkpoint_observations(&id, previous, false)
+                .await
+                .is_err()
+        );
+        storage.recover(&id, true).await.unwrap();
+        storage
+            .outcome(&id, Outcome::Success, Some("manual assessment"))
+            .await
+            .unwrap();
+        replay(&paths, &storage, None).await;
+        let record = storage.get(&id).await.unwrap();
+        assert_eq!(record.outcome, Outcome::Success);
+        assert_eq!(record.feedback.len(), 1);
+        assert_eq!(
+            record.execution.unwrap().observations.unwrap().events.len(),
+            2
+        );
+        assert!(!journal.exists());
+    }
+
+    #[tokio::test]
+    async fn checkpoints_and_replay_preserve_lifecycle_outcomes_and_idempotency() {
+        replay_contract(Config::default()).await;
+        replay_contract(Config {
+            storage: StorageConfig::Sqlite {
+                url: "sqlite://.jevia/runs.db".into(),
+            },
+            ..Config::default()
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires isolated PostgreSQL test database"]
+    async fn postgres_checkpoints_and_replay_preserve_lifecycle_outcomes_and_idempotency() {
+        replay_contract(Config {
+            storage: StorageConfig::Postgres {
+                url_env: "JEVIA_TEST_POSTGRES_URL".into(),
+                project: uuid::Uuid::new_v4().to_string(),
+                allow_insecure_localhost: true,
+            },
+            ..Config::default()
+        })
+        .await;
+    }
+
     #[tokio::test]
     #[cfg(unix)]
     async fn auto_capture_checks_version_and_uses_session_local_exec_hooks() {

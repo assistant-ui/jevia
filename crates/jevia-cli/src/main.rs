@@ -581,14 +581,30 @@ async fn execute_observed_harness(
         )
         .await?;
     let started = Instant::now();
-    let status = runner
-        .run(
+    let status = {
+        let run = runner.run(
             &invocation.program,
             &capture.args,
             &paths.root,
             options.timeout_seconds.map(std::time::Duration::from_secs),
-        )
-        .await;
+        );
+        tokio::pin!(run);
+        let mut timer = tokio::time::interval(std::time::Duration::from_secs(2));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut previous = execution.observations.clone().expect("capture initialized");
+        let mut warned = false;
+        loop {
+            tokio::select! {
+                result = &mut run => break result,
+                _ = timer.tick() => {
+                    if !matches!(tokio::time::timeout(std::time::Duration::from_secs(1), capture.checkpoint(storage, &record.decision.run_id, &mut previous)).await, Ok(Ok(()))) && !warned {
+                        eprintln!("jevia: observation checkpoint delayed; journal retained (details redacted)");
+                        warned = true;
+                    }
+                }
+            }
+        }
+    };
     execution.observations = Some(capture.snapshot());
     let status = match status {
         Ok(processes::ProcessResult::Exited(status)) => status,
@@ -793,6 +809,13 @@ async fn routed_record_in(
     paths: &ProjectPaths,
     storage: &Storage,
 ) -> Result<RouteRecord> {
+    // Replay must not turn a slow/offline observation store into an unbounded
+    // startup delay. Cancellation leaves the journal for the next invocation.
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        observations::replay(paths, storage, None),
+    )
+    .await;
     let wait_started = Instant::now();
     let wait_budget =
         std::time::Duration::from_millis(config.jev.timeout_ms.saturating_add(1_000).min(30_000));
@@ -1000,7 +1023,9 @@ async fn show_run(run_id: &str) -> Result<()> {
 async fn recover_run(run_id: &str, confirm_stopped: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
     let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
-    let record = storage.recover(run_id, confirm_stopped).await?;
+    storage.recover(run_id, confirm_stopped).await?;
+    observations::replay(&paths, &storage, Some(run_id)).await;
+    let record = storage.get(run_id).await?;
     println!("{}", serde_json::to_string_pretty(&record)?);
     eprintln!(
         "jevia: marked interrupted; no processes were rerun or stopped. Inspect the workspace and any surviving agent before retrying."
