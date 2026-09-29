@@ -61,34 +61,33 @@ Jevia does not decide that its own output is good. A completed verifier or expli
 Map stable capability tiers to the model names your harness accepts:
 
 ```bash
-jevia harness setup agent --command my-agent \
-  --arg=run --arg=--model --arg='{model}' --arg='{task}' \
-  --model fast=provider/small \
-  --model balanced=provider/standard \
-  --model strong=provider/frontier \
-  --verify-command cargo --verify-arg=test
+jevia harness presets
+jevia harness setup codex --preset codex \
+  --model fast=your-fast-model \
+  --model balanced=your-balanced-model \
+  --model strong=your-strong-model
 ```
 
-This is a generic template, not a provider preset. Replace the command, arguments, and model IDs with values your harness accepts. The first command only previews generated TOML.
+Built-in shell-free templates are available for Codex, Claude Code, OpenCode, and Gemini CLI. A preset supplies only the command and non-interactive argument shape; you still choose model IDs, credentials, permissions, and verification. The setup command only previews generated TOML.
 
 ```bash
 # Review the generated TOML, then save it
-jevia harness setup agent --command my-agent \
-  --arg=run --arg=--model --arg='{model}' --arg='{task}' \
-  --model fast=provider/small \
-  --model balanced=provider/standard \
-  --model strong=provider/frontier \
-  --verify-command cargo --verify-arg=test --apply
+jevia harness setup codex --preset codex \
+  --model fast=your-fast-model \
+  --model balanced=your-balanced-model \
+  --model strong=your-strong-model --apply
 
 # Validate templates and executable paths without launching anything
-jevia harness check agent
-jevia harness check agent --json
+jevia harness check codex
+jevia harness check codex --json
 
 # Route and launch the configured harness
-jevia run agent "investigate the failing integration test"
+jevia run codex "investigate the failing integration test"
 ```
 
 Changing an existing adapter also requires `--replace`. Extra harness arguments can follow `--` on `jevia run`. Jevia executes argument arrays directly without shell expansion.
+
+Use explicit `--command` and repeated `--arg` values when a built-in template does not match the installed harness version or when connecting another agent.
 
 The same pattern works with Claude Code, Codex, OpenCode, Gemini CLI, Cursor Agent, Copilot CLI, Aider, Goose, Amp, or a custom runner. Jevia learns from outcomes while the adapter owns the tier-to-model mapping.
 

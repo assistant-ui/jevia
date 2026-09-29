@@ -92,7 +92,7 @@ export function getInstallGuide(origin: string) {
     "",
     "## Optional: run the automatic CLI pipeline",
     "",
-    "Ask which installed harness and models the user wants, then configure its credentials and tier-to-model mappings once; do not guess or overwrite an existing adapter. CLI 0.1.4 automatically detects existing root Rust or Node tests when no verifier is configured. An explicit verifier takes precedence. Documentation and examples: https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#harness-adapters.",
+    "Ask which installed harness and models the user wants, then run `jevia harness presets` to check for a built-in shell-free template. Presets cover Codex, Claude Code, OpenCode, and Gemini CLI but never guess model IDs, credentials, or permissions. Preview setup before applying it; do not overwrite an existing adapter. CLI 0.1.4 automatically detects existing root Rust or Node tests when no verifier is configured. An explicit verifier takes precedence. Documentation and examples: https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#harness-adapters.",
     "",
     "With the user's permission to execute the task, run `jevia run <configured-harness> <task>`. Jevia routes, launches the agent, runs verification after a successful agent exit, and records the lifecycle and outcome automatically in the selected backend. No manual `feedback` or `runs complete` step is needed after `jevia run`. Inspect `jevia runs --json` to report the actual evidence, not an assumed success.",
     "",

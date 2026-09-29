@@ -48,6 +48,53 @@ fn init(root: &Path) -> String {
 }
 
 #[test]
+fn harness_presets_are_discoverable_and_preview_without_launching() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let original = init(root);
+    let presets = cli(root)
+        .args(["harness", "presets"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let presets = String::from_utf8(presets).unwrap();
+    for expected in [
+        "codex    codex exec --model {model} {task}",
+        "claude   claude --print --model {model} {task}",
+        "opencode opencode run --model {model} {task}",
+        "gemini   gemini --model {model} --prompt {task}",
+    ] {
+        assert!(presets.contains(expected));
+    }
+
+    let preview = cli(root)
+        .args([
+            "harness",
+            "setup",
+            "codex",
+            "--preset",
+            "codex",
+            "--model=fast=fast-model",
+            "--model=balanced=balanced-model",
+            "--model=strong=strong-model",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let preview = String::from_utf8(preview).unwrap();
+    assert!(preview.contains("command = \"codex\""));
+    assert!(preview.contains("args = [\"exec\", \"--model\", \"{model}\", \"{task}\"]"));
+    assert_eq!(
+        fs::read_to_string(root.join(".jevia/config.toml")).unwrap(),
+        original
+    );
+}
+
+#[test]
 fn harness_setup_preview_apply_backup_noop_and_explicit_replacement() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();

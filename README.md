@@ -66,19 +66,24 @@ synthetic run.
 ## Run any harness
 
 Jevia returns a capability tier. Your adapter maps that tier to a concrete model
-and command for the harness you already use.
+and command for the harness you already use. Start from a built-in shell-free
+template for Codex, Claude Code, OpenCode, or Gemini CLI:
 
 ```bash
-jevia harness setup agent --command my-agent \
-  --arg=run --arg=--model --arg='{model}' --arg='{task}' \
-  --model fast=provider/small \
-  --model balanced=provider/standard \
-  --model strong=provider/frontier \
-  --verify-command cargo --verify-arg=test
+jevia harness presets
+jevia harness setup codex --preset codex \
+  --model fast=your-fast-model \
+  --model balanced=your-balanced-model \
+  --model strong=your-strong-model
 ```
 
-The command previews the configuration first. Review it, repeat with `--apply`,
-then run a routed task:
+Presets supply only the executable and argument shape; model IDs, credentials,
+permissions, and verification remain yours. For any other harness, use explicit
+`--command` and repeated `--arg` values as shown in the
+[adapter reference](docs/reference.md#preview-first-setup).
+
+Setup previews the configuration first. Review it, repeat with `--apply`, then
+run a routed task:
 
 ```bash
 jevia run agent "fix the flaky integration test"
