@@ -179,6 +179,7 @@ fn prepare(paths: &ProjectPaths, options: &Options) -> Result<ConfigEdit> {
             previous.and_then(|harness| harness.verification.clone())
         };
         let harness = HarnessConfig {
+            observations: previous.map(|h| h.observations).unwrap_or_default(),
             auto_verify: if options.no_verification {
                 false
             } else if options.auto_verification {
@@ -308,6 +309,7 @@ fn harness_item(harness: &HarnessConfig) -> Item {
     table["command"] = value(&harness.command);
     table["args"] = arguments(&harness.args);
     table["auto_verify"] = value(harness.auto_verify);
+    table["observations"] = value(harness.observations.as_str());
     let mut models = Table::new();
     for (tier, model) in &harness.models {
         models[tier] = value(model);

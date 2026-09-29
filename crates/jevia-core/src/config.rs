@@ -300,6 +300,9 @@ pub struct HarnessConfig {
     /// Opt in to root project tests when no explicit verifier is configured.
     #[serde(default = "default_auto_verify")]
     pub auto_verify: bool,
+    /// Passive event recording is enabled for supported harnesses by default.
+    #[serde(default)]
+    pub observations: crate::ObservationMode,
     #[serde(default)]
     pub verification: Option<VerificationConfig>,
 }
@@ -632,6 +635,7 @@ mod tests {
     fn harness_invocation_substitutes_without_a_shell() {
         let harness = HarnessConfig {
             auto_verify: true,
+            observations: Default::default(),
             command: "agent".to_owned(),
             args: vec![
                 "run".to_owned(),
@@ -707,6 +711,7 @@ mod tests {
             "agent".to_owned(),
             HarnessConfig {
                 auto_verify: true,
+                observations: Default::default(),
                 command: "agent".to_owned(),
                 args: vec![
                     "--model".to_owned(),
@@ -731,6 +736,7 @@ mod tests {
     fn invocation_rejects_unknown_placeholders_without_panicking() {
         let harness = HarnessConfig {
             auto_verify: true,
+            observations: Default::default(),
             command: "agent".to_owned(),
             args: vec!["{unknown}".to_owned()],
             models: [("balanced".to_owned(), "provider/model".to_owned())]
@@ -753,6 +759,7 @@ mod tests {
             "agent".to_owned(),
             HarnessConfig {
                 auto_verify: true,
+                observations: Default::default(),
                 command: "agent".to_owned(),
                 args: vec!["{model}".to_owned(), "{task}".to_owned()],
                 models: config
@@ -780,6 +787,7 @@ mod tests {
             "agent".to_owned(),
             HarnessConfig {
                 auto_verify: true,
+                observations: Default::default(),
                 command: "agent".to_owned(),
                 args: vec!["{model}".to_owned(), "{task}".to_owned()],
                 models: config

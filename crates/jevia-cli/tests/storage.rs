@@ -136,6 +136,7 @@ fn flow(postgres: bool) {
         "test".into(),
         HarnessConfig {
             auto_verify: true,
+            observations: Default::default(),
             command: "rustc".into(),
             args: vec![
                 "--version".into(),
@@ -262,6 +263,7 @@ fn automatic_rust_flow(storage: StorageConfig) {
                 .map(|tier| (tier.clone(), "test".into()))
                 .collect(),
             auto_verify: true,
+            observations: Default::default(),
             verification: None,
         },
     );

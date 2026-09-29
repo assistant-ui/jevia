@@ -3,6 +3,7 @@ mod config_edit;
 mod diagnostics;
 mod harness;
 mod lease;
+mod observations;
 mod paths;
 mod processes;
 mod setup;
@@ -36,6 +37,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    #[command(hide = true)]
+    CaptureEvent {
+        #[arg(long)]
+        journal: std::path::PathBuf,
+    },
     /// Create project-local Jevia configuration.
     Init {
         /// Replace an existing config.toml with the default configuration.
@@ -197,6 +203,7 @@ enum RunsAction {
 
 #[derive(Default, Clone, Copy)]
 struct RunOptions {
+    observation_mode: jevia_core::ObservationMode,
     non_interactive: bool,
     timeout_seconds: Option<u64>,
     verification_timeout_seconds: Option<u64>,
@@ -229,9 +236,19 @@ impl From<OutcomeArgument> for Outcome {
     }
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    match run().await {
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    // Frequent passive hooks need neither an async runtime nor project discovery.
+    if let Command::CaptureEvent { journal } = &cli.command {
+        observations::receive(journal, std::io::stdin().lock());
+        return ExitCode::SUCCESS;
+    }
+    let result = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("could not start runtime")
+        .and_then(|runtime| runtime.block_on(run(cli)));
+    match result {
         Ok(exit_code) => exit_code,
         Err(error) => {
             eprintln!("error: {error:#}");
@@ -240,9 +257,9 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn run() -> Result<ExitCode> {
-    let cli = Cli::parse();
+async fn run(cli: Cli) -> Result<ExitCode> {
     match cli.command {
+        Command::CaptureEvent { .. } => unreachable!("handled before runtime startup"),
         Command::Init { force } => {
             init(force)?;
             Ok(ExitCode::SUCCESS)
@@ -436,6 +453,7 @@ async fn run_harness(
         &record.decision.run_id,
         extra_args,
     )?;
+    options.observation_mode = harness.observations;
     if invocation.verification.is_none() && harness.auto_verify {
         match verification::detect(&paths.root) {
             verification::Detection::Found(plan) => {
@@ -503,6 +521,38 @@ async fn execute_stored_harness(
     storage: &Storage,
 ) -> Result<ExitCode> {
     let _lease = storage.execution_guard(&record.decision.run_id).await?;
+    let capture = observations::Capture::prepare(
+        options.observation_mode,
+        invocation,
+        &paths.directory,
+        &record.decision.run_id,
+    )
+    .await;
+    let result = execute_observed_harness(
+        paths,
+        harness_name,
+        invocation,
+        record,
+        options,
+        storage,
+        &capture,
+    )
+    .await;
+    if result.is_ok() {
+        capture.persisted();
+    }
+    result
+}
+
+async fn execute_observed_harness(
+    paths: &ProjectPaths,
+    harness_name: &str,
+    invocation: &HarnessInvocation,
+    record: &RouteRecord,
+    options: RunOptions,
+    storage: &Storage,
+    capture: &observations::Capture,
+) -> Result<ExitCode> {
     let mut runner = processes::Runner::new(options.non_interactive)?;
     eprintln!(
         "jevia: run={} tier={} suggested={} confidence={:.2} fallback={}",
@@ -515,6 +565,7 @@ async fn execute_stored_harness(
     eprintln!("jevia: launching harness `{harness_name}`");
 
     let mut execution = ExecutionEvidence {
+        observations: Some(capture.snapshot()),
         harness: harness_name.to_owned(),
         model: invocation.model.clone(),
         duration_ms: 0,
@@ -533,11 +584,12 @@ async fn execute_stored_harness(
     let status = runner
         .run(
             &invocation.program,
-            &invocation.args,
+            &capture.args,
             &paths.root,
             options.timeout_seconds.map(std::time::Duration::from_secs),
         )
         .await;
+    execution.observations = Some(capture.snapshot());
     let status = match status {
         Ok(processes::ProcessResult::Exited(status)) => status,
         Ok(processes::ProcessResult::Stopped { state, .. }) => {
@@ -1530,6 +1582,7 @@ mod tests {
                     timeout_seconds: None,
                     verification_timeout_seconds: Some(1),
                     automatic_verification,
+                    observation_mode: Default::default(),
                 },
             )
             .await

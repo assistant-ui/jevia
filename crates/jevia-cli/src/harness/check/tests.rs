@@ -10,6 +10,7 @@ fn fixture() -> (tempfile::TempDir, ProjectPaths, Config) {
         "agent".into(),
         HarnessConfig {
             auto_verify: true,
+            observations: Default::default(),
             command: env::current_exe().unwrap().to_str().unwrap().into(),
             args: vec!["{model}".into(), "{task}".into()],
             models: config

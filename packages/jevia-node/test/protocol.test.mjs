@@ -15,7 +15,7 @@ const evidence = { source: "manual", recorded_at_ms: 3 };
 const feedback = { previous_outcome: "unknown", previous_source: null, outcome: "success", recorded_at_ms: 3, reason: null };
 
 test("accepts supported legacy records without inventing optional evidence", () => {
-  for (const schema_version of [1, 2, 3]) {
+  for (const schema_version of [1, 2, 3, 4]) {
     assert.ok(isRouteRecord({ ...record, schema_version }));
   }
   assert.ok(isRouteRecord({ ...record, execution: { ...execution, verification }, lifecycle, outcome_evidence: evidence, feedback: [feedback], future_metadata: {} }));
@@ -24,7 +24,7 @@ test("accepts supported legacy records without inventing optional evidence", () 
 
 test("rejects invalid scalar, schema, timestamp, and probability fields", () => {
   for (const [field, values] of Object.entries({
-    schema_version: [0, 4, 999, 1.5, "3"], run_id: ["", 1], tier: ["", null],
+    schema_version: [0, 5, 999, 1.5, "3"], run_id: ["", 1], tier: ["", null],
     suggested_tier: [[], ""], jev_model: [true, ""], task: [false, {}], outcome: ["done", null],
     source: ["remote", null], fallback_applied: [1, null],
     confidence: [-1, 1.1, NaN, Infinity, "0.9"],

@@ -2,7 +2,13 @@
 
 mod config;
 mod jev;
+mod observations;
 mod route;
+
+pub use observations::{
+    HarnessEvent, HarnessEventKind, HarnessObservations, MAX_HARNESS_EVENTS, ObservationMode,
+    ObservationSource, ObservationStatus, valid_identifier,
+};
 
 pub use config::{
     CacheConfig, Config, ConfigError, HarnessConfig, HarnessInvocation, JevConfig, PrivacyConfig,

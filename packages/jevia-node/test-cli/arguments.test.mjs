@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -242,6 +242,88 @@ test("CLI run records by default and only adds Node tests after opting in", asyn
   assert.equal(record.outcome, "success");
   assert.equal(await readFile(join(cwd, "verified"), "utf8"), before);
 });
+
+for (const backend of ["jsonl", "sqlite", "postgres"]) {
+  test(`native hooks record model changes without manual feedback (${backend})`, {
+    skip: backend === "postgres" && !process.env.JEVIA_TEST_POSTGRES_URL
+      && "requires isolated PostgreSQL test database",
+  }, async (t) => {
+    const { client, cwd, requests } = await fixture(t, { SDK_TEST_DB: process.env.JEVIA_TEST_POSTGRES_URL });
+    if (backend !== "jsonl") await client.setupStorage(backend === "sqlite"
+      ? { backend, path: ".jevia/observations.db" }
+      : { backend, project: `hooks-${randomUUID()}`, urlEnv: "SDK_TEST_DB", allowInsecureLocalhost: true },
+    { apply: true, confirmStopped: true });
+    const configPath = join(cwd, ".jevia", "config.toml");
+    const initial = await readFile(configPath, "utf8");
+    await writeFile(configPath, initial + `\n[harnesses.agent]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ["hooks.cjs", "{model}", "{task}"]\nobservations = "claude_hooks"\n[harnesses.agent.models]\nfast = "requested-alias"\nbalanced = "requested-alias"\nstrong = "requested-alias"\n`);
+    // A compatible wrapper fixture executes the actual injected commands, not a
+    // fabricated run record. No provider credentials or real agent are needed.
+    await writeFile(join(cwd, "hooks.cjs"), `
+      const assert = require('node:assert/strict');
+      const { spawnSync } = require('node:child_process');
+      const hooks = JSON.parse(process.argv[process.argv.indexOf('--settings') + 1]).hooks;
+      const events = [
+        { hook_event_name: 'SessionStart', model: 'model-a' },
+        { hook_event_name: 'UserPromptSubmit', prompt: 'PRIVATE_PROMPT' },
+        { hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'PRIVATE_COMMAND' } },
+        { hook_event_name: 'PostModelSwitch', from_model: 'model-a', to_model: 'model-b' },
+        { hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_response: 'PRIVATE_CONTENT' },
+        { hook_event_name: 'TaskCompleted', task_subject: 'PRIVATE_TASK' },
+        { hook_event_name: 'Stop', last_assistant_message: 'PRIVATE_OUTPUT' },
+        { hook_event_name: 'SessionEnd' },
+      ];
+      for (const event of events) {
+        const hook = hooks[event.hook_event_name][0].hooks[0];
+        const result = spawnSync(hook.command, hook.args, { input: JSON.stringify({ ...event, session_id: 'private-session-id', transcript_path: '/PRIVATE_PATH' }), encoding: 'utf8' });
+        assert.equal(result.status, 0); assert.equal(result.stdout, ''); assert.equal(result.stderr, '');
+      }
+      process.stdout.write('unchanged harness output');
+      process.exit(Number(process.env.FAKE_HARNESS_EXIT || 0));
+    `);
+    await client.route("later task");
+    const run = (code) => execute(binary, ["run", "agent", "fix task"], { cwd, env: { ...client.env, FAKE_HARNESS_EXIT: String(code) }, timeout: 30000 });
+    const { stdout } = await run(0);
+    assert.equal(stdout, "unchanged harness output");
+    const [record] = await client.runs({ limit: 1 });
+    assert.equal(record.schema_version, 4);
+    assert.equal(record.outcome, "unknown");
+    assert.equal(record.feedback, undefined);
+    assert.equal(record.execution.verification, undefined);
+    assert.equal(record.execution.model, "requested-alias");
+    const captured = record.execution.observations;
+    assert.equal(captured.status, "recorded");
+    assert.equal(captured.source, "claude_hooks");
+    assert.equal(captured.events.length, 8);
+    assert.equal(captured.events[3].model, "model-b");
+    assert.equal(captured.events[3].previous_model, "model-a");
+    assert.ok(!JSON.stringify(record).includes("PRIVATE_"));
+    assert.equal((await client.route("later task")).source, "live");
+    let state = requests.at(-1).state;
+    assert.deepEqual(state.recent_completed_outcomes, []);
+    const summary = state.recent_execution_observations[0].harness_observations;
+    assert.deepEqual(summary.observed_models, ["model-a", "model-b"]);
+    assert.equal(summary.event_counts.tool_failed, 1);
+    assert.ok(!JSON.stringify(state).includes("private-session-id"));
+    assert.equal((await client.route("later task")).source, "cache");
+    await assert.rejects(run(7), { code: 7 });
+    const [failed] = await client.runs({ limit: 1 });
+    assert.equal(failed.outcome, "unknown");
+    assert.equal(failed.execution.exit_code, 7);
+    assert.equal(failed.execution.observations.events.length, 8);
+    assert.ok(!(await readdir(join(cwd, ".jevia"))).some((name) => name.startsWith("jevia-events-")));
+    await client.feedback(record.run_id, "success");
+    const updated = await client.show(record.run_id);
+    assert.deepEqual(updated.execution.observations, captured);
+    await client.route("with optional feedback");
+    state = requests.at(-1).state;
+    assert.equal(state.recent_completed_outcomes.length, 1);
+    assert.equal(state.recent_execution_observations.length, 1);
+    assert.ok(!JSON.stringify(state).includes("private-session-id"));
+    const exported = join(cwd, "observations-export.jsonl");
+    await execute(binary, ["storage", "export", "--output", exported], { cwd, env: client.env });
+    assert.ok((await readFile(exported, "utf8")).includes('"model_changed"'));
+  });
+}
 
 test("real CLI looks up option-like imported run IDs literally", async (t) => {
   const { client, cwd } = await fixture(t);

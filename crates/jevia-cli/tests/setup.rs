@@ -22,6 +22,7 @@ fn init(root: &Path) -> String {
         "test".into(),
         HarnessConfig {
             auto_verify: true,
+            observations: Default::default(),
             command: "test-agent".into(),
             args: vec!["--model".into(), "{model}".into(), "{task}".into()],
             models: config

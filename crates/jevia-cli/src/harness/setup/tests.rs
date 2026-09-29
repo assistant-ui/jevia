@@ -110,6 +110,29 @@ fn automatic_verification_is_opt_in_and_explicit_choices_survive_replacement() {
 }
 
 #[test]
+fn replacement_preserves_passive_observation_preference() {
+    let (_directory, paths) = fixture();
+    let mut opts = options();
+    prepare(&paths, &opts).unwrap().commit().unwrap();
+    let text = fs::read_to_string(&paths.config)
+        .unwrap()
+        .replace("observations = \"auto\"", "observations = \"off\"");
+    fs::write(&paths.config, text).unwrap();
+    opts.command = Some("changed".into());
+    let updated = prepare(&paths, &opts).unwrap();
+    assert_eq!(
+        updated.next.harnesses["agent"].observations,
+        jevia_core::ObservationMode::Off
+    );
+    updated.commit().unwrap();
+    assert!(
+        fs::read_to_string(&paths.config)
+            .unwrap()
+            .contains("observations = \"off\"")
+    );
+}
+
+#[test]
 fn invalid_harness_values_are_rejected_without_echoing_private_arguments() {
     let (_directory, paths) = fixture();
     let original = fs::read(&paths.config).unwrap();
