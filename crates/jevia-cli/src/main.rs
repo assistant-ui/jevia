@@ -953,8 +953,9 @@ async fn runs(limit: usize, print_json: bool) -> Result<()> {
             .map(|evidence| format!("{:?}", evidence.source))
             .unwrap_or_else(|| "legacy".to_owned());
         println!(
-            "state={state} evidence={evidence} learning={}",
-            record.is_learning_evidence()
+            "state={state} evidence={evidence} quality_evidence={} execution_observed={}",
+            record.is_learning_evidence(),
+            record.is_execution_observation()
         );
         if let Some(execution) = &record.execution {
             let verification = match &execution.verification {
@@ -964,7 +965,7 @@ async fn runs(limit: usize, print_json: bool) -> Result<()> {
                 None => "none",
             };
             println!(
-                "{}  tier={}  model={}  source={}  confidence={:.2}  outcome={}  verification={}  duration={}ms",
+                "{}  tier={}  requested_model={}  source={}  confidence={:.2}  outcome={}  verification={}  duration={}ms",
                 record.decision.run_id,
                 record.decision.tier,
                 execution.model,

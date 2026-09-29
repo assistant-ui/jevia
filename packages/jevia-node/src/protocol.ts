@@ -17,12 +17,23 @@ const isState = oneOf("routed", "running", "verifying", "completed", "launch_fai
 const nullable = (guard: Guard): Guard => (value) => value === null || guard(value);
 const optional = (value: unknown, guard: Guard): boolean => value === undefined || guard(value);
 
+const isIdentifier: Guard = (value) => typeof value === "string" && value.length > 0 && value.length <= 256 && !/[^a-zA-Z0-9._:/@+-]/.test(value);
+const isEventKind = oneOf("session_started", "session_ended", "turn_started", "turn_completed", "turn_failed",
+  "tool_succeeded", "tool_failed", "task_reported_complete", "model_changed", "subagent_started", "subagent_stopped");
+const isHarnessEvent: Guard = (value) => isObject(value) && isEventKind(value.kind) && isUnsigned(value.recorded_at_ms) &&
+  ["session_id", "agent_id", "model", "previous_model", "tool_name"].every((key) => optional(value[key], isIdentifier));
+const isObservations: Guard = (value) => isObject(value) && nullable(oneOf("claude_hooks"))(value.source) &&
+  oneOf("unsupported", "disabled", "unavailable", "no_events", "recorded", "partial")(value.status) &&
+  Array.isArray(value.events) && value.events.length <= 256 && value.events.every(isHarnessEvent) &&
+  (value.events.length === 0 || (value.source !== null && (value.status === "recorded" || value.status === "partial"))) &&
+  (value.status !== "recorded" || value.events.length > 0);
+
 const isVerification: Guard = (value) => isObject(value) &&
   isText(value.command) && typeof value.launched === "boolean" &&
   isUnsigned(value.duration_ms) && isExitCode(value.exit_code);
 const isExecution: Guard = (value) => isObject(value) &&
   isText(value.harness) && isText(value.model) && isUnsigned(value.duration_ms) &&
-  isExitCode(value.exit_code) && optional(value.verification, isVerification);
+  isExitCode(value.exit_code) && optional(value.verification, isVerification) && optional(value.observations, isObservations);
 const isLifecycle: Guard = (value) => isObject(value) && isState(value.state) &&
   nullable(isUnsigned)(value.started_at_ms) && nullable(isUnsigned)(value.finished_at_ms);
 const isEvidence: Guard = (value) => isObject(value) &&

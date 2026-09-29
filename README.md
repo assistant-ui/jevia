@@ -2,11 +2,15 @@
 
 Jevia is an open-source, local-first, outcome-based model router for coding
 harnesses. It chooses a capability tier for each task, applies your safety
-policy, and uses verified outcomes as evidence for future routes.
+policy, and uses recorded execution history and optional outcome feedback for future routes.
 
 Use it with Claude Code, Codex, OpenCode, Gemini CLI, Cursor Agent, or a custom
-harness. Jevia uses automatically verified CLI outcomes or results your application
-reports; it is not tied to one model provider or agent runtime.
+harness. Recording does not require extra tests or manual feedback; it is not tied
+to one programming language, model provider, or agent runtime.
+
+> The passive-recording workflow below is unreleased. CLI 0.1.4–0.1.5 enabled
+> extra test discovery by default. The next CLI/SDK pair makes verification opt-in
+> and adds schema-4 observations; upgrade all clients sharing a store together.
 
 > Jevia is experimental. The CLI, typed routing contract, local outcome store,
 > harness adapters, and Node.js SDK are available today. A managed control plane
@@ -17,10 +21,11 @@ reports; it is not tied to one model provider or agent runtime.
 Most routers stop after choosing a model. Jevia closes the loop:
 
 ```text
-task -> route -> harness -> verification -> outcome -> future evidence
+task -> route -> harness -> automatic observations -> future routing context
+                            + optional feedback / verification -> known outcomes
 ```
 
-- **Adaptive:** verified outcomes inform later routing decisions.
+- **Adaptive:** passive history and optional known outcomes inform later routing.
 - **Model-agnostic:** stable tiers map to whichever models your harness exposes.
 - **Harness-agnostic:** use the CLI directly or embed the typed Node.js SDK.
 - **Local-first:** policy, cache, and history stay in your project or database.
@@ -86,14 +91,19 @@ Setup previews the configuration first. Review it, repeat with `--apply`, then
 run a routed task:
 
 ```bash
-jevia run agent "fix the flaky integration test"
+jevia run codex "fix the flaky integration test"
 ```
 
-Jevia routes, executes, verifies, and records this run automatically. No manual
-`feedback` or `runs complete` step is needed. CLI 0.1.4 can automatically discover
-existing root Rust or Node tests when no verifier is configured. See the
-[automatic CLI pipeline](docs/reference.md#automatic-cli-pipeline)
-for detection, opt-out settings, and verification limits.
+Jevia routes, executes, and records this run automatically. No manual `feedback`
+or `runs complete` step is needed. Extra verification is opt-in: a process exit
+remains an observed fact, not proof of task success. Existing explicitly enabled
+checks are preserved. See the [automatic CLI pipeline](docs/reference.md#automatic-cli-pipeline).
+
+Native event capture currently supports direct Claude Code 2.1.251+ launches.
+It records reported models/switches and tool/turn activity without storing prompts
+or tool contents. Other harnesses currently provide process-level observations.
+Coverage is best-effort, not a claim that every model attempt or successful fix is
+known. See [native capture limits](docs/reference.md#native-harness-observations).
 
 Harness and verifier processes are launched directly without shell
 interpolation. Credentials remain in the environment instead of the project
@@ -119,7 +129,7 @@ if (result.outcome === "success" || result.outcome === "failure") {
   await jevia.feedback(route.run_id, result.outcome);
 }
 
-// Eligible recorded outcomes inform the next decision automatically.
+// Recorded observations and eligible outcomes inform the next route automatically.
 const next = await jevia.route("investigate another integration failure");
 ```
 
@@ -127,7 +137,9 @@ The SDK calls Jevia's shell-free JSON interface, so CLI and programmatic usage
 share the same policy, storage, caching, and outcome rules. The CLI must already
 be installed and available on `PATH`. Feedback and verification are optional:
 skipping feedback leaves the outcome unknown, while future routes still use
-other eligible recorded outcomes. No history argument or manual fetch is needed.
+recorded CLI observations and other eligible outcomes. No history argument or
+manual fetch is needed. The SDK does not instrument an externally launched agent
+merely because your application called `route()`.
 
 ## Documentation
 

@@ -86,8 +86,8 @@ Jevia closes that loop:
 2. ask Jev which tier should handle the current task;
 3. fall back to a configured safe tier when confidence is low;
 4. record the routing decision in the configured history store;
-5. automatically record execution and verification outcomes for `jevia run`;
-6. include recent outcomes as evidence in future routing decisions.
+5. automatically record execution facts and supported native events for `jevia run`;
+6. include passive history and optional known outcomes in future routing decisions.
 
 The application owns the policy. Jev supplies a structured decision signal.
 
@@ -144,10 +144,9 @@ jevia run codex "fix the failing test"
 jevia runs
 ```
 
-Jevia routes the task, launches the agent, runs verification after a successful
-agent exit, and saves the outcome automatically. **No manual `feedback` or
-`runs complete` step is needed.** Verifier-backed outcomes become evidence for
-later routing decisions. The name `codex` must match your configured adapter;
+Jevia routes the task, launches the agent, and saves execution facts automatically.
+**No manual `feedback` or `runs complete` step is needed.** Recorded observations
+and optional known outcomes inform later routing. The name `codex` must match your configured adapter;
 Jevia does not install or authenticate the agent for you.
 
 **Unreleased default change:** additional verification is now opt-in. Recording
@@ -183,7 +182,7 @@ jevia runs --json
 | `jevia harness setup <name>` | Preview an explicit harness template; back up and save only with `--apply`. |
 | `jevia harness check <name> [--json]` | Inspect configuration and local executable candidates without launching programs or calling APIs. |
 | `jevia route <task>` | Ask Jev for a tier and record the decision. |
-| <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch, verify, and record automatically, including root Rust/Node test discovery when no verifier is configured. |
+| <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch, and record automatically; additional verification is opt-in. |
 | `jevia runs` | Inspect recent records in the configured backend. |
 | `jevia stats [--limit <records>] [--json]` | Summarize recent routing decisions, verified outcomes, manual feedback, and cache hits. |
 | `jevia feedback <id> <outcome>` | Report externally verified work or manually correct an outcome; not required after `run`. |
@@ -340,8 +339,9 @@ the agent and configured or automatically detected verifier. It requires no
 Jev/provider key or database
 connection, does not read history/cache, and creates no files or locks. It never
 executes even a `--version` probe. Missing executables, model mappings, or valid
-templates produce a failing exit status. An absent verifier is a warning, not a
-failure; process success alone still is not learning evidence.
+templates produce a failing exit status. Verification disabled by choice/default
+is a passing check; an explicitly requested check that cannot be detected is a
+warning. Process success alone is not proof of task correctness.
 
 The human report escapes the requested harness name. JSON reports use
 `schema_version: 1`, `harness`, `scope: "static"`, `ok`, `checks` (stable `id`,
@@ -382,9 +382,10 @@ fast = "provider/small"
 balanced = "provider/standard"
 strong = "provider/frontier"
 
-[harnesses.agent.verification]
-command = "cargo"
-args = ["test", "--workspace", "--all-features"]
+# Optional: uncomment only if you want extra verification after execution.
+# [harnesses.agent.verification]
+# command = "cargo"
+# args = ["test", "--workspace", "--all-features"]
 ~~~
 
 A complete ready-to-copy configuration is available at
@@ -406,10 +407,9 @@ jevia run agent "update the parser" -- --verbose
 Templates support <code>{task}</code>, <code>{model}</code>,
 <code>{tier}</code>, and <code>{run_id}</code>. Jevia requires the task and
 model placeholders, rejects unknown placeholders, launches the configured
-executable directly, and mirrors its exit code. A non-zero harness exit records
-failure and skips verification. If neither an explicit nor an automatically
-detected verifier is available, a zero harness exit records process-only success
-for backward compatibility, not verified task success or learning evidence.
+executable directly, and mirrors its exit code. A non-zero harness exit skips
+verification. Without a verifier or explicit feedback, both zero and non-zero
+exits leave task outcome `unknown`, while retaining useful execution observations.
 
 Jevia runs the configured or detected verifier only after the harness succeeds
 and uses its exit status as the final outcome. A verifier that
@@ -417,11 +417,10 @@ cannot start leaves the outcome unknown, preventing an environment problem
 from incorrectly training the router. Verification arguments support the same
 placeholders and are also launched directly without shell interpretation.
 
-Completed harness runs also record the concrete model, harness name, duration,
-process exit code, and verification evidence. This data appears in
-<code>jevia runs --json</code> and is supplied with relevant outcomes on later
-routing requests, so model changes do not erase which implementation actually
-produced a verified result.
+Completed harness runs record the requested model, harness name, duration,
+process exit code, optional verification, and available native observations.
+Inspect <code>jevia runs --json</code>. A requested model or a passing verifier
+does not establish which internal model attempt produced the fix.
 
 ## Node.js API
 
@@ -472,8 +471,9 @@ reported by the application or user, not necessarily human-entered. Each
 `route()` automatically loads recent eligible successes/failures from the
 selected JSONL, SQLite, or PostgreSQL history before deciding. No history argument
 or manual cache clearing is needed; the evidence is part of the cache key.
-Unknown, active, and process-only records do not influence routing. The
-`[router].history_limit` setting bounds this context (default 20, maximum 100;
+Finished process-only runs inform a separate observation window, even while their
+task outcome is unknown. Active and routed-only runs are not execution observations.
+The `[router].history_limit` setting bounds each window (default 20, maximum 100;
 0 disables it). This supplies evidence to Jev, not model training. See the
 [SDK outcome loop](../packages/jevia-node/README.md#recorded-outcomes-inform-the-next-route-automatically)
 for provenance and privacy details.
@@ -505,14 +505,17 @@ After configuring your harness once, use the normal command:
 jevia run codex "fix the failing test"
 ```
 
-Jevia routes the task, launches the agent, runs verification after a successful
-agent exit, and records the lifecycle and result in your selected storage backend.
-Verified results are available to subsequent routing automatically. **Do not run
-`feedback` or `runs complete` afterward** for the normal supervised CLI flow.
-Those APIs are for manual corrections and externally executed work, respectively.
+Jevia routes the task, launches the agent, and records lifecycle, process facts,
+and supported native events automatically. Later routing uses this history without
+requiring a known task outcome. **No manual `feedback` or `runs complete` step is
+required.** Optional feedback may report a known outcome or correct an earlier one;
+external completion is for work executed outside the supervised CLI flow.
 
-Verification runs once when the launched agent process/session finishes
-successfully, not after every message or tool call inside an interactive agent.
+Additional verification is opt-in. When explicitly enabled, it runs once after the
+agent process/session finishes successfully, not after each internal tool call.
+Recording itself is language-independent: Python, Go, and mixed-language projects
+need no test configuration for passive history. Optional checks can use explicit
+commands such as `python -m pytest`, `go test ./...`, or your project's test script.
 Task execution may still require the agent's normal permission prompts. Installing
 the agent, supplying credentials/model mappings, and preparing project dependencies
 are one-time prerequisites, not per-run feedback tasks. Jevia does not retry or
@@ -536,7 +539,7 @@ An explicit `[harnesses.<name>.verification]` always wins. For mixed Rust/Node
 roots, unsupported projects, invalid manifests, or conflicting lockfiles, Jevia
 reports that automatic verification is unavailable instead of guessing. The run
 is still recorded, but process-only results are not verified learning evidence.
-Configure a suitable check once for such projects. `harness check <name>` previews
+Configure a suitable check only if you want extra verification. `harness check <name>` previews
 detection and executable availability without running tests. Passing tests means
 the selected checks passed—not a guarantee that every requirement was satisfied.
 
@@ -566,7 +569,7 @@ processes. After a supervisor crash, inspect any surviving child processes and
 workspace changes before starting new work. Legacy unknown outcomes are not
 assumed to represent interrupted executions. Feedback on active runs is refused.
 
-New and updated records use schema version 3; versions 1 and 2 remain readable.
+New and updated records use schema version 4; versions 1, 2, and 3 remain readable.
 Older CLI versions refuse version 3 rather than silently discard new metadata.
 The ignored `run-leases/` sidecars are retained so concurrent processes always
 coordinate on the same lock file.
@@ -632,11 +635,12 @@ are for externally verified work, corrections, or legacy records—not a require
 step after each CLI run.
 
 Run records distinguish `process_exit`, `verification`, and `manual` evidence.
-Process-only success/failure remains visible, but only known outcomes from a
+Legacy process-only success/failure remains visible, but only known outcomes from a
 completed verifier or explicit application or human feedback are supplied to Jev as learning
 evidence. Legacy outcomes without provenance are not silently promoted; confirm
 them with `feedback` if you want them used in routing. `runs` reports the source
-and whether the result is eligible for learning.
+and whether the result is eligible as quality evidence. Finished executions can
+still contribute passive observations independently of that quality label.
 
 ```sh
 jevia feedback <run-id> success
@@ -648,7 +652,8 @@ Changing an already-known outcome requires a nonempty `--reason`. Every feedback
 operation retains the prior outcome/source, timestamp, and optional reason in a
 audit trail in the selected backend; original execution evidence is preserved. Reasons are limited
 to 4096 bytes and are never sent to Jev. Setting the outcome to `unknown` removes
-it from learning evidence. These records are not a tamper-proof audit log.
+it from the known-outcome window; any finished execution facts remain eligible as
+passive observations. These records are not a tamper-proof audit log.
 
 ## Routing cache
 
@@ -665,8 +670,8 @@ max_entries = 256
 
 A cache key is a SHA-256 fingerprint over the exact task, Jev endpoint and
 model, routing policy, tier definitions, selected harness mapping, and the
-recent completed evidence actually sent to Jev. A new success, failure,
-verification result, policy change, model change, or harness change therefore
+recent outcomes and passive observations actually sent to Jev. A new observation,
+success, failure, verification result, policy change, model change, or harness change therefore
 produces a miss automatically. Pending outcomes do not invalidate an otherwise
 equivalent decision.
 

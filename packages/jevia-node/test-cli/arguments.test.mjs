@@ -210,6 +210,9 @@ test("CLI run records by default and only adds Node tests after opting in", asyn
   assert.equal(record.execution.verification, undefined);
   assert.equal(record.lifecycle.state, "completed");
   assert.equal(record.outcome, "unknown");
+  const { stdout: listing } = await execute(binary, ["runs", "--limit", "1"], { cwd, env: client.env });
+  assert.match(listing, /quality_evidence=false execution_observed=true/);
+  assert.match(listing, /requested_model=test/);
   await client.route("use passive history");
   assert.deepEqual(requests.at(-1).state.recent_completed_outcomes, []);
   assert.equal(requests.at(-1).state.recent_execution_observations[0].requested_model, "test");

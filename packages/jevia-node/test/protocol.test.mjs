@@ -74,6 +74,23 @@ test("validates every optional evidence object and nested field", () => {
   assert.equal(isRouteRecord({ ...record, feedback: [{ ...feedback, reason: 1 }] }), false);
 });
 
+test("validates bounded passive observations without requiring verification or known outcomes", () => {
+  const event = { kind: "model_changed", recorded_at_ms: 3, model: "model-b", previous_model: "model-a" };
+  const observations = { source: "claude_hooks", status: "recorded", events: [event] };
+  const wrap = (observations) => ({ ...record, schema_version: 4, execution: { ...execution, observations } });
+  assert.ok(isRouteRecord(wrap(observations)));
+  assert.ok(isRouteRecord(wrap({ source: null, status: "unsupported", events: [] })));
+  assert.ok(isRouteRecord(wrap({ ...observations, status: "partial", events: [] })));
+  for (const invalid of [
+    null, {}, { ...observations, source: "guessed" }, { ...observations, status: "success" },
+    { ...observations, events: [] }, { ...observations, events: Array(257).fill(event) },
+    { ...observations, source: null }, { ...observations, status: "disabled" },
+    ...["PRIVATE bad model", "model\n", "", "a".repeat(257)].map((model) => ({ ...observations, events: [{ ...event, model }] })),
+    { ...observations, events: [{ ...event, kind: "solved" }] },
+    { ...observations, events: [{ ...event, recorded_at_ms: -1 }] },
+  ]) assert.equal(isRouteRecord(wrap(invalid)), false);
+});
+
 test("all record-returning methods reject invalid CLI output without exposing it", async () => {
   const invalid = { ...record, lifecycle: "PRIVATE_RESPONSE_SENTINEL" };
   for (const method of ["route", "feedback", "show", "runs", "complete"]) {

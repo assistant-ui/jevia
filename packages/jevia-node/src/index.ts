@@ -44,10 +44,34 @@ export interface VerificationEvidence {
 
 export interface ExecutionEvidence {
   harness: string;
+  /** Requested model, not proof of the model that executed every turn. */
   model: string;
   duration_ms: number;
   exit_code: number | null;
   verification?: VerificationEvidence;
+  observations?: HarnessObservations;
+}
+
+export type ObservationStatus = "unsupported" | "disabled" | "unavailable" | "no_events" | "recorded" | "partial";
+export type HarnessEventKind = "session_started" | "session_ended" | "turn_started" | "turn_completed" | "turn_failed"
+  | "tool_succeeded" | "tool_failed" | "task_reported_complete" | "model_changed" | "subagent_started" | "subagent_stopped";
+
+/** Passive, harness-reported facts; none establishes task correctness. */
+export interface HarnessEvent {
+  kind: HarnessEventKind;
+  recorded_at_ms: number;
+  session_id?: string;
+  agent_id?: string;
+  model?: string;
+  previous_model?: string;
+  tool_name?: string;
+}
+
+export interface HarnessObservations {
+  source: "claude_hooks" | null;
+  /** recorded means some events arrived, not complete coverage. */
+  status: ObservationStatus;
+  events: HarnessEvent[];
 }
 
 export interface RouteDecision {

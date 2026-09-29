@@ -55,11 +55,11 @@ const CLI_COMMANDS = [
   },
   {
     signature: "run <harness> <task>",
-    description: "Route the task, launch a configured harness, verify it, and record the result.",
+    description: "Route, launch, and record automatically; extra verification is opt-in.",
   },
   {
     signature: "runs [--json]",
-    description: "List recent run records, their lifecycle state, outcome source, and learning eligibility.",
+    description: "List recent runs, lifecycle state, quality evidence, and execution observations.",
   },
   {
     signature: "runs show <run-id>",
@@ -81,16 +81,16 @@ const ADAPTIVE_LOOP = [
     description: "Your chosen harness maps that tier to a concrete model and performs the work.",
   },
   {
-    signature: "03  Verify",
-    description: "Tests, review, or another trusted evaluator decides whether the task succeeded.",
+    signature: "03  Observe",
+    description: "Record process facts and supported native activity automatically; keep uncertain outcomes unknown.",
   },
   {
-    signature: "04  Record",
-    description: "The verified outcome is attached to the run with its evidence source.",
+    signature: "04  Optional outcome",
+    description: "Add feedback or extra verification only when wanted; neither is required for passive history.",
   },
   {
     signature: "05  Adapt",
-    description: "Eligible outcomes become evidence for later routing decisions.",
+    description: "Use recorded observations and known outcomes as separate context for later routing decisions.",
   },
 ] as const;
 
@@ -232,7 +232,7 @@ const EVIDENCE_TYPES = [
   },
   {
     signature: "process_exit",
-    description: "The harness process exited. Visible for diagnosis, but not learning evidence by itself.",
+    description: "The harness process exited. Useful passive context, but not proof of task success.",
   },
   {
     signature: "unknown",
@@ -288,7 +288,7 @@ const STORAGE_OPTIONS = [
 
 const STORED_RUN = [
   "{",
-  '  "schema_version": 3,',
+  '  "schema_version": 4,',
   '  "run_id": "7b65a69a-0a6f-4a89-bd73-88f090954dd9",',
   '  "tier": "balanced",',
   '  "suggested_tier": "balanced",',
@@ -309,6 +309,7 @@ const STORED_RUN = [
   '    "model": "provider/standard",',
   '    "duration_ms": 48231,',
   '    "exit_code": 0,',
+  '    "observations": { "source": null, "status": "unsupported", "events": [] },',
   '    "verification": {',
   '      "command": "pnpm",',
   '      "launched": true,',
@@ -380,12 +381,12 @@ export default function DocsPage() {
             <p>
               Jevia is an adaptive, outcome-based router for coding harnesses. Start
               with the CLI, connect the models and agents you already use, then feed
-              verified results back into later routing decisions.
+              recorded observations and optional known outcomes into later routing decisions.
             </p>
             <p>
-              With <code>jevia run</code>, the CLI handles execution,
-              verification, and outcome recording automatically. No manual feedback
-              step is needed. See <a href="#adapters">automatic CLI execution</a> below
+              With <code>jevia run</code>, the CLI handles execution and recording
+              automatically. Extra verification and feedback are optional.
+              See <a href="#adapters">automatic CLI execution</a> below
               for setup, release availability, and verification limits.
             </p>
           </header>
@@ -445,7 +446,7 @@ export default function DocsPage() {
               <span>03</span>
               <div>
                 <h2 id="adaptive-title">How adaptive routing works</h2>
-                <p>Routing and task success stay separate until a trusted result closes the loop.</p>
+                <p>Recorded activity informs routing without pretending every completed run is a successful task.</p>
               </div>
             </div>
             <div className="docs-methods" role="list">
@@ -457,10 +458,11 @@ export default function DocsPage() {
               ))}
             </div>
             <div className="docs-note">
-              <strong>Verified, not self-scored</strong>
+              <strong>Observed is not verified</strong>
               <p>
                 Jevia does not decide that its own output is good. A completed verifier
-                or explicit application or human feedback supplies the outcome used as learning evidence.
+                or explicit application or human feedback can supply a known outcome.
+                Without either, recorded activity still informs routing as passive context.
               </p>
             </div>
           </section>
@@ -501,11 +503,11 @@ export default function DocsPage() {
               <strong>Automatic CLI pipeline</strong>
               <p>
                 Configure your installed harness, credentials, and model mappings once.
-                Then <code>jevia run</code> routes the task, launches the agent, runs
-                verification after a successful exit, and records the outcome in your
+                Then <code>jevia run</code> routes the task, launches the agent, and
+                records execution facts and supported native events in your
                 selected storage backend. No manual <code>feedback</code> or
-                <code> runs complete</code> step is needed. Verifier-backed outcomes
-                become evidence for later routing decisions automatically.
+                <code> runs complete</code> step is needed. Recorded history informs
+                later routing automatically, even when task success is unknown.
               </p>
             </div>
             <CommandBlock
@@ -513,19 +515,33 @@ export default function DocsPage() {
               label="Run a configured harness"
             />
             <p className="docs-body-copy">
-              CLI 0.1.4 detects root Rust workspace tests or Node test scripts when no
-              verifier is configured; an explicit verifier takes precedence. Missing
-              or ambiguous checks stay unverified and are excluded from learning.
+              Unreleased: additional verification is opt-in. CLI 0.1.4–0.1.5 enabled
+              test discovery by default; existing explicit checks are preserved.
+              Set <code>auto_verify = true</code> only if you want root Rust/Node
+              test discovery, or configure your own optional verifier. Recording
+              itself works with Python, Go, and mixed-language projects without tests.
               Passing tests is evidence, not proof of every requirement.
             </p>
             <p className="docs-body-copy">
-              Verification runs when the agent process/session finishes, not after each
+              Native event capture currently supports direct Claude Code 2.1.251+
+              launches. Codex, OpenCode, Gemini, and other harnesses currently provide
+              process-level observations. Capture is best-effort: reported models,
+              switches, and tool activity do not prove which model solved a task.
+              Raw prompts, tool contents, and transcripts are not retained. Inspect
+              <code> execution.observations</code> for coverage and recorded events.
+              Upgrade the CLI and SDK together for schema 4. See the{" "}
+              <a href="https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#native-harness-observations">
+                capture contract and limits
+              </a>.
+            </p>
+            <p className="docs-body-copy">
+              Optional verification runs when the agent process/session finishes, not after each
               internal message or tool call. Jevia does not install the agent or test
               runner, supply credentials, bypass agent permission prompts, or retry
               failed work. Prepare project dependencies first. See the{" "}
               <a href="https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline">
                 CLI setup and verification reference
-              </a> for supported tests, deadlines, and opt-out settings.
+              </a> for supported tests, deadlines, and opt-in settings.
             </p>
           </section>
 
@@ -563,16 +579,20 @@ export default function DocsPage() {
                 (application-reported), not CLI verification. Use <code>unknown</code>
                 when the result is uncertain. The next <code>route()</code> automatically
                 includes eligible recorded outcomes from the same JSONL, SQLite, or
-                PostgreSQL history, including CLI-verified results. No manual cache
+                PostgreSQL history, including CLI-verified results, plus a separate
+                window of passive execution observations. No manual cache
                 clearing is needed: evidence is part of the cache key.
               </p>
             </div>
             <p className="docs-body-copy">
-              Unknown, active, and process-exit-only records are excluded.
-              <code> [router].history_limit</code> bounds recent evidence: default 20,
+              Unknown outcomes are not quality labels. Finished process-only runs still
+              supply observations; active and routed-only runs do not. The SDK does
+              not instrument agents your application launches outside <code>jevia run</code>.
+              <code> [router].history_limit</code> bounds each history window: default 20,
               maximum 100, or 0 to disable it. This is decision context, not model
               training or a guarantee of better choices. Live requests send eligible
-              historical task text and outcome metadata to Jev; feedback reasons stay
+              historical task text, outcome metadata, and bounded native summaries to Jev;
+              feedback reasons, session IDs, and raw event lists stay
               in storage. <code>[privacy].store_task_text = false</code> omits task text
               from new records, not older history or the current routing request.
             </p>
@@ -673,8 +693,8 @@ export default function DocsPage() {
             <h3 className="docs-subheading">What a stored run looks like</h3>
             <p className="docs-body-copy">
               Every backend preserves the same logical record. JSONL writes one compact JSON
-              object per line to <code>.jevia/runs.jsonl</code>; this example is expanded only
-              for readability. SQLite and PostgreSQL store the equivalent fields while keeping
+              object per line to <code>.jevia/runs.jsonl</code>; this example uses explicitly
+              enabled verification and is expanded for readability. SQLite and PostgreSQL store the equivalent fields while keeping
               the same lifecycle and outcome-evidence semantics.
             </p>
             <CodeBlock

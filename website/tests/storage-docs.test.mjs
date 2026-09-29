@@ -25,10 +25,22 @@ test("shows the persisted run shape and explains outcome provenance", async () =
   for (const url of [docsPage, docsMarkdown]) {
     const contents = await readFile(url, "utf8");
 
-    assert.match(contents, /"schema_version": 3/);
+    assert.match(contents, /"schema_version": 4/);
     assert.match(contents, /"state": "completed"/);
     assert.match(contents, /"source": "verification"/);
     assert.match(contents, /privacy\.store_task_text = false/);
     assert.match(contents, /task: null/);
+  }
+});
+
+test("documents passive history separately from optional verification in both formats", async () => {
+  for (const url of [docsPage, docsMarkdown]) {
+    const contents = await readFile(url, "utf8");
+    assert.match(contents, /Unreleased: additional verification is opt-in/);
+    assert.match(contents, /Claude Code 2\.1\.251/);
+    assert.match(contents, /process-level/);
+    assert.match(contents, /execution\.observations/);
+    assert.match(contents, /each history window/);
+    assert.doesNotMatch(contents, /Unknown, active, and process-exit-only records are excluded/);
   }
 });

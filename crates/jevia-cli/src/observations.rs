@@ -77,7 +77,10 @@ impl Capture {
         }
         // Auto-detection must not add unknown hook settings to an older harness.
         // Explicit claude_hooks is the contract for compatible wrapper executables.
-        if mode == ObservationMode::Auto && !supported_version(&invocation.program).await {
+        if mode == ObservationMode::Auto
+            && !supported_version(&invocation.program, directory.parent().unwrap_or(directory))
+                .await
+        {
             eprintln!(
                 "jevia: native observations unavailable: Claude Code 2.1.251+ required; process recording remains active"
             );
@@ -143,10 +146,11 @@ impl Capture {
     }
 }
 
-async fn supported_version(program: &str) -> bool {
+async fn supported_version(program: &str, root: &Path) -> bool {
     use tokio::io::AsyncReadExt;
     let probe = async {
         let mut child = tokio::process::Command::new(program)
+            .current_dir(root)
             .arg("--version")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -343,6 +347,7 @@ mod tests {
         let id = uuid::Uuid::new_v4().to_string();
         fs::write(&program, "#!/bin/sh\nprintf '2.1.251 (Claude Code)\\n'\n").unwrap();
         fs::set_permissions(&program, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(supported_version("./claude", dir.path()).await);
         let invocation = HarnessInvocation {
             program: program.to_str().unwrap().into(),
             args: vec!["--print".into(), "task".into()],

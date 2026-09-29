@@ -321,14 +321,12 @@ fn checked_in_harness_example_remains_valid() {
         .expect("example defines the agent harness");
     assert_eq!(harness.command, "my-agent");
     assert_eq!(harness.models.len(), config.tiers.len());
-    assert_eq!(
-        harness
-            .verification
-            .as_ref()
-            .expect("example defines verification")
-            .command,
-        "cargo"
+    assert!(
+        harness.verification.is_none(),
+        "extra verification is opt-in"
     );
+    assert!(!harness.auto_verify);
+    assert_eq!(harness.observations, jevia_core::ObservationMode::Auto);
 }
 
 #[test]

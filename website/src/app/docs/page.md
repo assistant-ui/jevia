@@ -1,6 +1,6 @@
 # Jevia documentation
 
-Jevia is an adaptive, outcome-based router for coding harnesses. Start with the CLI, connect the models and agents you already use, then feed verified results back into later routing decisions.
+Jevia is an adaptive, outcome-based router for coding harnesses. Start with the CLI, connect the models and agents you already use, then feed recorded observations and optional known outcomes into later routing decisions.
 
 ## Install and validate
 
@@ -39,8 +39,8 @@ jevia stats --json
 ```
 
 - `route <task>` selects a capability tier and saves the routing decision as a new run.
-- `run <harness> <task>` routes the task, launches a configured harness, verifies it, and records the result.
-- `runs [--json]` lists recent records, lifecycle state, outcome source, and learning eligibility.
+- `run <harness> <task>` routes, launches, and records automatically; extra verification is opt-in.
+- `runs [--json]` lists recent runs, lifecycle state, quality evidence, and execution observations.
 - `runs show <run-id>` prints one complete versioned record.
 - `stats [--limit N] [--json]` summarizes routing, trusted outcomes, feedback, and cache hits.
 
@@ -50,11 +50,11 @@ Add `--json` where supported for stable machine-readable output. Run `jevia <com
 
 1. **Route:** Jevia selects one configured capability tier for the current task.
 2. **Execute:** Your chosen harness maps that tier to a concrete model and performs the work.
-3. **Verify:** Tests, review, or another trusted evaluator decides whether the task succeeded.
-4. **Record:** The verified outcome is attached to the run with its evidence source.
-5. **Adapt:** Eligible outcomes become evidence for later routing decisions.
+3. **Observe:** Record process facts and supported native activity automatically; keep uncertain outcomes unknown.
+4. **Optional outcome:** Add feedback or extra verification only when wanted; neither is required for passive history.
+5. **Adapt:** Use recorded observations and known outcomes as separate context for later routing decisions.
 
-Jevia does not decide that its own output is good. A completed verifier or explicit application or human feedback supplies the outcome used as learning evidence.
+Jevia does not decide that its own output is good. A completed verifier or explicit application or human feedback can supply a known outcome. Without either, recorded activity still informs routing as passive context.
 
 ## Connect any harness
 
@@ -94,26 +94,35 @@ The same pattern works with Claude Code, Codex, OpenCode, Gemini CLI, Cursor Age
 ### Automatic CLI pipeline
 
 Configure your installed harness, credentials, and model mappings once. Then
-`jevia run` routes the task, launches the agent, runs verification after a
-successful exit, and records the outcome in your selected storage backend.
-**No manual `feedback` or `runs complete` step is needed.** Verifier-backed
-outcomes become evidence for later routing decisions automatically.
+`jevia run` routes the task, launches the agent, and records execution facts and
+supported native events in your selected storage backend.
+**No manual `feedback` or `runs complete` step is needed.** Recorded history informs
+later routing automatically, even when task success is unknown.
 
 ```bash
 jevia run codex "fix the failing test"
 ```
 
-CLI 0.1.4 detects root Rust workspace tests or Node test scripts when no verifier
-is configured; an explicit verifier takes precedence. Missing or ambiguous checks
-stay unverified and are excluded from learning. Passing tests is evidence, not
-proof of every requirement.
+Unreleased: additional verification is opt-in. CLI 0.1.4–0.1.5 enabled test
+discovery by default; existing explicit checks are preserved. Set `auto_verify = true`
+only if you want root Rust/Node test discovery, or configure your own optional
+verifier. Recording itself works with Python, Go, and mixed-language projects
+without tests. Passing tests is evidence, not proof of every requirement.
 
-Verification runs when the agent process/session finishes, not after each internal
+Native event capture currently supports direct Claude Code 2.1.251+ launches.
+Codex, OpenCode, Gemini, and other harnesses currently provide process-level
+observations. Capture is best-effort: reported models, switches, and tool activity
+do not prove which model solved a task. Raw prompts, tool contents, and transcripts
+are not retained. Inspect `execution.observations` for coverage and recorded events.
+Upgrade the CLI and SDK together for schema 4. See the
+[capture contract and limits](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#native-harness-observations).
+
+Optional verification runs when the agent process/session finishes, not after each internal
 message or tool call. Jevia does not install the agent or test runner, supply
 credentials, bypass agent permission prompts, or retry failed work. Prepare
 project dependencies first. See the
 [CLI setup and verification reference](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline)
-for supported tests, deadlines, and opt-out settings.
+for supported tests, deadlines, and opt-in settings.
 
 ## Use the Node.js SDK
 
@@ -166,14 +175,18 @@ tests, acceptance checks, or a user-approved result and record success or failur
 This is labeled `manual` evidence (application-reported), not CLI verification.
 Use `unknown` when the result is uncertain. The next `route()` automatically
 includes eligible recorded outcomes from the same JSONL, SQLite, or PostgreSQL
-history, including CLI-verified results. No manual cache clearing is needed:
+history, including CLI-verified results, plus a separate window of passive
+execution observations. No manual cache clearing is needed:
 evidence is part of the cache key.
 
-Unknown, active, and process-exit-only records are excluded.
-`[router].history_limit` bounds recent evidence: default 20, maximum 100, or 0 to
+Unknown outcomes are not quality labels. Finished process-only runs still supply
+observations; active and routed-only runs do not. The SDK does not instrument agents
+your application launches outside `jevia run`.
+`[router].history_limit` bounds each history window: default 20, maximum 100, or 0 to
 disable it. This is decision context, not model training or a guarantee of better
-choices. Live requests send eligible historical task text and outcome metadata
-to Jev; feedback reasons stay in storage. `[privacy].store_task_text = false`
+choices. Live requests send eligible historical task text, outcome metadata, and
+bounded native summaries to Jev; feedback reasons, session IDs, and raw event lists
+stay in storage. `[privacy].store_task_text = false`
 omits task text from new records, not older history or the current routing request.
 
 ### Client methods
@@ -254,7 +267,7 @@ jevia runs show <run-id>
 
 - `verification` — A configured or detected verifier produced a known result. Eligible for learning.
 - `manual` — An application or person explicitly recorded success or failure. Eligible for learning.
-- `process_exit` — The harness exited. Visible for diagnosis, but not learning evidence by itself.
+- `process_exit` — The harness exited. Useful passive context, but not proof of task success.
 - `unknown` — No trusted result is known, so it stays out of the adaptive evidence set.
 
 Changing a known outcome requires `--reason`. Jevia retains the prior value in feedback history. Setting `unknown` removes the run from learning without erasing execution evidence. Feedback on active runs is rejected.
@@ -267,11 +280,11 @@ Changing a known outcome requires `--reason`. Jevia retains the prior value in f
 
 ### What a stored run looks like
 
-Every backend preserves the same logical record. JSONL writes one compact JSON object per line to `.jevia/runs.jsonl`; this example is expanded only for readability. SQLite and PostgreSQL store the equivalent fields while keeping the same lifecycle and outcome-evidence semantics.
+Every backend preserves the same logical record. JSONL writes one compact JSON object per line to `.jevia/runs.jsonl`; this example uses explicitly enabled verification and is expanded for readability. SQLite and PostgreSQL store the equivalent fields while keeping the same lifecycle and outcome-evidence semantics.
 
 ```json
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "run_id": "7b65a69a-0a6f-4a89-bd73-88f090954dd9",
   "tier": "balanced",
   "suggested_tier": "balanced",
@@ -292,6 +305,7 @@ Every backend preserves the same logical record. JSONL writes one compact JSON o
     "model": "provider/standard",
     "duration_ms": 48231,
     "exit_code": 0,
+    "observations": { "source": null, "status": "unsupported", "events": [] },
     "verification": {
       "command": "pnpm",
       "launched": true,

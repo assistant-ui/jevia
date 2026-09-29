@@ -4,6 +4,10 @@ Typed, shell-free access to Jevia from Node.js. The package invokes the Jevia
 CLI's JSON interface so routing policy, local storage, caching, privacy, and
 outcome eligibility stay consistent with the Rust implementation.
 
+> Unreleased: schema-4 observation types and passive routing context require the
+> matching new CLI and SDK. Published CLI 0.1.4–0.1.5 used different verification
+> defaults. Upgrade all readers/writers sharing a store together.
+
 ## Install
 
 Install the Jevia CLI first, then add the Node package:
@@ -20,14 +24,15 @@ elsewhere.
 ## Automatic CLI or explicit SDK?
 
 For end-to-end execution, configure your installed harness once and use
-`jevia run codex "fix the failing test"`. Jevia launches the agent, runs its
-verifier after a successful exit, and saves the result automatically. **No manual
-`feedback` or `complete` call is needed after `jevia run`.** Verification happens
-when the launched process/session ends, not after each internal agent message.
+`jevia run codex "fix the failing test"`. Jevia launches the agent and records
+execution facts automatically. **No manual `feedback` or `complete` call is needed
+after `jevia run`.** Extra verification is opt-in; existing explicit checks are
+preserved. Without a verifier or feedback, task outcome stays `unknown`, even on
+exit zero. Passive observations still inform future routing.
 
-CLI 0.1.4 automatically detects existing root Rust or Node tests when no verifier
-is configured. If no usable verifier is available, Jevia records an unverified,
-process-only result; it does not treat the agent exiting as proof of task success.
+Native event capture currently covers direct Claude Code 2.1.251+ launches;
+other harnesses record process facts only. Hook events report activity, not proof
+that a task was solved. Optional verification runs after the launched session ends.
 See the [CLI pipeline documentation](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline).
 
 Use the SDK when your application should control how agents run and how their
@@ -89,25 +94,54 @@ not `verification`; it does not mean a person must type the feedback. Record
 
 On every `route()` call, Jevia loads recent eligible outcomes from that project's
 selected JSONL, SQLite, or PostgreSQL storage before choosing a tier. There is no
-need to fetch history with `runs()` or pass it back to `route()`. CLI-verified
-results and SDK-reported results in the same history can both contribute. The
+need to fetch history with `runs()` or pass it back to `route()`. Passive CLI
+observations, CLI-verified results, and SDK-reported results in the same history can
+contribute through separate context categories. The
 `complete()` method also records an eligible outcome while closing an
 external run, but completion is not required merely to reuse `feedback`.
 
-- Only known successes/failures backed by verification or explicit feedback are
-  included. Pending/unknown, active, and process-exit-only records are excluded.
-- `[router].history_limit` bounds the recent evidence (default 20, maximum 100;
+- Known successes/failures backed by verification or explicit feedback enter the
+  outcome window. Finished executions without a known outcome enter a separate
+  observation window; they are not counted as successful tasks. Routed-only and
+  active records are excluded from that observation window.
+- `[router].history_limit` bounds **each** window (default 20, maximum 100;
   0 disables history input). This is context for a decision, not model training
   or a guarantee that future decisions improve.
 - The evidence is part of the routing-cache key. A changed evidence payload
-  prevents reuse of a decision based on older outcomes; unchanged inputs can
+  prevents reuse of a decision based on older outcomes or observations; unchanged inputs can
   still use the cache. No cache clearing or `noCache` flag is needed after feedback.
 - On a live request, eligible historical task text and outcome metadata are
-  supplied to Jev. Feedback reasons stay in storage and are not sent to Jev.
+  supplied to Jev, along with bounded native-event/model summaries where available.
+  Feedback reasons, local session/agent IDs, and raw event lists stay in storage.
   `[privacy].store_task_text = false` omits task text from newly recorded history;
   it does not erase older records or hide the current task sent for routing.
 
 ## API
+
+### Inspect passive observations
+
+```ts
+const run = await jevia.show(runId);
+const observations = run.execution?.observations;
+if (observations) {
+  console.log(observations.status); // recorded, partial, no_events, etc.
+  for (const event of observations.events) {
+    if (event.kind === "model_changed") {
+      console.log(event.previous_model, event.model);
+    }
+  }
+}
+```
+
+These typed fields are optional for older and route-only records. `execution.model`
+is the requested model; `event.model` is present only when the harness reported it.
+`recorded` means some events arrived, not complete coverage or task success. Events
+are bounded to 256 and are persisted when the supervised process stops. The SDK
+does not attach hooks to agents your application launches outside `jevia run`.
+No feedback call, verifier, or history argument is required to reuse observations
+already saved by the CLI. See the [capture contract and limits](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#native-harness-observations).
+
+### Client methods
 
 ```ts
 const version = await jevia.version();
@@ -134,9 +168,9 @@ Already-aborted signals never launch a process. Timeout/abort diagnostics may
 be empty because rejection does not wait for output collection. Cancellation
 cannot undo completed writes; inspect storage before retrying a mutation.
 
-Record responses are validated at runtime, including schema versions 1–3,
+Record responses are validated at runtime, including schema versions 1–4,
 finite probabilities in `[0, 1]`, safe-integer timestamps, and optional lifecycle,
-execution, verification, outcome evidence, and feedback. Malformed or unsupported
+execution, bounded harness observations, verification, outcome evidence, and feedback. Malformed or unsupported
 responses raise `JeviaProtocolError` without their contents. Legacy records can
 omit optional evidence; the SDK never invents it. Additive unknown fields remain
 compatible within a supported schema.
