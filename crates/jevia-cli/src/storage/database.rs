@@ -472,6 +472,7 @@ fn decode(raw: &str) -> Result<RouteRecord> {
 }
 
 fn validate_record(record: &RouteRecord) -> Result<()> {
+    record.decision.validate().map_err(anyhow::Error::msg)?;
     if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
         bail!("unsupported history record schema; refusing to read or modify it");
     }

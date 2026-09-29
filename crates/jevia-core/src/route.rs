@@ -140,6 +140,35 @@ pub struct RouteDecision {
 }
 
 impl RouteDecision {
+    /// Shared validation for provider output, persisted history, and cached decisions.
+    /// Errors describe fields only; provider values must never enter diagnostics.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if [
+            &self.run_id,
+            &self.tier,
+            &self.suggested_tier,
+            &self.jev_model,
+        ]
+        .iter()
+        .any(|value| value.trim().is_empty())
+        {
+            return Err("routing identity, tiers, and model must be nonempty");
+        }
+        if !self.confidence.is_finite() || !(0.0..=1.0).contains(&self.confidence) {
+            return Err("routing confidence must be finite and between 0 and 1");
+        }
+        // Empty maps remain valid for older providers/records. Do not require
+        // a sum of one: providers may return only a subset of tier scores.
+        if self
+            .probabilities
+            .values()
+            .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
+        {
+            return Err("routing probabilities must be finite and between 0 and 1");
+        }
+        Ok(())
+    }
+
     /// Reuse the decision signal while giving a cache hit its own run identity.
     pub fn for_cache_hit(&self) -> Self {
         let mut decision = self.clone();

@@ -111,12 +111,21 @@ async fn corruption(postgres: bool) {
     wrong_id.decision.run_id = "private-wrong-id".into();
     let mut empty_id = record(404);
     empty_id.decision.run_id.clear();
+    let mut bad_probability = record(404);
+    bad_probability
+        .decision
+        .probabilities
+        .insert("private-tier".into(), 2.0);
+    let mut blank_model = record(404);
+    blank_model.decision.jev_model = " \t".into();
     let valid = serde_json::to_string(&record(404)).unwrap();
     for invalid in [
         "{private-invalid".into(),
         serde_json::to_string(&unsupported).unwrap(),
         serde_json::to_string(&wrong_id).unwrap(),
         serde_json::to_string(&empty_id).unwrap(),
+        serde_json::to_string(&bad_probability).unwrap(),
+        serde_json::to_string(&blank_model).unwrap(),
     ] {
         sqlx::query("UPDATE jevia_runs SET record = $2 WHERE project = $1 AND run_id = 'run-404'")
             .bind(&f.db().project)
