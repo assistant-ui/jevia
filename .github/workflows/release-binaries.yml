@@ -164,8 +164,6 @@ jobs:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ env.RELEASE_TAG }}
       - name: Install from published release assets
         if: matrix.installer == 'shell'
         shell: bash
