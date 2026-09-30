@@ -2,8 +2,6 @@
 
 ## Unreleased
 
-- Rotate bounded observation replay across retained candidates, preventing a
-  corrupt/busy prefix from starving later journals; defer incomplete scans safely.
 - Ignore native recording journals, loss markers, event locks, temporary snapshots,
   and generated plugins in Git; safely repair older project ignore rules before
   capture without changing configuration or untracking existing files.
@@ -11,6 +9,8 @@
   skip busy JSONL checkpoint locks and reject stale terminal supervisor writes.
 - Bound recovery replay to one two-second budget, skip busy journals/history,
   and retain pending snapshots for later retry.
+- Rotate bounded observation replay across retained candidates, preventing a
+  corrupt/busy prefix from starving later journals; defer incomplete scans safely.
 - Expose detected hook-write loss as partial coverage and a conservative lost-input
   lower bound, with a private, payload-free marker and idempotent recovery.
 - Add opt-in `route --explain` and `run --explain` diagnostics on stderr for
