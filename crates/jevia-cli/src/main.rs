@@ -546,7 +546,13 @@ async fn execute_stored_harness(
     )
     .await;
     if result.is_ok() {
-        capture.persisted();
+        // Read the committed snapshot: a concurrent/timed-out checkpoint may have
+        // saved newer observations than the supervisor's in-memory copy.
+        if let Ok(saved) = storage.get(&record.decision.run_id).await
+            && let Some(observations) = saved.execution.and_then(|e| e.observations)
+        {
+            capture.persisted(&observations);
+        }
     }
     result
 }
@@ -588,6 +594,7 @@ async fn execute_observed_harness(
         )
         .await?;
     let started = Instant::now();
+    let mut previous = execution.observations.clone().expect("capture initialized");
     runner.set_environment(&capture.environment);
     let status = {
         let run = runner.run(
@@ -599,7 +606,6 @@ async fn execute_observed_harness(
         tokio::pin!(run);
         let mut timer = tokio::time::interval(std::time::Duration::from_secs(2));
         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let mut previous = execution.observations.clone().expect("capture initialized");
         let mut warned = false;
         loop {
             tokio::select! {
@@ -613,7 +619,7 @@ async fn execute_observed_harness(
             }
         }
     };
-    execution.observations = Some(capture.snapshot());
+    execution.observations = Some(capture.snapshot_after(&previous));
     // Optional verifiers must not inherit a harness adapter's private config.
     runner.set_environment(&[]);
     let status = match status {

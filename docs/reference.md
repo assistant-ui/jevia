@@ -2,6 +2,14 @@
 
 ## Unreleased: passive routing context
 
+### Shutdown durability
+
+Final journal read failures preserve the most recent checkpoint and mark capture
+partial. Terminal state writes cannot replace newer durable observations with an
+older snapshot. Unreadable, corrupt, or subsequently changed journals remain on
+disk for recovery; cleanup only removes a journal matching the saved snapshot.
+This does not infer task success or run additional verification.
+
 ### Passive model reporting
 
 The unreleased `jevia stats` / `jevia stats --json` includes a separate
