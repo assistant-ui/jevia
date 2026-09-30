@@ -1,4 +1,4 @@
-import type { RouteRecord } from "./index.js";
+import type { RouteRecord, StorageCheckReport } from "./index.js";
 
 type Guard = (value: unknown) => boolean;
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -16,6 +16,26 @@ const isOutcomeSource = oneOf("process_exit", "verification", "manual");
 const isState = oneOf("routed", "running", "verifying", "completed", "launch_failed", "interrupted", "cancelled", "timed_out");
 const nullable = (guard: Guard): Guard => (value) => value === null || guard(value);
 const optional = (value: unknown, guard: Guard): boolean => value === undefined || guard(value);
+
+export function isStorageCheckReport(value: unknown): value is StorageCheckReport {
+  if (!isObject(value) || value.schema_version !== 1 || !oneOf("basic", "deep")(value.check) ||
+    typeof value.ok !== "boolean" || !nullable(oneOf("jsonl", "sqlite", "postgres"))(value.backend) ||
+    !nullable(isUnsigned)(value.records)) return false;
+  if (value.ok) {
+    if (value.backend === null || value.records === null || value.error !== null) return false;
+    if (value.backend === "jsonl") return value.passive_history_index === "not_applicable";
+    return oneOf("present", "missing", "unavailable")(value.passive_history_index) ||
+      (value.backend === "postgres" && value.passive_history_index === "unsupported");
+  }
+  if (value.passive_history_index !== null || !isObject(value.error) || !isText(value.error.message)) return false;
+  switch (value.error.code) {
+    case "configuration_unavailable": return value.backend === null && value.records === null;
+    case "storage_unavailable":
+    case "history_check_failed": return value.backend !== null && value.records === null;
+    case "index_check_failed": return value.backend !== null && value.records !== null;
+    default: return false;
+  }
+}
 
 const isIdentifier: Guard = (value) => typeof value === "string" && value.length > 0 && value.length <= 256 && !/[^a-zA-Z0-9._:/@+-]/.test(value);
 const isEventKind = oneOf("session_started", "session_ended", "turn_started", "turn_completed", "turn_failed",
