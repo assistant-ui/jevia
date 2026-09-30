@@ -1,5 +1,6 @@
 //! Explicit harness onboarding. These commands never run configured programs.
 mod check;
+mod health;
 mod setup;
 
 use crate::paths::ProjectPaths;
@@ -21,13 +22,20 @@ pub enum Action {
         #[arg(long)]
         json: bool,
     },
+    /// Inspect recording configuration and recent stored capture; never launch an agent.
+    Health {
+        name: String,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
-pub fn run(paths: &ProjectPaths, action: Action) -> Result<ExitCode> {
+pub async fn run(paths: &ProjectPaths, action: Action) -> Result<ExitCode> {
     match action {
         Action::Presets => setup::print_presets(),
         Action::Setup(options) => setup::run(paths, options)?,
         Action::Check { name, json } => return check::run(paths, &name, json),
+        Action::Health { name, json } => return health::run(paths, &name, json).await,
     }
     Ok(ExitCode::SUCCESS)
 }

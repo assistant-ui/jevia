@@ -271,7 +271,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             init(force)?;
             Ok(ExitCode::SUCCESS)
         }
-        Command::Harness { action } => harness::run(&ProjectPaths::discover()?, action),
+        Command::Harness { action } => harness::run(&ProjectPaths::discover()?, action).await,
         Command::Route {
             task,
             json,
