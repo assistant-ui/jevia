@@ -92,7 +92,7 @@ function assertAutomaticPipelineDocs(content) {
   assert.match(text, /--preset codex/);
   assert.match(text, /jevia run codex/);
   assert.match(text, /No manual feedback or runs complete step is needed/);
-  assert.match(text, /Unreleased: additional verification is opt-in/);
+  assert.match(text, /CLI 0\.1\.6: additional verification is opt-in/);
   assert.match(text, /CLI 0\.1\.4–0\.1\.5 enabled test discovery by default/);
   assert.match(text, /Recorded history informs later routing automatically, even when task success is unknown/);
   assert.match(text, /Claude Code 2\.1\.251/);
@@ -101,7 +101,7 @@ function assertAutomaticPipelineDocs(content) {
   assert.match(text, /OpenCode v1/);
   assert.match(text, /normal hook trust/);
   assert.match(text, /execution\.observations/);
-  assert.match(text, /schema 5/);
+  assert.match(text, /schema 6/);
   assert.match(text, /each history window/);
   assert.doesNotMatch(text, /verifies it, and records|Unknown, active, and process-exit-only records are excluded/);
   assert.match(text, /when the agent process\/session finishes/);

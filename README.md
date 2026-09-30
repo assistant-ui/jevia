@@ -8,9 +8,9 @@ Use it with Claude Code, Codex, OpenCode, Gemini CLI, Cursor Agent, or a custom
 harness. Recording does not require extra tests or manual feedback; it is not tied
 to one programming language, model provider, or agent runtime.
 
-> The passive-recording workflow below is unreleased. CLI 0.1.4–0.1.5 enabled
-> extra test discovery by default. The next CLI/SDK pair makes verification opt-in
-> and adds schema-4 observations; upgrade all clients sharing a store together.
+> Passive recording is available in CLI 0.1.6 and Node SDK 0.1.2. CLI 0.1.4–0.1.5
+> enabled extra test discovery by default; 0.1.6 makes it opt-in. Back up history
+> and upgrade all clients sharing a store together before writing schema-6 records.
 
 > Jevia is experimental. The CLI, typed routing contract, local outcome store,
 > harness adapters, and Node.js SDK are available today. A managed control plane
@@ -99,7 +99,7 @@ or `runs complete` step is needed. Extra verification is opt-in: a process exit
 remains an observed fact, not proof of task success. Existing explicitly enabled
 checks are preserved. See the [automatic CLI pipeline](docs/reference.md#automatic-cli-pipeline).
 
-Unreleased native capture supports Claude Code 2.1.251+, tested Codex 0.158.x
+CLI 0.1.6 native capture supports Claude Code 2.1.251+, tested Codex 0.158.x
 on macOS/Linux, and OpenCode v1 >= 1.18.33. Codex hooks require normal `/hooks`
 trust review. It records reported models and tool/turn activity without storing
 prompts or tool contents. Unsupported versions/remote sessions keep process facts.
@@ -112,11 +112,11 @@ configuration.
 
 ## Node.js SDK
 
-Unreleased: apps that own execution can optionally call `recordExecution()` with
+With SDK 0.1.2 and CLI 0.1.6+, apps can optionally call `recordExecution()` with
 finished execution facts and bounded events. Saved observations automatically
 inform subsequent routes; feedback and extra verification remain optional.
 `jevia run` already records automatically. See the
-[SDK recording example](packages/jevia-node/README.md#optional-passive-execution-recording-unreleased).
+[SDK recording example](packages/jevia-node/README.md#optional-passive-execution-recording).
 
 Use the typed `jevia` package when your application owns harness execution:
 

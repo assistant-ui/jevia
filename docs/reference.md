@@ -1,12 +1,13 @@
 # Jevia reference
 
-## Unreleased: passive routing context
+## CLI 0.1.6: passive routing context
 
 ### Application-owned execution recording
 
 `jevia runs record-execution <run-id> --json` reads a single bounded JSON object
 from stdin (`harness`, requested `model`, `duration_ms`, optional `exit_code`, and
-optional `events`). The Node SDK exposes `recordExecution()` with the same fields.
+optional `events`). Node SDK 0.1.2 exposes `recordExecution()` with the same fields
+and requires CLI 0.1.6 or newer.
 Call only after app-owned work has stopped. This is optional; it does not launch
 an agent, run verification, or require feedback. `jevia run` already records its
 own execution and must not be reported again through this API.
@@ -25,7 +26,7 @@ integer timestamps/duration, and an optional signed 32-bit exit code. Raw text,
 tool inputs/outputs, arbitrary event fields, outcome labels, and verifier evidence
 are rejected. The new `application` source uses record schema 6 (older schemas
 remain readable); upgrade all readers/writers together. See the
-[SDK example](../packages/jevia-node/README.md#optional-passive-execution-recording-unreleased).
+[SDK example](../packages/jevia-node/README.md#optional-passive-execution-recording).
 
 ### Recording health
 
@@ -55,7 +56,7 @@ This does not infer task success or run additional verification.
 
 ### Passive model reporting
 
-The unreleased `jevia stats` / `jevia stats --json` includes a separate
+In CLI 0.1.6, `jevia stats` / `jevia stats --json` includes a separate
 `observations` section over the same bounded history window. It reports coverage
 (`recorded`, `partial`, `no_events`, `unavailable`, `disabled`, `unsupported`, or
 legacy `not_reported`), active checkpoints, whole-session event counts, sampled
@@ -73,7 +74,7 @@ remain supported). No feedback or extra verification is needed for these metrics
 
 ### Native harness observations
 
-Unreleased `jevia run` enables native capture automatically for supported direct
+CLI 0.1.6 `jevia run` enables native capture automatically for supported direct
 executables (including `.exe` names). It probes `--version` with a two-second
 deadline before adding a session-local adapter. No user/project harness config is
 rewritten. Set `observations = "off"` to disable native capture; process recording
@@ -166,9 +167,10 @@ Replay scans at most 4,096 directory entries/128 candidate runs per invocation,
 with a two-second total budget before routing; it is not an unbounded repair job.
 Routing receives bounded event counts and model summaries, not session IDs/raw events.
 
-New records use schema 5 (schemas 1–4 stay readable). Older CLI versions reject
-schema 5 rather than silently erasing whole-session counters. Upgrade all clients
-sharing a store together; the paired SDK accepts schema 5.
+New records use schema 6 (schemas 1–5 stay readable). Older CLI versions reject
+newer schemas rather than silently erasing metadata. Back up history and upgrade
+all clients sharing a store together to CLI 0.1.6 and Node SDK 0.1.2. SQL database
+schema 1 is unchanged. Do not downgrade clients against updated history.
 
 ### History and task outcomes
 
@@ -245,7 +247,7 @@ PostgreSQL storage checks do connect to the configured database.
 To install the exact crates.io release with Rust 1.92 or newer:
 
 ```bash
-cargo install jevia --version 0.1.5 --locked
+cargo install jevia --version 0.1.6 --locked
 ```
 
 To try unreleased development changes instead:
@@ -269,9 +271,9 @@ Jevia routes the task, launches the agent, and saves execution facts automatical
 and optional known outcomes inform later routing. The name `codex` must match your configured adapter;
 Jevia does not install or authenticate the agent for you.
 
-**Unreleased default change:** additional verification is now opt-in. Recording
+**CLI 0.1.6 default change:** additional verification is now opt-in. Recording
 still happens automatically. CLI 0.1.4–0.1.5 enabled test discovery by default;
-the next release only discovers tests when `auto_verify = true` is explicitly
+CLI 0.1.6 only discovers tests when `auto_verify = true` is explicitly
 configured. See [automatic CLI pipeline](#automatic-cli-pipeline)
 for detection, overrides, and verification limits.
 
@@ -434,7 +436,7 @@ shown and use `--arg=--flag` / `--verify-arg=--flag` for leading-hyphen argument
   the config lock sidecar). The selected harness entry is rewritten when changed.
 - Automatic test detection and persistent opt-out behavior are available in
   CLI 0.1.4. Omitted verifier options preserve an existing verifier and automatic-detection
-  setting. In the next release, new adapters default to recording without extra tests. Use `--no-verification`
+  setting. Since CLI 0.1.6, new adapters default to recording without extra tests. Use `--no-verification`
   to disable both explicit and automatic checks, or `--auto-verification` to remove
   a custom verifier and re-enable detection. Supplying `--verify-command` replaces
   its whole command and argument list (for example, `--verify-command cargo
@@ -642,7 +644,7 @@ are one-time prerequisites, not per-run feedback tasks. Jevia does not retry or
 repair failed work automatically.
 
 If you opt in with `auto_verify = true` and have no explicit verifier, Jevia
-detects existing tests at the project root. The unreleased default is `false`:
+detects existing tests at the project root. The default in CLI 0.1.6 is `false`:
 
 - Rust: `cargo test --workspace` for a root Cargo package/workspace.
 - Node: the existing `test` script, using `packageManager`, then an unambiguous
@@ -663,7 +665,7 @@ Configure a suitable check only if you want extra verification. `harness check <
 detection and executable availability without running tests. Passing tests means
 the selected checks passed—not a guarantee that every requirement was satisfied.
 
-Test discovery is available since CLI 0.1.4. In the next release, omitted
+Test discovery is available since CLI 0.1.4. Since CLI 0.1.6, omitted
 `auto_verify` means no extra tests; existing explicit `true` values and custom
 verifiers remain honored. Earlier setup commands wrote `auto_verify = true`, so
 use `harness setup ... --no-verification --replace --apply` or set it to `false`

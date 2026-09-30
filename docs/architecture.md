@@ -48,7 +48,7 @@ catalogs change. Templates are rendered into a process and argument vector;
 they are never passed through a shell. Jevia launches the child in the project
 root and mirrors its exit code. Recording is automatic and language-independent.
 After a successful exit, Jevia runs extra checks only when explicitly configured.
-CLI 0.1.4–0.1.5 enabled root-test detection by default; the unreleased default is
+CLI 0.1.4–0.1.5 enabled root-test detection by default; the CLI 0.1.6 default is
 opt-in and preserves existing explicit choices. Passive observations enter future
 routing without a known task outcome or manual feedback/completion call.
 A passing optional check is evidence, not proof of every requirement.

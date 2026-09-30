@@ -4,9 +4,9 @@ Typed, shell-free access to Jevia from Node.js. The package invokes the Jevia
 CLI's JSON interface so routing policy, local storage, caching, privacy, and
 outcome eligibility stay consistent with the Rust implementation.
 
-> Unreleased: schema-6 application recording and passive routing context require the
-> matching new CLI and SDK. Published CLI 0.1.4–0.1.5 used different verification
-> defaults. Upgrade all readers/writers sharing a store together.
+> SDK 0.1.2 supports schema-6 application recording and passive routing context
+> with CLI 0.1.6. CLI 0.1.4–0.1.5 used different verification defaults. Back up
+> history and upgrade all readers/writers sharing a store together.
 
 ## Install
 
@@ -30,7 +30,7 @@ after `jevia run`.** Extra verification is opt-in; existing explicit checks are
 preserved. Without a verifier or feedback, task outcome stays `unknown`, even on
 exit zero. Passive observations still inform future routing.
 
-Unreleased native capture covers Claude Code 2.1.251+, tested Codex 0.158.x on
+CLI 0.1.6 native capture covers Claude Code 2.1.251+, tested Codex 0.158.x on
 macOS/Linux (with normal hook trust), and OpenCode v1 >= 1.18.33. Unsupported
 versions/remote sessions keep process facts. Hook events report activity, not proof
 that a task was solved. Optional verification runs after the launched session ends.
@@ -85,7 +85,7 @@ outcomes. If you report success or failure, it can inform the next route without
 requiring verifier evidence. You can also explicitly record `unknown` when the
 result is inconclusive. The SDK does not generate positive feedback on your behalf.
 
-### Optional passive execution recording (unreleased)
+### Optional passive execution recording
 
 When your app owns execution, it can record facts without deciding whether the
 task succeeded. After the work has stopped, call this **once per routed run**:
@@ -125,7 +125,7 @@ signed 32-bit integer or null. Omitted events are allowed. No raw prompts, tool
 arguments, output, arbitrary metadata, outcomes, or verification claims are
 accepted. Payload travels over stdin, not command arguments. Source is
 `application`, distinct from native harness observations. This requires the
-matching unreleased CLI and SDK; upgrade all readers/writers before using schema 6.
+CLI 0.1.6+ and SDK 0.1.2+; upgrade all readers/writers before using schema 6.
 
 ### Recorded outcomes inform the next route automatically
 
@@ -179,7 +179,8 @@ if (observations) {
 These typed fields are optional for older and route-only records. `execution.model`
 is the requested model; `event.model` is present only when the harness reported it.
 `recorded` means some events arrived, not complete coverage or task success. Events
-are bounded to 256 and are persisted when the supervised process stops. The SDK
+are bounded to the latest 256, with whole-session counters retained separately.
+CLI observations are checkpointed during execution and saved again when it stops. The SDK
 does not attach hooks to agents your application launches outside `jevia run`.
 No feedback call, verifier, or history argument is required to reuse observations
 already saved by the CLI. See the [capture contract and limits](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#native-harness-observations).
@@ -211,7 +212,7 @@ Already-aborted signals never launch a process. Timeout/abort diagnostics may
 be empty because rejection does not wait for output collection. Cancellation
 cannot undo completed writes; inspect storage before retrying a mutation.
 
-Record responses are validated at runtime, including schema versions 1–4,
+Record responses are validated at runtime, including schema versions 1–6,
 finite probabilities in `[0, 1]`, safe-integer timestamps, and optional lifecycle,
 execution, bounded harness observations, verification, outcome evidence, and feedback. Malformed or unsupported
 responses raise `JeviaProtocolError` without their contents. Legacy records can
