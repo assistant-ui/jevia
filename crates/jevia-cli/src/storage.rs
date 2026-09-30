@@ -222,7 +222,7 @@ impl Storage {
 
     pub async fn check(&self) -> Result<usize> {
         match self {
-            Self::Jsonl(paths) => Ok(store::load(&paths.runs)?.len()),
+            Self::Jsonl(paths) => store::count(&paths.runs),
             Self::Database(db) => db.check().await,
         }
     }

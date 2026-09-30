@@ -15,7 +15,7 @@ use tempfile::NamedTempFile;
 mod check;
 mod history;
 mod maintenance;
-pub use check::check_deep;
+pub use check::{check_deep, count};
 pub use history::routing_history;
 pub(crate) use maintenance::archivable;
 pub use maintenance::{Maintenance, Report as MaintenanceReport, maintain};
@@ -23,6 +23,10 @@ pub use maintenance::{Maintenance, Report as MaintenanceReport, maintain};
 mod lookup;
 pub use lookup::{get, try_get};
 
+mod rewrite;
+use rewrite::update_unlocked;
+
+#[cfg(test)]
 pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
     let parent = path
         .parent()
@@ -32,10 +36,6 @@ pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
     }
 
     let _lock = acquire_lock(path, LockMode::Shared)?;
-    load_unlocked(path)
-}
-
-fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
     let mut records = Vec::new();
     read_records(path, |record| {
         records.push(record);
@@ -500,50 +500,6 @@ fn update(
 ) -> Result<RouteRecord> {
     let _lock = acquire_lock(path, LockMode::Exclusive)?;
     update_unlocked(path, run_id, update_record)
-}
-
-fn update_unlocked(
-    path: &Path,
-    run_id: &str,
-    update_record: impl FnOnce(&mut RouteRecord) -> Result<()>,
-) -> Result<RouteRecord> {
-    let mut records = load_unlocked(path)?;
-    let updated = records
-        .iter_mut()
-        .find(|record| record.decision.run_id == run_id)
-        .context("run id was not found in local history")?;
-    update_record(updated)?;
-    updated.schema_version = RECORD_SCHEMA_VERSION;
-    let result = updated.clone();
-
-    let parent = path
-        .parent()
-        .context("run history path does not have a parent directory")?;
-    let mut temporary = NamedTempFile::new_in(parent)
-        .with_context(|| format!("could not create a temporary file in {}", parent.display()))?;
-    {
-        let mut writer = BufWriter::new(temporary.as_file_mut());
-        for record in &records {
-            serde_json::to_writer(&mut writer, record).context("could not encode run record")?;
-            writer
-                .write_all(b"\n")
-                .context("could not terminate run record")?;
-        }
-        writer
-            .flush()
-            .context("could not flush updated run history")?;
-    }
-    temporary
-        .as_file()
-        .sync_all()
-        .context("could not sync updated run history")?;
-    temporary
-        .persist(path)
-        .map_err(|error| error.error)
-        .with_context(|| format!("could not atomically replace {}", path.display()))?;
-    sync_parent(path)?;
-
-    Ok(result)
 }
 
 #[derive(Debug, Clone, Copy)]
