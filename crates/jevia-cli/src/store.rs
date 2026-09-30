@@ -13,12 +13,13 @@ use jevia_core::{
 use tempfile::NamedTempFile;
 
 mod check;
-mod lookup;
 mod maintenance;
 pub use check::check_deep;
-pub use lookup::{get, try_get};
 pub(crate) use maintenance::archivable;
 pub use maintenance::{Maintenance, Report as MaintenanceReport, maintain};
+
+mod lookup;
+pub use lookup::{get, try_get};
 
 pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
     let parent = path
