@@ -19,6 +19,7 @@ mod check;
 mod export;
 #[cfg(test)]
 mod import_tests;
+mod observations;
 
 const SCHEMA_VERSION: i64 = 1;
 const DB_TIMEOUT: Duration = Duration::from_secs(5);
@@ -27,6 +28,9 @@ pub struct Database {
     pool: AnyPool,
     project: String,
     sqlite_path: Option<PathBuf>,
+    // PostgreSQL <16 retains the legacy query; IS JSON is needed to keep corrupt
+    // text inspectable instead of making an additive index reject old writes.
+    supports_observation_index: bool,
     // Every CLI invocation has a distinct token. Recovery revokes the previous
     // token, fencing delayed writes from a disconnected supervisor.
     owner: String,
@@ -128,10 +132,21 @@ impl Database {
             })
             .connect_with(options))
         .await?;
+        let supports_observation_index = if postgres {
+            let version: String =
+                db(sqlx::query_scalar("SHOW server_version_num").fetch_one(&pool)).await?;
+            version
+                .parse::<u32>()
+                .map_err(|_| anyhow!("invalid database version"))?
+                >= 160_000
+        } else {
+            true
+        };
         let database = Self {
             pool,
             project,
             sqlite_path,
+            supports_observation_index,
             owner: uuid::Uuid::new_v4().to_string(),
         };
         if initialize {
@@ -201,6 +216,7 @@ impl Database {
             .execute(&mut *tx)).await?;
         db(sqlx::query("CREATE INDEX IF NOT EXISTS jevia_runs_evidence ON jevia_runs(project, learning, ordinal)")
             .execute(&mut *tx)).await?;
+        self.initialize_observation_index(&mut tx).await?;
         db(sqlx::query("INSERT INTO jevia_projects (project, next_seq) VALUES ($1, 0) ON CONFLICT (project) DO NOTHING")
             .bind(&self.project).execute(&mut *tx)).await?;
         db(tx.commit()).await
@@ -278,6 +294,14 @@ impl Database {
     }
 
     pub async fn recent_observations(&self, limit: usize) -> Result<Vec<RouteRecord>> {
+        if self.supports_observation_index {
+            return self.indexed_recent_observations(limit).await;
+        }
+        self.legacy_recent_observations(limit).await
+    }
+
+    // Compatibility fallback for PostgreSQL servers without IS JSON support.
+    async fn legacy_recent_observations(&self, limit: usize) -> Result<Vec<RouteRecord>> {
         let mut records = Vec::new();
         if limit == 0 {
             return Ok(records);

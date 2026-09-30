@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Index passive execution history in SQLite and PostgreSQL 16+ so unrelated
+  routed/active runs do not require a full history scan before cache lookup.
+  Existing stores can add the index explicitly with `storage init`; record and
+  SQL schemas, history ordering, and optional feedback/verification are unchanged.
 - Bound cache/JSONL file-lock acquisition; route live on cache contention and
   explicitly fail on unavailable history without dropping recorded evidence.
 - Ignore native recording journals, loss markers, event locks, temporary snapshots,
