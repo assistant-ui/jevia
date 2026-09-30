@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+## 0.1.6 — 2026-09-29
+
+- Record harness execution automatically without requiring feedback or additional
+  tests. Keep task outcomes unknown unless separately assessed; use passive
+  observations and known outcomes as distinct routing context and cache inputs.
+- Make additional verification opt-in while preserving explicitly configured
+  verifiers and `auto_verify = true` settings.
+- Capture allowlisted native activity for Claude Code 2.1.251+, tested Codex
+  0.158.x on macOS/Linux with normal hook trust, and OpenCode v1 >= 1.18.33.
+  Unsupported versions/configurations retain process-level recording.
+- Checkpoint live observations, replay recoverable journals, retain whole-session
+  counters beyond the bounded recent sample, and preserve durable events when
+  final reads fail. Keep unreadable or subsequently changed journals for recovery.
+- Add passive per-model activity/coverage to `stats` and read-only
+  `harness health <name> [--json]` diagnostics. Neither infers task correctness.
+- Add CI tests against pinned real harness binaries and loopback model endpoints,
+  preserving normal hook trust and avoiding paid model calls.
+- Release Node SDK `jevia@0.1.2` with optional `recordExecution()` for finished
+  app-owned work. Save application-reported events without requiring feedback or
+  verification; automatically reuse their summaries in subsequent routes.
+- Bound and validate recording input, keep it off command arguments, support
+  idempotent retries, and prevent replacement of active or supervised executions
+  consistently across JSONL, SQLite, and PostgreSQL.
+
+### Compatibility and upgrade
+
+Back up history and upgrade every CLI/SDK reader and writer sharing a store
+together: CLI/core 0.1.6 and Node SDK 0.1.2 use record schema 6. Schemas 1–5 remain
+readable, but older clients reject newer records. SQL database schema 1 is
+unchanged. Do not downgrade against updated history or silently switch to an old
+JSONL copy. The SDK recording API requires CLI 0.1.6 or newer.
+
+In CLI 0.1.4–0.1.5, omitted `auto_verify` enabled test discovery. In 0.1.6 it
+defaults to false; opt in explicitly if you want Jevia to run additional tests.
+Native events are best-effort operational facts, not verified success or complete
+model attribution. Existing task-text privacy settings still apply to routing.
+
+This experimental patch also adds Rust struct fields and enum variants; callers
+constructing harness/execution structs or exhaustively matching observation types
+must review their code. It is not source-compatible with every 0.1.5 library
+caller. Rust 1.92 and Node.js 20 remain the minimum supported versions.
+
 ## 0.1.5 — 2026-09-29
 
 - Add guided, shell-free harness presets for Codex, Claude Code, OpenCode, and
