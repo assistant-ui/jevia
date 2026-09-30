@@ -64,6 +64,7 @@ impl Database {
 
     pub(super) async fn indexed_recent_observations(
         &self,
+        tx: &mut Transaction<'_, Any>,
         limit: usize,
     ) -> Result<Vec<RouteRecord>> {
         if limit == 0 {
@@ -72,7 +73,7 @@ impl Database {
         let rows: Vec<String> = db(sqlx::query_scalar(&self.observation_query())
             .bind(&self.project)
             .bind(i64::try_from(limit).unwrap_or(i64::MAX))
-            .fetch_all(&self.pool))
+            .fetch_all(&mut **tx))
         .await?;
         // One statement supplies a consistent snapshot. Only the selected window
         // crosses the SQL boundary; deep check remains the full-store validator.

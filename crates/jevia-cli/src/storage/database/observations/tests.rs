@@ -321,3 +321,54 @@ async fn postgres_observation_index_tracks_mutations() {
 async fn postgres_sparse_observations_use_index() {
     query_plan(true).await;
 }
+
+async fn shared_history_snapshot(postgres: bool) {
+    let mut f = Fixture::new(postgres).await;
+    f.database.append(&record(0)).await.unwrap();
+    let supports_index = f.database.supports_observation_index;
+    for indexed in [false, true] {
+        if indexed && !supports_index {
+            continue;
+        }
+        f.database.supports_observation_index = indexed;
+        for (before, after) in [
+            (Outcome::Unknown, Outcome::Success),
+            (Outcome::Success, Outcome::Unknown),
+        ] {
+            f.database
+                .outcome("observation-0", before, Some("snapshot fixture"))
+                .await
+                .unwrap();
+            // Run the production window readers with the same snapshot used by
+            // routing_history, committing feedback exactly between the reads.
+            let mut tx = f.database.read_snapshot().await.unwrap();
+            let known = f.database.recent_with(&mut *tx, 20, true).await.unwrap();
+            f.database
+                .outcome("observation-0", after, Some("concurrent feedback"))
+                .await
+                .unwrap();
+            let passive = f.database.observations_in(&mut tx, 20).await.unwrap();
+            tx.commit().await.unwrap();
+            assert_eq!(
+                known.len() + passive.len(),
+                1,
+                "attempt vanished or appeared twice"
+            );
+            assert_eq!(known.iter().chain(&passive).next().unwrap().outcome, before);
+            let (known, passive) = f.database.routing_history(20).await.unwrap();
+            assert_eq!(known.len() + passive.len(), 1);
+            assert_eq!(known.iter().chain(&passive).next().unwrap().outcome, after);
+        }
+    }
+}
+
+#[tokio::test]
+async fn sqlite_routing_windows_share_a_feedback_snapshot() {
+    shared_history_snapshot(false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated PostgreSQL database in JEVIA_TEST_POSTGRES_URL"]
+async fn postgres_routing_windows_share_a_feedback_snapshot() {
+    shared_history_snapshot(true).await;
+}

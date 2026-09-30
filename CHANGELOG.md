@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Read known outcomes and passive observations from one consistent snapshot;
+  concurrent feedback cannot move an attempt out of both routing windows. JSONL
+  collects both bounded windows in one validated pass under a shared lock.
 - Index passive execution history in SQLite and PostgreSQL 16+ so unrelated
   routed/active runs do not require a full history scan before cache lookup.
   Existing stores can add the index explicitly with `storage init`; record and

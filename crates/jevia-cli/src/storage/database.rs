@@ -269,6 +269,15 @@ impl Database {
     }
 
     pub async fn recent(&self, limit: usize, evidence_only: bool) -> Result<Vec<RouteRecord>> {
+        self.recent_with(&self.pool, limit, evidence_only).await
+    }
+
+    async fn recent_with<'a>(
+        &self,
+        executor: impl sqlx::Executor<'a, Database = Any>,
+        limit: usize,
+        evidence_only: bool,
+    ) -> Result<Vec<RouteRecord>> {
         let query = if evidence_only {
             "SELECT record FROM jevia_runs WHERE project = $1 AND learning = 1 ORDER BY ordinal DESC LIMIT $2"
         } else {
@@ -277,9 +286,20 @@ impl Database {
         let rows: Vec<String> = db(sqlx::query_scalar(query)
             .bind(&self.project)
             .bind(i64::try_from(limit).unwrap_or(i64::MAX))
-            .fetch_all(&self.pool))
+            .fetch_all(executor))
         .await?;
         rows.iter().rev().map(|row| decode(row)).collect()
+    }
+
+    pub async fn routing_history(
+        &self,
+        limit: usize,
+    ) -> Result<(Vec<RouteRecord>, Vec<RouteRecord>)> {
+        let mut tx = self.read_snapshot().await?;
+        let known = self.recent_with(&mut *tx, limit, true).await?;
+        let observed = self.observations_in(&mut tx, limit).await?;
+        db(tx.commit()).await?;
+        Ok((known, observed))
     }
 
     pub async fn get(&self, id: &str) -> Result<RouteRecord> {
@@ -293,25 +313,45 @@ impl Database {
         decode(&row.context("run id was not found in this project's history")?)
     }
 
-    pub async fn recent_observations(&self, limit: usize) -> Result<Vec<RouteRecord>> {
+    async fn observations_in(
+        &self,
+        tx: &mut Transaction<'_, Any>,
+        limit: usize,
+    ) -> Result<Vec<RouteRecord>> {
         if self.supports_observation_index {
-            return self.indexed_recent_observations(limit).await;
+            return self.indexed_recent_observations(tx, limit).await;
         }
-        self.legacy_recent_observations(limit).await
+        self.legacy_observations_in(tx, limit).await
+    }
+
+    #[cfg(test)]
+    async fn recent_observations(&self, limit: usize) -> Result<Vec<RouteRecord>> {
+        Ok(self.routing_history(limit).await?.1)
+    }
+
+    #[cfg(test)]
+    async fn legacy_recent_observations(&self, limit: usize) -> Result<Vec<RouteRecord>> {
+        let mut tx = self.read_snapshot().await?;
+        let records = self.legacy_observations_in(&mut tx, limit).await?;
+        db(tx.commit()).await?;
+        Ok(records)
     }
 
     // Compatibility fallback for PostgreSQL servers without IS JSON support.
-    async fn legacy_recent_observations(&self, limit: usize) -> Result<Vec<RouteRecord>> {
+    async fn legacy_observations_in(
+        &self,
+        tx: &mut Transaction<'_, Any>,
+        limit: usize,
+    ) -> Result<Vec<RouteRecord>> {
         let mut records = Vec::new();
         if limit == 0 {
             return Ok(records);
         }
-        let mut tx = self.read_snapshot().await?;
         let mut before = i64::MAX;
         loop {
             let rows: Vec<(i64, String)> = db(sqlx::query_as(
                 "SELECT ordinal, record FROM jevia_runs WHERE project = $1 AND ordinal < $2 ORDER BY ordinal DESC LIMIT 128",
-            ).bind(&self.project).bind(before).fetch_all(&mut *tx)).await?;
+            ).bind(&self.project).bind(before).fetch_all(&mut **tx)).await?;
             if rows.is_empty() {
                 break;
             }
@@ -329,7 +369,6 @@ impl Database {
                 break;
             }
         }
-        db(tx.commit()).await?;
         records.reverse();
         Ok(records)
     }
