@@ -14,6 +14,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  native-harnesses:
+    name: Native harness contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.92.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo build --locked -p jevia
+      - name: Install pinned native harnesses
+        run: npm install --prefix "$RUNNER_TEMP/native-tools" --no-audit --no-fund --save-exact opencode-ai@1.18.33 @openai/codex@0.158.0-alpha.2
+      - name: Exercise real harnesses against loopback providers
+        env:
+          JEVIA_NATIVE_BIN_DIR: ${{ runner.temp }}/native-tools/node_modules/.bin
+        run: node --test tests/native-harness.test.mjs
+
   node:
     name: Node SDK checks
     runs-on: ${{ matrix.os }}
