@@ -20,19 +20,43 @@ task
 ### `jevia-core`
 
 Owns versioned configuration, the Jev wire contract, confidence fallback,
-route records, and outcome types. It does not read environment variables or
-write files.
+route records, bounded observation types, and outcome types. It does not read
+environment variables or write files.
 
 ### `jevia-cli`
 
-Owns command parsing, project discovery, credential lookup, and the local
-JSONL store. Task text is local and ignored by Git unless a user explicitly
-moves or publishes it.
+Owns command parsing, project discovery, credential lookup, harness supervision,
+and the selected JSONL, SQLite, or PostgreSQL store. JSONL is the default; SQL is
+explicitly configured, not an automatic mirror or fallback. Local history and
+recording artifacts are ignored by Git, but Git ignore rules are not access
+control and do not untrack files already committed.
 
-`jevia doctor` validates local state without a network request. `jevia check`
+`jevia doctor` validates configuration, selected storage, cache, and credential
+presence without calling Jev. PostgreSQL storage checks still contact the
+configured database and use a rolled-back write probe. `jevia check`
 adds one live Jev round trip to verify credentials, connectivity, and response
 decoding, but deliberately does not persist that synthetic check as routing
 history or cache data.
+
+On a live route, the current task and eligible historical task text are sent to
+the configured Jev endpoint along with bounded outcome/observation summaries.
+`privacy.store_task_text = false` omits task text from **new history records**;
+it does not hide the current routing request or redact previously stored tasks.
+Raw native hook payloads, transcripts, and tool contents are not persisted, and
+feedback reasons, session/agent IDs, and raw event lists are not included in the
+routing summaries. A cache hit avoids the Jev classification call, not the
+history read used to construct its key.
+
+### `packages/jevia-node`
+
+The Node SDK invokes the local CLI with structured arguments and validates its
+JSON output. It does not connect directly to databases. Storage selection,
+recording, and routing-history behavior therefore use the same CLI contracts.
+`route()` records the decision but does not run or observe an application-owned
+agent. Apps may call `recordExecution()` for finished work and optionally report
+feedback; neither a verifier nor a known outcome is required to save those facts.
+Application-reported observations retain their own source, separate from native
+hooks. The recording API requires CLI 0.1.6 or newer.
 
 ### `website`
 
@@ -73,8 +97,11 @@ eligible outcomes continue to inform those decisions automatically.
 Explicit SDK feedback is application-reported evidence and does not require a
 CLI verifier or external-completion call to become eligible. Every subsequent
 `route` reads eligible history from the selected backend before building its
-cache key and Jev request. Separate outcome and observation windows each use `router.history_limit`
-apply equally to SDK and CLI callers; no separate SDK history payload is needed.
+cache key and Jev request. Separate outcome and observation windows each use
+`router.history_limit` and apply equally to SDK and CLI callers; no separate SDK
+history payload is needed. Learning here means automatically supplying recorded
+context to subsequent decisions, not training model weights or labeling every
+completed process as a successful task.
 
 ### Routing cache
 
@@ -123,16 +150,26 @@ repository and security boundary; no dashboard code belongs here.
 
 ## Persistence
 
-`.jevia/config.toml` is reviewable project policy. `.jevia/runs.jsonl` is
-local operational data. Feedback updates are written to a temporary file,
-flushed, synchronized, and renamed over the previous history.
+`.jevia/config.toml` is reviewable project policy. With the default JSONL backend,
+`.jevia/runs.jsonl` is local operational data. Feedback updates are written to a
+temporary file, flushed, synchronized, and renamed over the previous history.
 
-All history reads take a shared lock and all mutations take an exclusive lock
+JSONL history reads take a shared lock and mutations take an exclusive lock
 on `.jevia/runs.lock`. The separate lock file remains stable when the history
 file is atomically replaced. Appends are encoded before locking and written as
 one buffer; updates hold the lock across the complete read-modify-replace
 transaction. On Unix, Jevia also synchronizes the parent directory after a
 history mutation.
+
+SQLite stores history at its configured filesystem path; PostgreSQL stores it in
+an explicitly named project namespace with credentials resolved from an
+environment variable. SQL keeps the complete versioned record plus derived query indexes.
+Transactions and project-scoped write coordination protect updates; SQLite uses
+file-based execution leases alongside the database, while PostgreSQL uses
+session advisory locks. PostgreSQL requires direct or session-pooled connections,
+not transaction-mode pooling. Selecting SQL does not import old JSONL history or
+fall back to it on an error; migration is an explicit, preview-first operation.
+See the [storage reference](reference.md#storage).
 
 `.jevia/cache.jsonl` is bounded, ignored local data protected by the stable
 `.jevia/cache.lock` sidecar. Inserts remove expired entries, replace an existing
@@ -148,17 +185,26 @@ changed evidence selects a new fingerprint. Waits are bounded (Jev timeout plus
 one second, capped at 30 seconds), then fail open to live routing. API failures
 and process exits release the lease, and `--no-cache` bypasses coordination.
 
-Schema-version-1, -2, and -3 history remains readable. New or mutated records use
-version 4 to protect native observations from older writers. A per-run OS file lease is
-held from before the running transition until the terminal record is saved.
-Explicit recovery obtains that same lease non-blockingly before marking a
+Record schemas 1–5 remain readable. New records and typed record updates use
+**schema 6**, including application-reported observations; the SQL database
+schema remains **1**. Older readers/writers may reject newer records, so upgrade
+all clients sharing a store together and back up before upgrading. Do not
+downgrade against updated history or silently switch back to an old JSONL copy.
+
+A per-run execution lease is held from before the running transition until the
+terminal record is saved. Explicit recovery attempts that same lease without
+waiting for another supervisor to release it before marking a
 running/verifying record interrupted; it never reruns work or infers task failure.
-The durable phases are routed, running, verifying, completed, launch_failed, and
-interrupted. Start and finish timestamps are distinct from routing time.
+PostgreSQL recovery also requires confirmation that remote work has stopped;
+losing a database connection does not prove its child process exited.
+The durable phases are routed, running, verifying, completed, launch_failed,
+interrupted, cancelled, and timed_out. Start and finish timestamps are distinct
+from routing time. Stable lock sidecars are not removed to force an unlock;
+file-lock guards explicitly release ownership when the operation ends.
 Manual feedback is refused on active runs and never invents harness metadata.
 For CLI-run work, a configured verifier takes precedence; otherwise root-project
-test detection requires `auto_verify = true`. Detected checks use the same durable verification state and
-evidence, run with CI semantics and owned process-tree cleanup, and have a default
+test detection requires `auto_verify = true`. Detected checks use the same durable
+verification state and evidence, run with CI semantics and owned process-tree cleanup, and have a default
 five-minute deadline. Missing/ambiguous checks leave process-only evidence; they
 are never silently treated as verification. No manual completion is needed after
 `run`. Route-only/SDK integrations remain explicit and do not execute tests.
@@ -167,19 +213,76 @@ per-run lease and atomically records manual feedback plus a completed lifecycle
 only for pending, unowned external work. It does not invent a start time or
 execution/verifier evidence. Ordinary feedback never changes lifecycle state.
 
-Native hooks append normalized events to a private, bounded per-run journal under
-`.jevia`. The supervisor merges the snapshot into its selected backend at process
-termination using the existing ownership lease. Hook subprocesses never mutate
-SQL records or compete for supervisor ownership. Successful persistence removes
-the journal; a crash/failed write leaves it for manual inspection. `runs recover`
-does not replay journals, and event snapshots are not streamed live to SQL.
+### Native checkpoint and replay lifecycle
 
-History maintenance is explicit and preview-first. Apply takes the same exclusive
-history lock, revalidates the complete input, durably saves an exact original-byte
+Native hooks append normalized events to a private, bounded per-run journal under
+`.jevia`. Hook subprocesses never mutate SQL records or compete for supervisor
+ownership. The supervisor attempts to checkpoint changed snapshots to the
+**selected backend, including SQL**, every two seconds during harness execution,
+and saves a final snapshot with terminal execution state. These are periodic
+snapshots, not a durable per-event SQL stream.
+
+The recent sample holds at most 256 events; whole-session totals and bounded
+per-model counters survive sampling. Coverage and discarded-input counts remain
+separate from outcomes. A private, payload-free loss marker can indicate a hook
+write was missed; its contribution is a conservative lower bound, not an exact
+count of lost events. Repeated reads/replay do not multiply that contribution.
+
+Checkpoint waits have a one-second supervisor budget, while process cancellation
+and deadlines stay responsive. Busy JSONL checkpoint locks are skipped, and
+late supervisor writes cannot overwrite terminal state or revoked SQL ownership.
+An unreadable final journal preserves earlier durable observations and marks
+coverage partial rather than erasing them. Cleanup removes the journal/loss
+marker only after confirming they still match the saved snapshot; failed writes,
+unreadable files, or later events retain the retry source.
+
+Before routing a new `route`/`run`, Jevia attempts best-effort journal replay
+under execution and journal leases. `runs recover` also attempts targeted replay
+after its lifecycle safety checks. Replay updates observations without changing
+task outcomes or inferring that surviving children stopped. Active runs remain
+active and retain their journals for later events. Ambiguous, corrupt, missing,
+or contended inputs remain for retry or inspection. Read-only `runs show` and
+`stats` do not trigger replay.
+
+Each replay attempt has one two-second budget covering scanning, locking,
+reading, and persistence, with caps of 4,096 scanned directory entries and 128
+candidate runs. Work can be deferred; this is not an unbounded repair job or a
+guarantee that the entire route command completes in two seconds. The budget
+bounds awaiting replay, not cancellation of an already-running filesystem
+operation. Required history reads, cache coordination, provider requests, and
+harness execution are separate.
+See the [recording reference](reference.md#native-harness-observations) for
+adapter support, privacy, replay limits, and version-specific caveats.
+
+### History maintenance
+
+History maintenance is explicit and preview-first. JSONL apply takes the same
+exclusive history lock, revalidates the complete input, durably saves an exact original-byte
 backup, and then atomically replaces the active file. Archival also saves removed
 records before replacement. Raw record bytes are retained, including additive
 metadata; unknown schemas and duplicate identities are refused. Repair only
 handles a truncated final JSON line without a newline, or a missing final newline
 on otherwise valid history. Active/pending and legacy-unknown records cannot be
 archived. Archives are outside the active learning/feedback history and are never
-deleted automatically. Maintenance still scans the full active history in memory.
+deleted automatically. JSONL maintenance still scans the full active history in
+memory.
+
+SQL archival instead scans in bounded pages under project write coordination and
+saves a full backup plus an archive of removed records before deleting rows in a
+transaction. Export/import and deep checks are separate explicit operations;
+JSONL tail repair is not SQL repair. Archives are not database-native disaster
+recovery, and an ambiguous commit error requires inspection before retrying.
+See [history maintenance](reference.md#history-maintenance).
+
+## Implementation map
+
+- [CLI routing and supervision](../crates/jevia-cli/src/main.rs): history loading,
+  cache decisions, checkpoint scheduling, and lifecycle commands.
+- [Native recording](../crates/jevia-cli/src/observations.rs): bounded journals,
+  snapshot persistence, replay, and safe final cleanup.
+- [Storage facade](../crates/jevia-cli/src/storage.rs): shared JSONL/SQL contracts
+  and execution leases; [SQL implementation](../crates/jevia-cli/src/storage/database.rs).
+- [Record schema](../crates/jevia-core/src/route.rs) and
+  [Jev request construction](../crates/jevia-core/src/jev.rs): outcome eligibility,
+  passive history, and cache-key material.
+- [Node SDK](../packages/jevia-node/src/index.ts): CLI-backed application APIs.
