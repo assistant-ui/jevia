@@ -1086,7 +1086,9 @@ original storage health result remains separate: a missing performance index is
 not data corruption. SDK `checkStorage()` returns the additional human-readable
 line without changing its API.
 
-### Structured storage checks (unreleased)
+### Structured storage checks
+
+Available in CLI 0.1.7 and Node SDK 0.1.3.
 
 ```sh
 jevia storage check --json
@@ -1109,10 +1111,10 @@ They summarize sequential checks, not one atomic database-wide snapshot. The
 existing basic/deep guarantees below apply; neither mode initializes storage or
 repairs records/indexes, and no Jev credential or request is needed.
 
-The unreleased Node SDK adds `checkStorageReport({ deep?: boolean, signal? })`.
+Node SDK 0.1.3 adds `checkStorageReport({ deep?: boolean, signal? })`.
 It validates schema and report/exit-code consistency and returns typed healthy
 **or failed** reports; check `report.ok`. Process, timeout, cancellation, and
-protocol errors still throw. This method requires a CLI with `--json` support;
+protocol errors still throw. This method requires CLI 0.1.7 or newer;
 older CLIs fail explicitly rather than falling back to parsing text.
 `checkStorage()` remains the unchanged human-readable API.
 

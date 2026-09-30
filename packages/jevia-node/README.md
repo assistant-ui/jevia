@@ -322,7 +322,7 @@ console.log(await jevia.checkStorage());
 console.log(await jevia.checkStorage({ deep: true }));
 ```
 
-The **unreleased SDK and CLI** also provide typed diagnostics (older CLI versions
+**SDK 0.1.3 and CLI 0.1.7 or newer** also provide typed diagnostics (older CLI versions
 do not support this method):
 
 ```ts

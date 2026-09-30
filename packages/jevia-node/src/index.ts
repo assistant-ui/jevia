@@ -426,7 +426,7 @@ export class JeviaClient {
     return this.execute(["storage", "check", ...(options.deep === true ? ["--deep"] : [])], options.signal);
   }
 
-  /** Structured health, including reported check failures. Process/protocol errors still reject. */
+  /** SDK 0.1.3 / CLI >= 0.1.7. Returns reported health failures; process/protocol errors still reject. */
   async checkStorageReport(options: StorageCheckOptions = {}): Promise<StorageCheckReport> {
     requireOptionalBoolean(options.deep, "deep");
     let output: string;
