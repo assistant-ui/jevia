@@ -634,7 +634,13 @@ async fn execute_observed_harness(
             tokio::select! {
                 result = &mut run => break result,
                 _ = timer.tick() => {
-                    if !matches!(tokio::time::timeout(std::time::Duration::from_secs(1), capture.checkpoint(storage, &record.decision.run_id, &mut previous)).await, Ok(Ok(()))) && !warned {
+                    // Keep polling process exit, cancellation and the phase deadline
+                    // while recording is pending (including a slow SQL backend).
+                    let checkpoint = tokio::select! {
+                        result = &mut run => break result,
+                        result = tokio::time::timeout(std::time::Duration::from_secs(1), capture.checkpoint(storage, &record.decision.run_id, &mut previous)) => result,
+                    };
+                    if !matches!(checkpoint, Ok(Ok(()))) && !warned {
                         eprintln!("jevia: observation checkpoint delayed; journal retained (details redacted)");
                         warned = true;
                     }
@@ -1576,6 +1582,102 @@ mod tests {
         assert_eq!(stored.outcome, Outcome::Unknown);
         assert_eq!(stored.lifecycle.unwrap().state, RunState::TimedOut);
         assert!(stored.execution.unwrap().verification.is_none());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn busy_history_checkpoint_does_not_delay_killing_the_harness() {
+        use std::time::Duration;
+
+        let dir = tempdir().unwrap();
+        let paths = ProjectPaths::at(dir.path().to_path_buf());
+        let mut record = sample_record();
+        record.decision.run_id = uuid::Uuid::new_v4().to_string();
+        store::append(&paths.runs, &record).unwrap();
+        let storage = Storage::open(&Config::default(), &paths, false)
+            .await
+            .unwrap();
+        let invocation = HarnessInvocation {
+            program: "sh".into(),
+            args: vec![
+                "-c".into(),
+                "touch ready; while :; do printf x >> ticks; sleep 0.05; done".into(),
+            ],
+            model: "test".into(),
+            verification: None,
+        };
+        let capture = observations::Capture::prepare(
+            jevia_core::ObservationMode::ClaudeHooks,
+            &invocation,
+            &paths.directory,
+            &record.decision.run_id,
+        )
+        .await;
+        let settings: serde_json::Value =
+            serde_json::from_str(capture.args.last().unwrap()).unwrap();
+        let journal = std::path::PathBuf::from(
+            settings["hooks"]["Stop"][0]["hooks"][0]["args"][2]
+                .as_str()
+                .unwrap(),
+        );
+        let root = paths.root.clone();
+        let history = paths.runs.with_extension("lock");
+        // A real OS thread holds the lock independently of the Tokio runtime.
+        // Check the child while still locked: delayed final persistence alone
+        // must not be mistaken for delayed process termination.
+        let contender = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !root.join("ready").exists() {
+                assert!(Instant::now() < deadline, "harness did not start");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let file = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(history)
+                .unwrap();
+            file.lock().unwrap();
+            let _lock = lease::FileLock::new(file);
+            observations::receive_from(
+                &journal,
+                "claude_hooks",
+                br#"{"hook_event_name":"Stop","model":"test"}"#.as_slice(),
+            );
+            std::thread::sleep(Duration::from_secs(4));
+            let before = fs::metadata(root.join("ticks")).unwrap().len();
+            std::thread::sleep(Duration::from_millis(400));
+            let after = fs::metadata(root.join("ticks")).unwrap().len();
+            (before, after)
+        });
+        let code = execute_observed_harness(
+            &paths,
+            "test",
+            &invocation,
+            &record,
+            RunOptions {
+                non_interactive: true,
+                timeout_seconds: Some(3),
+                ..Default::default()
+            },
+            &storage,
+            &capture,
+        )
+        .await
+        .unwrap();
+        let (before, after) = contender.join().unwrap();
+        assert!(before > 0);
+        assert_eq!(
+            before, after,
+            "child kept working after its deadline while history was locked"
+        );
+        assert_eq!(code, ExitCode::from(124));
+        let saved = storage.get(&record.decision.run_id).await.unwrap();
+        assert_eq!(saved.lifecycle.unwrap().state, RunState::TimedOut);
+        assert_eq!(saved.outcome, Outcome::Unknown);
+        assert_eq!(
+            saved.execution.unwrap().observations.unwrap().event_count(),
+            1
+        );
     }
 
     #[cfg(unix)]
