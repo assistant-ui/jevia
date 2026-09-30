@@ -4,10 +4,166 @@
 use std::{collections::BTreeMap, fmt::Write};
 
 use anyhow::Result;
-use jevia_core::{DecisionSource, Outcome, OutcomeSource, RouteRecord};
+use jevia_core::{
+    DecisionSource, HarnessEventKind, ObservationStatus, Outcome, OutcomeSource, RouteRecord,
+};
 use serde::Serialize;
 
 use crate::storage::Storage;
+
+type EventCounts = BTreeMap<HarnessEventKind, u64>;
+const MAX_REPORT_MODELS: usize = 128;
+const MAX_SAFE_COUNT: u64 = 9_007_199_254_740_991;
+
+#[derive(Default, Serialize)]
+struct ModelFacts {
+    runs: usize,
+    event_counts: EventCounts,
+}
+
+#[derive(Default, Serialize)]
+struct Observations {
+    execution_runs: usize,
+    active_runs: usize,
+    coverage: BTreeMap<&'static str, usize>,
+    sampled_runs: usize,
+    event_counts: EventCounts,
+    models: BTreeMap<String, ModelFacts>,
+    unattributed_event_counts: EventCounts,
+    omitted_model_event_counts: EventCounts,
+    model_groups_truncated: bool,
+    counts_saturated: bool,
+}
+
+fn add_events(target: &mut EventCounts, source: &EventCounts, saturated: &mut bool) {
+    for (kind, value) in source {
+        let count = target.entry(*kind).or_default();
+        let sum = count.saturating_add(*value);
+        *saturated |= sum > MAX_SAFE_COUNT;
+        *count = sum.min(MAX_SAFE_COUNT);
+    }
+}
+
+impl Observations {
+    fn add(&mut self, record: &RouteRecord) {
+        let Some(execution) = &record.execution else {
+            return;
+        };
+        self.execution_runs += 1;
+        self.active_runs += usize::from(
+            record
+                .lifecycle
+                .as_ref()
+                .is_some_and(|l| l.state.is_active()),
+        );
+        let Some(observations) = &execution.observations else {
+            *self.coverage.entry("not_reported").or_default() += 1;
+            return;
+        };
+        let coverage = match observations.status {
+            ObservationStatus::Unsupported => "unsupported",
+            ObservationStatus::Disabled => "disabled",
+            ObservationStatus::Unavailable => "unavailable",
+            ObservationStatus::NoEvents => "no_events",
+            ObservationStatus::Recorded => "recorded",
+            ObservationStatus::Partial => "partial",
+        };
+        *self.coverage.entry(coverage).or_default() += 1;
+        self.sampled_runs +=
+            usize::from(observations.event_count() > observations.events.len() as u64);
+        let totals = observations.counts();
+        self.model_groups_truncated |= totals.models_truncated;
+        add_events(
+            &mut self.event_counts,
+            &totals.event_counts,
+            &mut self.counts_saturated,
+        );
+        add_events(
+            &mut self.unattributed_event_counts,
+            &totals.unattributed_event_counts,
+            &mut self.counts_saturated,
+        );
+        add_events(
+            &mut self.omitted_model_event_counts,
+            &totals.omitted_model_event_counts,
+            &mut self.counts_saturated,
+        );
+        for (model, counts) in &totals.models {
+            if self.models.contains_key(model) || self.models.len() < MAX_REPORT_MODELS {
+                let facts = self.models.entry(model.clone()).or_default();
+                facts.runs += 1;
+                add_events(&mut facts.event_counts, counts, &mut self.counts_saturated);
+            } else {
+                self.model_groups_truncated = true;
+                add_events(
+                    &mut self.omitted_model_event_counts,
+                    counts,
+                    &mut self.counts_saturated,
+                );
+            }
+        }
+    }
+
+    fn render(&self, output: &mut String) {
+        writeln!(
+            output,
+            "\nPassive recording: {} execution runs ({} active checkpoints)",
+            self.execution_runs, self.active_runs
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "Coverage: {}",
+            self.coverage
+                .iter()
+                .map(|(status, count)| format!("{status}={count}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "Observed model switches: {} | Sampled runs: {}",
+            self.event_counts
+                .get(&HarnessEventKind::ModelChanged)
+                .copied()
+                .unwrap_or_default(),
+            self.sampled_runs
+        )
+        .unwrap();
+        writeln!(
+            output,
+            "{:<28} {:>6} {:>15}",
+            "Reported model", "Runs", "Tool ok/error"
+        )
+        .unwrap();
+        for (model, facts) in &self.models {
+            writeln!(
+                output,
+                "{:<28} {:>6} {:>15}",
+                model,
+                facts.runs,
+                format!(
+                    "{}/{}",
+                    facts
+                        .event_counts
+                        .get(&HarnessEventKind::ToolSucceeded)
+                        .unwrap_or(&0),
+                    facts
+                        .event_counts
+                        .get(&HarnessEventKind::ToolFailed)
+                        .unwrap_or(&0)
+                )
+            )
+            .unwrap();
+        }
+        // u128 avoids overflow when summing independently bounded kind counters.
+        writeln!(output, "Unattributed events: {} | Omitted model events: {} | Model groups truncated: {} | Counts saturated: {}",
+            self.unattributed_event_counts.values().map(|v| *v as u128).sum::<u128>(),
+            self.omitted_model_event_counts.values().map(|v| *v as u128).sum::<u128>(), self.model_groups_truncated, self.counts_saturated).unwrap();
+        writeln!(output, "Reported models only; requested aliases are not attribution. Tool errors and switches are not task failures. Partial coverage means counts may be lower bounds.").unwrap();
+    }
+}
 
 #[derive(Default, Serialize)]
 struct Outcomes {
@@ -100,6 +256,7 @@ pub struct Report {
     window: Window,
     totals: Metrics,
     tiers: BTreeMap<String, Metrics>,
+    observations: Observations,
 }
 
 pub async fn collect(storage: &Storage, limit: usize) -> Result<Report> {
@@ -113,8 +270,10 @@ impl Report {
     fn new(storage: &'static str, limit: usize, records: &[RouteRecord]) -> Self {
         let mut totals = Counts::default();
         let mut tiers = BTreeMap::<String, Counts>::new();
+        let mut observations = Observations::default();
         for record in &records[records.len().saturating_sub(limit)..] {
             totals.add(record);
+            observations.add(record);
             tiers
                 .entry(record.decision.tier.clone())
                 .or_default()
@@ -129,6 +288,7 @@ impl Report {
                 has_older_records: records.len() > limit,
             },
             totals: totals.summarize(),
+            observations,
             tiers: tiers
                 .into_iter()
                 .map(|(tier, counts)| (tier, counts.summarize()))
@@ -207,6 +367,7 @@ impl Report {
             "Observed results only, not a model ranking or proof of routing improvement."
         )
         .unwrap();
+        self.observations.render(&mut output);
         output
     }
 }
@@ -225,6 +386,40 @@ fn percent(value: Option<f64>) -> String {
 mod tests {
     use super::*;
     use jevia_core::{OutcomeEvidence, RouteDecision, RunState};
+
+    #[test]
+    fn observation_groups_and_counts_are_bounded_without_false_attribution() {
+        let mut observations = Observations::default();
+        for i in 0..130 {
+            let mut record = record(Outcome::Unknown, None);
+            record.lifecycle.as_mut().unwrap().state = RunState::Running;
+            record.execution = Some(serde_json::from_value(serde_json::json!({
+                "harness":"private-harness", "model":"private-requested", "duration_ms":9999, "exit_code":null,
+                "observations": {"source":"claude_hooks", "status":"recorded", "events":[{"kind":"tool_failed", "recorded_at_ms":1,"model":format!("actual-{i}")}]} })).unwrap());
+            observations.add(&record);
+        }
+        assert_eq!(observations.active_runs, 130);
+        assert_eq!(observations.models.len(), MAX_REPORT_MODELS);
+        assert!(observations.model_groups_truncated);
+        assert_eq!(
+            observations.omitted_model_event_counts[&HarnessEventKind::ToolFailed],
+            2
+        );
+        assert!(
+            !serde_json::to_string(&observations)
+                .unwrap()
+                .contains("private-")
+        );
+        let mut counts = BTreeMap::from([(HarnessEventKind::ToolFailed, MAX_SAFE_COUNT)]);
+        let mut saturated = false;
+        add_events(
+            &mut counts,
+            &BTreeMap::from([(HarnessEventKind::ToolFailed, 1)]),
+            &mut saturated,
+        );
+        assert_eq!(counts[&HarnessEventKind::ToolFailed], MAX_SAFE_COUNT);
+        assert!(saturated);
+    }
 
     fn record(outcome: Outcome, source: Option<OutcomeSource>) -> RouteRecord {
         let mut record = RouteRecord::new(
