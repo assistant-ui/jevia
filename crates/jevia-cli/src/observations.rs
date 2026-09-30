@@ -125,6 +125,9 @@ impl Capture {
     }
 
     fn install(&mut self, directory: &Path, run_id: &str) -> Result<()> {
+        // Older projects may predate native recording. Repair ignore rules
+        // before creating journals, loss markers or adapter files there.
+        crate::ensure_local_ignore(&directory.join(".gitignore"))?;
         let executable = std::env::current_exe()?;
         let run_id = uuid::Uuid::parse_str(run_id)?;
         let mut file = tempfile::Builder::new()
@@ -638,6 +641,79 @@ mod tests {
         Config, DecisionSource, ExecutionEvidence, Outcome, RouteDecision, RouteRecord, RunState,
         StorageConfig,
     };
+
+    #[tokio::test]
+    async fn capture_repairs_legacy_ignore_rules_before_creating_private_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let ignore = directory.path().join(".gitignore");
+        fs::write(&ignore, "# existing project\ncustom-rule\nruns.jsonl\n").unwrap();
+        let invocation = HarnessInvocation {
+            program: "wrapper".into(),
+            args: vec![],
+            model: "test".into(),
+            verification: None,
+        };
+        let capture = Capture::prepare(
+            ObservationMode::ClaudeHooks,
+            &invocation,
+            directory.path(),
+            &uuid::Uuid::new_v4().to_string(),
+        )
+        .await;
+        assert!(capture.journal.is_some());
+        let repaired = fs::read_to_string(&ignore).unwrap();
+        assert!(repaired.starts_with("# existing project\ncustom-rule\nruns.jsonl\n"));
+        for rule in [
+            "jevia-events-*.jsonl",
+            "jevia-events-*.loss",
+            "event-leases/",
+            ".jevia-event-checkpoint-*",
+            "jevia-observer-*.mjs",
+        ] {
+            assert!(repaired.lines().any(|line| line == rule));
+        }
+        capture.persisted(&capture.snapshot());
+        let next = Capture::prepare(
+            ObservationMode::ClaudeHooks,
+            &invocation,
+            directory.path(),
+            &uuid::Uuid::new_v4().to_string(),
+        )
+        .await;
+        assert_eq!(fs::read_to_string(ignore).unwrap(), repaired);
+        next.persisted(&next.snapshot());
+    }
+
+    #[tokio::test]
+    async fn failed_ignore_repair_keeps_native_capture_unavailable_without_private_files() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::create_dir(directory.path().join(".gitignore")).unwrap();
+        let invocation = HarnessInvocation {
+            program: "wrapper".into(),
+            args: vec!["task".into()],
+            model: "test".into(),
+            verification: None,
+        };
+        let capture = Capture::prepare(
+            ObservationMode::ClaudeHooks,
+            &invocation,
+            directory.path(),
+            &uuid::Uuid::new_v4().to_string(),
+        )
+        .await;
+        assert!(capture.journal.is_none());
+        assert_eq!(capture.snapshot().status, Status::Unavailable);
+        assert_eq!(capture.args, invocation.args);
+        assert!(
+            !fs::read_dir(directory.path())
+                .unwrap()
+                .flatten()
+                .any(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("jevia-events-"))
+        );
+    }
 
     #[tokio::test]
     async fn replay_skips_contended_journals_within_one_budget() {
