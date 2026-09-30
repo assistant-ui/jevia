@@ -55,12 +55,12 @@ async function migrateAndVerify(t, target, env) {
   assert.equal(await readFile(historyPath, "utf8"), history, "feedback must use SQL, not retained JSONL");
   assert.match(await client.checkStorage(), new RegExp(`backend=${target.backend}, records=1`));
   assert.match(await client.checkStorage({ deep: true }), /check=deep/);
-  const report = await client.checkStorageReport({ deep: true });
-  assert.equal(report.ok, true);
-  assert.equal(report.backend, target.backend);
-  assert.equal(report.records, 1);
-  assert.ok(["present", "unsupported"].includes(report.passive_history_index));
-  assert.equal(report.error, null);
+  const health = await client.checkStorageReport({ deep: true });
+  assert.equal(health.ok, true);
+  assert.equal(health.backend, target.backend);
+  assert.equal(health.records, 1);
+  assert.ok(["present", "unsupported"].includes(health.passive_history_index));
+  assert.equal(health.error, null);
 }
 
 test("SQLite setup previews, imports explicitly, and uses selected storage for SDK calls", async (t) => {
