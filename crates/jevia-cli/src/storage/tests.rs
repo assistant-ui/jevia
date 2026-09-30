@@ -29,6 +29,96 @@ fn sqlite_config() -> Config {
 }
 
 #[tokio::test]
+async fn jsonl_checkpoints_skip_busy_history_and_reject_late_supervisor_writes() {
+    use jevia_core::{ObservationSource, ObservationStatus};
+    use std::time::{Duration, Instant};
+    let directory = tempfile::tempdir().unwrap();
+    let paths = ProjectPaths::at(directory.path().into());
+    let storage = Storage::open(&Config::default(), &paths, true)
+        .await
+        .unwrap();
+    storage.append(&sample("checkpoint")).await.unwrap();
+    let observations = HarnessObservations {
+        source: Some(ObservationSource::ClaudeHooks),
+        status: ObservationStatus::NoEvents,
+        events: vec![],
+        totals: None,
+    };
+    storage
+        .state(
+            "checkpoint",
+            RunState::Running,
+            Outcome::Unknown,
+            Some(ExecutionEvidence {
+                observations: Some(observations.clone()),
+                harness: "test".into(),
+                model: "test".into(),
+                duration_ms: 0,
+                exit_code: None,
+                verification: None,
+            }),
+        )
+        .await
+        .unwrap();
+    let file = File::options()
+        .read(true)
+        .write(true)
+        .open(paths.runs.with_extension("lock"))
+        .unwrap();
+    file.lock().unwrap();
+    let (release, wait) = std::sync::mpsc::channel();
+    let holder = std::thread::spawn(move || {
+        let _guard = lease::FileLock::new(file);
+        // Safety bound lets the pre-fix regression fail rather than deadlock.
+        let _ = wait.recv_timeout(Duration::from_secs(3));
+    });
+    let started = Instant::now();
+    let result = storage
+        .checkpoint_observations("checkpoint", observations.clone(), true)
+        .await;
+    let elapsed = started.elapsed();
+    let _ = release.send(());
+    holder.join().unwrap();
+    assert!(
+        result.is_err(),
+        "busy history must leave the journal for retry"
+    );
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "checkpoint waited on the lock"
+    );
+    storage
+        .checkpoint_observations("checkpoint", observations.clone(), true)
+        .await
+        .unwrap();
+    storage
+        .state("checkpoint", RunState::TimedOut, Outcome::Unknown, None)
+        .await
+        .unwrap();
+    assert!(
+        storage
+            .checkpoint_observations("checkpoint", observations.clone(), true)
+            .await
+            .is_err()
+    );
+    // Explicit recovery/replay can still restore observations on terminal runs.
+    storage
+        .checkpoint_observations("checkpoint", observations, false)
+        .await
+        .unwrap();
+    assert_eq!(
+        storage
+            .get("checkpoint")
+            .await
+            .unwrap()
+            .lifecycle
+            .unwrap()
+            .state,
+        RunState::TimedOut
+    );
+}
+
+#[tokio::test]
 async fn invalid_decisions_are_rejected_before_jsonl_or_sqlite_writes() {
     for config in [Config::default(), sqlite_config()] {
         let directory = tempfile::tempdir().unwrap();

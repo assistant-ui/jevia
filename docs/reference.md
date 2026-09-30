@@ -155,6 +155,11 @@ A private journal under `.jevia/jevia-events-<run-id>-*.jsonl` is checkpointed i
 the selected JSONL/SQLite/PostgreSQL run record while the harness runs (at most once
 every two seconds when observations change), and saved again when it stops.
 Checkpoint failures do not fail the harness; the synced journal remains available.
+Pending checkpoints do not suspend process supervision: non-interactive timeouts
+and cancellation continue to stop the owned process tree. JSONL checkpoints skip
+a busy history lock and retry later; final history persistence can still wait for
+that lock after the process has stopped. Delayed supervisor checkpoints cannot
+overwrite a terminal run.
 Before the next route/run, Jevia makes a bounded, best-effort replay attempt for
 retained journals, skipping runs whose execution lease is still held. Replaying a
 cumulative snapshot does not duplicate events, alter feedback, or mark a run

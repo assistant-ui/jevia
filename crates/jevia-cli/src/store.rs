@@ -325,8 +325,21 @@ pub fn checkpoint_observations(
     path: &Path,
     run_id: &str,
     observations: HarnessObservations,
+    supervisor: bool,
 ) -> Result<RouteRecord> {
-    update(path, run_id, |record| {
+    let lock = private_lock_options().open(path.with_extension("lock"))?;
+    lock.try_lock()
+        .context("history busy; observation journal retained for retry")?;
+    let _guard = crate::lease::FileLock::new(lock);
+    update_unlocked(path, run_id, |record| {
+        if supervisor
+            && !record
+                .lifecycle
+                .as_ref()
+                .is_some_and(|life| life.state.is_active())
+        {
+            bail!("run is no longer active; refusing a stale observation checkpoint");
+        }
         apply_observations(record, observations)
     })
 }
@@ -487,6 +500,14 @@ fn update(
     update_record: impl FnOnce(&mut RouteRecord) -> Result<()>,
 ) -> Result<RouteRecord> {
     let _lock = acquire_lock(path, LockMode::Exclusive)?;
+    update_unlocked(path, run_id, update_record)
+}
+
+fn update_unlocked(
+    path: &Path,
+    run_id: &str,
+    update_record: impl FnOnce(&mut RouteRecord) -> Result<()>,
+) -> Result<RouteRecord> {
     let mut records = load_unlocked(path)?;
     let updated = records
         .iter_mut()

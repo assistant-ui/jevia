@@ -159,7 +159,17 @@ impl Storage {
         supervisor: bool,
     ) -> Result<RouteRecord> {
         match self {
-            Self::Jsonl(paths) => store::checkpoint_observations(&paths.runs, id, observations),
+            Self::Jsonl(paths) => {
+                let path = paths.runs.clone();
+                let id = id.to_owned();
+                // No synchronous file I/O on the process supervisor's task. The
+                // worker never waits for a busy history lock; the journal is the
+                // durable retry source. A late supervisor write rejects terminal runs.
+                tokio::task::spawn_blocking(move || {
+                    store::checkpoint_observations(&path, &id, observations, supervisor)
+                })
+                .await?
+            }
             Self::Database(db) => {
                 db.checkpoint_observations(id, observations, supervisor)
                     .await
