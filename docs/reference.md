@@ -204,6 +204,14 @@ The same budget applies to recovery replay. Busy journal/history locks are skipp
 immediately, not waited on once per journal; an expired attempt retains its files
 for a later invocation. File scanning and journal/history reads run off the async
 task so the replay timer remains responsive.
+In the next unreleased CLI, a private atomic cursor in `.jevia/replay-state/`
+rotates this candidate window between invocations, including past busy, corrupt,
+or ambiguous attempts. Concurrent replay passes do not race the cursor; explicit
+`runs recover <id>` does not move it. The two-second budget still applies.
+Incomplete directory scans (including more than 4,096 entries) defer replay
+without deleting anything, because an unseen duplicate could make a journal
+ambiguous. Oversized directories require inspection/maintenance; the cursor is
+not an unbounded background repair service or a guarantee against slow storage.
 Routing receives bounded event counts and model summaries, not session IDs/raw events.
 
 #### File-lock contention (unreleased)
