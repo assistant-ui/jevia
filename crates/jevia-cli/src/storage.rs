@@ -77,6 +77,25 @@ impl Storage {
         }
     }
 
+    /// Replay workers must stop scanning even if their async waiter was dropped.
+    pub async fn get_for_replay_until(
+        &self,
+        id: &str,
+        deadline: std::time::Instant,
+    ) -> Result<RouteRecord> {
+        match self {
+            Self::Jsonl(paths) => {
+                let path = paths.runs.clone();
+                let id = id.to_owned();
+                tokio::task::spawn_blocking(move || {
+                    store::try_get_until(&path, &id, Some(deadline))
+                })
+                .await?
+            }
+            Self::Database(db) => db.get(id).await,
+        }
+    }
+
     /// Separate windows prevent passive activity from displacing known outcomes.
     /// Each window retains append order; the provider consumes them separately.
     pub async fn routing_history(&self, limit: usize) -> Result<Vec<RouteRecord>> {
@@ -186,6 +205,31 @@ impl Storage {
         }
     }
 
+    pub async fn checkpoint_for_replay(
+        &self,
+        id: &str,
+        observations: HarnessObservations,
+        deadline: std::time::Instant,
+    ) -> Result<RouteRecord> {
+        match self {
+            Self::Jsonl(paths) => {
+                let path = paths.runs.clone();
+                let id = id.to_owned();
+                tokio::task::spawn_blocking(move || {
+                    store::checkpoint_observations_until(
+                        &path,
+                        &id,
+                        observations,
+                        false,
+                        Some(deadline),
+                    )
+                })
+                .await?
+            }
+            Self::Database(db) => db.checkpoint_observations(id, observations, false).await,
+        }
+    }
+
     pub async fn recover(&self, id: &str, confirmed_stopped: bool) -> Result<RouteRecord> {
         if self.requires_recovery_confirmation() && !confirmed_stopped {
             bail!(
@@ -222,7 +266,7 @@ impl Storage {
 
     pub async fn check(&self) -> Result<usize> {
         match self {
-            Self::Jsonl(paths) => Ok(store::load(&paths.runs)?.len()),
+            Self::Jsonl(paths) => store::count(&paths.runs),
             Self::Database(db) => db.check().await,
         }
     }

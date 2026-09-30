@@ -9,21 +9,34 @@ pub fn get(path: &Path, id: &str) -> Result<RouteRecord> {
         bail!("run id was not found in history");
     }
     let _lock = acquire_lock(path, LockMode::Shared)?;
-    get_unlocked(path, id)
+    get_unlocked(path, id, None)
 }
 
 /// Background replay never waits for a busy writer or loads unrelated records.
 pub fn try_get(path: &Path, id: &str) -> Result<RouteRecord> {
+    try_get_until(path, id, None)
+}
+
+pub fn try_get_until(
+    path: &Path,
+    id: &str,
+    deadline: Option<std::time::Instant>,
+) -> Result<RouteRecord> {
+    check_deadline(deadline)?;
     let lock = private_lock_options().open(path.with_extension("lock"))?;
     lock.try_lock_shared()
         .context("history busy; replay deferred")?;
     let _guard = crate::lease::FileLock::new(lock);
-    get_unlocked(path, id)
+    get_unlocked(path, id, deadline)
 }
 
-fn get_unlocked(path: &Path, id: &str) -> Result<RouteRecord> {
+fn get_unlocked(
+    path: &Path,
+    id: &str,
+    deadline: Option<std::time::Instant>,
+) -> Result<RouteRecord> {
     let mut found = None;
-    read_records(path, |record| {
+    read_records_until(path, deadline, |record| {
         // Retain the old first-match behavior for duplicate identities. The
         // explicit deep check diagnoses duplicates; lookup never rewrites them.
         if found.is_none() && record.decision.run_id == id {
@@ -112,5 +125,29 @@ mod tests {
         assert!(started.elapsed() < std::time::Duration::from_secs(1));
         drop(held);
         assert_eq!(try_get(&path, "run-0").unwrap(), record(0));
+    }
+
+    #[test]
+    fn expired_lookup_does_not_create_sidecars_or_hide_corrupt_tails() {
+        use std::time::{Duration, Instant};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("runs.jsonl");
+        assert!(try_get_until(&path, "run-0", Some(Instant::now())).is_err());
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
+        let raw = format!("{}\n{{PRIVATE", serde_json::to_string(&record(0)).unwrap());
+        fs::write(&path, &raw).unwrap();
+        assert!(
+            try_get_until(
+                &path,
+                "run-0",
+                Some(Instant::now() + Duration::from_secs(2))
+            )
+            .is_err()
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), raw);
+        let lock = private_lock_options()
+            .open(path.with_extension("lock"))
+            .unwrap();
+        lock.try_lock().expect("failed lookup released its lock");
     }
 }
