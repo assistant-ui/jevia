@@ -8,6 +8,7 @@ interface CommandSettings {
   env: NodeJS.ProcessEnv;
   timeoutMs: number;
   maxBufferBytes: number;
+  input?: string;
 }
 
 type Failure = (cause: ExecFileException, stdout: string, stderr: string) => Error;
@@ -49,8 +50,10 @@ export function runCommand(settings: CommandSettings, signal: AbortSignal | unde
         detached: process.platform !== "win32",
         windowsHide: true,
       });
-      // No input protocol: match execFile by closing stdin immediately.
-      child.stdin?.end();
+      // Only explicit recording payloads use stdin, never argv or a temporary file.
+      // Early CLI rejection can close the pipe before all input is written.
+      child.stdin?.on("error", () => {});
+      child.stdin?.end(settings.input);
       child.once("error", finish);
       child.once("close", (code, exitSignal) => {
         if (code === 0) finish();

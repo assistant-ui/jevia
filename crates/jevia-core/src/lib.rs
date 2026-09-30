@@ -3,7 +3,9 @@
 mod config;
 mod jev;
 mod observations;
+mod recording;
 mod route;
+pub use recording::ExecutionRecording;
 
 pub use observations::{
     HarnessEvent, HarnessEventKind, HarnessObservations, MAX_HARNESS_EVENTS, MAX_OBSERVED_MODELS,

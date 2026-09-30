@@ -365,6 +365,17 @@ impl Database {
         .await
     }
 
+    pub async fn record_application(
+        &self,
+        id: &str,
+        input: jevia_core::ExecutionRecording,
+    ) -> Result<RouteRecord> {
+        self.mutate(id, None, false, true, false, |record| {
+            store::apply_application(record, input)
+        })
+        .await
+    }
+
     pub async fn checkpoint_observations(
         &self,
         id: &str,

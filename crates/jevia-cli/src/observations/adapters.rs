@@ -25,11 +25,13 @@ pub(super) fn events(source: ObservationSource) -> &'static [&'static str] {
         ObservationSource::ClaudeHooks => HOOKS,
         ObservationSource::CodexHooks => CODEX_EVENTS,
         ObservationSource::OpencodePlugin => OPENCODE_EVENTS,
+        ObservationSource::Application => &[],
     }
 }
 
 pub(super) fn conflicts(source: ObservationSource, args: &[String]) -> bool {
     match source {
+        ObservationSource::Application => true,
         ObservationSource::ClaudeHooks => args.iter().any(|a| {
             matches!(a.as_str(), "--settings" | "--bare" | "--safe-mode")
                 || a.starts_with("--settings=")
@@ -88,6 +90,7 @@ pub(super) fn version_supported(source: ObservationSource, output: &str) -> bool
         ObservationSource::ClaudeHooks => [*major, *minor, *patch] >= [2, 1, 251],
         ObservationSource::CodexHooks => *major == 0 && *minor == 158,
         ObservationSource::OpencodePlugin => *major == 1 && [*minor, *patch] >= [18, 33],
+        ObservationSource::Application => false,
     }
 }
 
@@ -109,6 +112,7 @@ pub(super) fn install(
         plugin: None,
     };
     match source {
+        ObservationSource::Application => bail!("application recording is not a native adapter"),
         ObservationSource::ClaudeHooks => {
             let mut hooks = serde_json::Map::new();
             for name in HOOKS {

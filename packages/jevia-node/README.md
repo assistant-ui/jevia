@@ -4,7 +4,7 @@ Typed, shell-free access to Jevia from Node.js. The package invokes the Jevia
 CLI's JSON interface so routing policy, local storage, caching, privacy, and
 outcome eligibility stay consistent with the Rust implementation.
 
-> Unreleased: schema-4 observation types and passive routing context require the
+> Unreleased: schema-6 application recording and passive routing context require the
 > matching new CLI and SDK. Published CLI 0.1.4–0.1.5 used different verification
 > defaults. Upgrade all readers/writers sharing a store together.
 
@@ -84,6 +84,48 @@ If you skip feedback, the routing decision is still stored with outcome
 outcomes. If you report success or failure, it can inform the next route without
 requiring verifier evidence. You can also explicitly record `unknown` when the
 result is inconclusive. The SDK does not generate positive feedback on your behalf.
+
+### Optional passive execution recording (unreleased)
+
+When your app owns execution, it can record facts without deciding whether the
+task succeeded. After the work has stopped, call this **once per routed run**:
+
+```ts
+await jevia.recordExecution(route.run_id, {
+  harness: "my-app",
+  model: models[route.tier], // requested model, not inferred event attribution
+  duration_ms: 1200,
+  events: [
+    { kind: "model_observed", model: "provider/small", recorded_at_ms: 1000 },
+    { kind: "turn_completed", model: "provider/small", recorded_at_ms: 2200 },
+  ],
+});
+const next = await jevia.route("fix another parser regression");
+```
+
+`recordExecution(runId, recording, { signal }?)` is optional. `route()` never
+launches your agent or silently observes it. Skipping this call still stores the
+route. Calling it records a completed **application-reported** execution, not
+verified success; `feedback()` and extra verification remain optional. Existing
+manual feedback is preserved. Do not call it after `jevia run`, which records
+automatically, or while app-owned work is still running.
+
+The next `route()` automatically reuses these saved observations from JSONL,
+SQLite, or PostgreSQL and includes them in its cache key. Do not fetch or resend
+history. An identical retry for the same run returns the saved record without
+double-counting or changing its timestamps; a different snapshot, active run, or
+existing supervised execution is rejected. After a timeout, retry the same
+payload or use `show()` to check whether it committed. Use a new route for a new
+attempt. This first API accepts a finished snapshot, not a streaming event feed.
+
+Input is bounded to 256 events / 256 KiB of JSON. Harness/model identifiers and
+event identifiers allow ASCII letters, digits, `._:/@+-` (1–256 characters).
+Durations/timestamps must be nonnegative safe integers; optional `exit_code` is a
+signed 32-bit integer or null. Omitted events are allowed. No raw prompts, tool
+arguments, output, arbitrary metadata, outcomes, or verification claims are
+accepted. Payload travels over stdin, not command arguments. Source is
+`application`, distinct from native harness observations. This requires the
+matching unreleased CLI and SDK; upgrade all readers/writers before using schema 6.
 
 ### Recorded outcomes inform the next route automatically
 

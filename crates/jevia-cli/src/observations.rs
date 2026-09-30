@@ -347,7 +347,7 @@ enum Entry {
 
 /// Stable striped locks survive atomic journal replacement and are never
 /// unlinked. At most 256 sidecars per project, independent of session length.
-fn journal_guard(path: &Path) -> Result<File> {
+fn journal_guard(path: &Path) -> Result<crate::lease::FileLock> {
     let parent = path.parent().context("invalid journal directory")?;
     let name = path.file_name().context("invalid journal name")?;
     let stripe = format!("{:02x}", Sha256::digest(name.as_encoded_bytes())[0]);

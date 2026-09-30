@@ -25,7 +25,7 @@ test("shows the persisted run shape and explains outcome provenance", async () =
   for (const url of [docsPage, docsMarkdown]) {
     const contents = await readFile(url, "utf8");
 
-    assert.match(contents, /"schema_version": 5/);
+    assert.match(contents, /"schema_version": 6/);
     assert.match(contents, /"state": "completed"/);
     assert.match(contents, /"source": "verification"/);
     assert.match(contents, /privacy\.store_task_text = false/);

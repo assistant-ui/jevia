@@ -127,6 +127,17 @@ for supported tests, deadlines, and opt-in settings.
 
 ## Use the Node.js SDK
 
+Unreleased: `recordExecution(runId, { harness, model, duration_ms, exit_code?, events? })`
+optionally saves one finished app-owned execution as passive, application-reported
+facts. Outcome stays unknown unless separately assessed; feedback and extra
+verification remain optional. Subsequent `route()` calls automatically include
+the recorded history and update cache eligibility. Exact retries are idempotent;
+conflicting snapshots or supervised executions cannot be overwritten. Do not call
+this after `jevia run`, which records automatically. Inputs are bounded to 256
+allowlisted events / 256 KiB; no raw prompt/tool content. Requires matching
+unreleased CLI/SDK with schema 6. See the
+[complete example](https://github.com/assistant-ui/jevia/tree/main/packages/jevia-node#optional-passive-execution-recording-unreleased).
+
 Map Jevia's tier to your harness model and let your application run the work.
 Feedback and verification are optional. SDK routing does not launch an agent or
 run tests. If your application knows the result, it can report it without a
@@ -285,7 +296,7 @@ Every backend preserves the same logical record. JSONL writes one compact JSON o
 
 ```json
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "run_id": "7b65a69a-0a6f-4a89-bd73-88f090954dd9",
   "tier": "balanced",
   "suggested_tier": "balanced",

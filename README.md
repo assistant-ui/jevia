@@ -112,6 +112,12 @@ configuration.
 
 ## Node.js SDK
 
+Unreleased: apps that own execution can optionally call `recordExecution()` with
+finished execution facts and bounded events. Saved observations automatically
+inform subsequent routes; feedback and extra verification remain optional.
+`jevia run` already records automatically. See the
+[SDK recording example](packages/jevia-node/README.md#optional-passive-execution-recording-unreleased).
+
 Use the typed `jevia` package when your application owns harness execution:
 
 ```bash

@@ -2,6 +2,31 @@
 
 ## Unreleased: passive routing context
 
+### Application-owned execution recording
+
+`jevia runs record-execution <run-id> --json` reads a single bounded JSON object
+from stdin (`harness`, requested `model`, `duration_ms`, optional `exit_code`, and
+optional `events`). The Node SDK exposes `recordExecution()` with the same fields.
+Call only after app-owned work has stopped. This is optional; it does not launch
+an agent, run verification, or require feedback. `jevia run` already records its
+own execution and must not be reported again through this API.
+
+The operation records one completed application-owned attempt. Its outcome stays
+unknown unless separately assessed; existing manual feedback remains unchanged.
+Observations are explicitly sourced as `application`, not trusted native hooks.
+An exact retry is idempotent; conflicting snapshots, legacy runs without an
+explicit routed lifecycle, active runs, and existing native executions are
+rejected. JSONL, SQLite, and PostgreSQL apply the same atomic storage contract.
+Later routing automatically includes the passive summary and invalidates cached
+decisions based on older history. No history plumbing or cache clearing is needed.
+
+Inputs are limited to 256 events / 256 KiB, allowlisted identifier fields, safe
+integer timestamps/duration, and an optional signed 32-bit exit code. Raw text,
+tool inputs/outputs, arbitrary event fields, outcome labels, and verifier evidence
+are rejected. The new `application` source uses record schema 6 (older schemas
+remain readable); upgrade all readers/writers together. See the
+[SDK example](../packages/jevia-node/README.md#optional-passive-execution-recording-unreleased).
+
 ### Recording health
 
 Run `jevia harness health codex` (or `claude` / `opencode`, using your configured
@@ -664,8 +689,8 @@ processes. After a supervisor crash, inspect any surviving child processes and
 workspace changes before starting new work. Legacy unknown outcomes are not
 assumed to represent interrupted executions. Feedback on active runs is refused.
 
-New and updated records use schema version 4; versions 1, 2, and 3 remain readable.
-Older CLI versions refuse version 3 rather than silently discard new metadata.
+New and updated records use schema version 6; versions 1–5 remain readable.
+Older CLI versions refuse newer schemas rather than silently discard new metadata.
 The ignored `run-leases/` sidecars are retained so concurrent processes always
 coordinate on the same lock file.
 

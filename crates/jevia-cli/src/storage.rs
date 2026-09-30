@@ -24,7 +24,7 @@ pub enum Storage {
 // Keep the lock alive through both harness execution and its verifier. Database
 // guards own a detached connection so a session lock is never returned to a pool.
 pub enum ExecutionGuard {
-    File { _file: File },
+    File { _file: lease::FileLock },
     Postgres { _connection: sqlx::AnyConnection },
 }
 
@@ -136,6 +136,18 @@ impl Storage {
         match self {
             Self::Jsonl(paths) => store::record_state(&paths.runs, id, state, outcome, execution),
             Self::Database(db) => db.state(id, state, outcome, execution, false).await,
+        }
+    }
+
+    pub async fn record_application(
+        &self,
+        id: &str,
+        input: jevia_core::ExecutionRecording,
+    ) -> Result<RouteRecord> {
+        let _guard = self.execution_guard(id).await?;
+        match self {
+            Self::Jsonl(paths) => store::record_application(&paths.runs, id, input),
+            Self::Database(db) => db.record_application(id, input).await,
         }
     }
 

@@ -123,6 +123,8 @@ pub enum ObservationSource {
     ClaudeHooks,
     CodexHooks,
     OpencodePlugin,
+    /// Caller-reported SDK facts, not independently observed native hooks.
+    Application,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -147,6 +149,7 @@ pub enum HarnessEventKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HarnessEvent {
     pub kind: HarnessEventKind,
     pub recorded_at_ms: u64,

@@ -168,6 +168,8 @@ enum StorageAction {
 enum RunsAction {
     /// Inspect one complete run record, including its execution lifecycle.
     Show { run_id: String },
+    /// Save one finished app-owned execution from bounded JSON on stdin; no outcome inference.
+    RecordExecution { run_id: String },
     /// Finish an externally executed pending run with an explicit manual outcome.
     Complete {
         run_id: String,
@@ -311,6 +313,27 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             match action {
                 None => runs(limit, json).await?,
                 Some(RunsAction::Show { run_id }) => show_run(&run_id).await?,
+                Some(RunsAction::RecordExecution { run_id }) => {
+                    use std::io::Read;
+                    const LIMIT: u64 = 256 * 1024;
+                    let mut bytes = Vec::new();
+                    std::io::stdin()
+                        .lock()
+                        .take(LIMIT + 1)
+                        .read_to_end(&mut bytes)
+                        .map_err(|_| anyhow::anyhow!("could not read execution recording"))?;
+                    if bytes.len() as u64 > LIMIT {
+                        bail!("execution recording exceeds 256 KiB");
+                    }
+                    let input = serde_json::from_slice::<jevia_core::ExecutionRecording>(&bytes)
+                        .map_err(|_| {
+                            anyhow::anyhow!("invalid execution recording (contents redacted)")
+                        })?;
+                    let paths = ProjectPaths::discover()?;
+                    let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
+                    let record = storage.record_application(&run_id, input).await?;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                }
                 Some(RunsAction::Complete {
                     run_id,
                     outcome,

@@ -61,6 +61,45 @@ async function fixture(t, overrides = {}) {
 }
 
 for (const backend of ["jsonl", "sqlite", "postgres"]) {
+  test(`optional SDK execution recording informs routing automatically with ${backend}`, {
+    skip: backend === "postgres" && !process.env.JEVIA_TEST_POSTGRES_URL && "requires isolated PostgreSQL test database",
+  }, async (t) => {
+    const { client, requests } = await fixture(t, { SDK_TEST_DB: process.env.JEVIA_TEST_POSTGRES_URL });
+    if (backend !== "jsonl") await client.setupStorage(backend === "sqlite"
+      ? { backend, path: ".jevia/sdk-recording.db" }
+      : { backend, project: `sdk-events-${randomUUID()}`, urlEnv: "SDK_TEST_DB", allowInsecureLocalhost: true },
+    { apply: true, confirmStopped: true });
+    const task = "improve parser";
+    const route = await client.route(task);
+    assert.equal((await client.route(task)).source, "cache");
+    const input = { harness: "my-app", model: "requested", duration_ms: 20, exit_code: 0, events: [
+      { kind: "turn_completed", recorded_at_ms: 1, model: "observed", session_id: "PRIVATE-session" },
+      { kind: "tool_failed", recorded_at_ms: 2, tool_name: "test" },
+    ] };
+    const saved = await client.recordExecution(route.run_id, input);
+    assert.equal(saved.schema_version, 6);
+    assert.equal(saved.lifecycle.state, "completed");
+    assert.equal(saved.outcome, "unknown");
+    assert.equal(saved.outcome_evidence, undefined);
+    assert.equal(saved.feedback, undefined);
+    assert.equal(saved.execution.verification, undefined);
+    assert.deepEqual(await client.recordExecution(route.run_id, input), saved, "an exact retry does not double-count or change timestamps");
+    await assert.rejects(client.recordExecution(route.run_id, { ...input, duration_ms: 21 }));
+    assert.deepEqual(await client.show(route.run_id), saved);
+    assert.equal((await client.route(task)).source, "live", "recorded activity invalidates cached routing");
+    assert.equal(requests.length, 2);
+    const state = requests.at(-1).state;
+    assert.deepEqual(state.recent_completed_outcomes, []);
+    assert.equal(state.recent_execution_observations.length, 1);
+    const observations = state.recent_execution_observations[0].harness_observations;
+    assert.equal(observations.source, "application");
+    assert.equal(observations.event_counts.turn_completed, 1);
+    assert.ok(!JSON.stringify(state).includes("PRIVATE-session"));
+    assert.equal((await client.route(task)).source, "cache");
+    await client.feedback(route.run_id, "success");
+    assert.equal((await client.recordExecution(route.run_id, input)).outcome, "success");
+  });
+
   test(`SDK routing automatically reuses recorded outcomes with ${backend} storage`, {
     skip: backend === "postgres" && !process.env.JEVIA_TEST_POSTGRES_URL
       && "requires isolated PostgreSQL test database",
@@ -304,7 +343,7 @@ for (const backend of ["jsonl", "sqlite", "postgres"]) {
     const { stdout } = await run(0);
     assert.equal(stdout, "unchanged harness output");
     const [record] = await client.runs({ limit: 1 });
-    assert.equal(record.schema_version, 5);
+    assert.equal(record.schema_version, 6);
     assert.equal(record.outcome, "unknown");
     assert.equal(record.feedback, undefined);
     assert.equal(record.execution.verification, undefined);

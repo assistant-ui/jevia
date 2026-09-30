@@ -331,6 +331,51 @@ pub fn checkpoint_observations(
     })
 }
 
+pub fn record_application(
+    path: &Path,
+    run_id: &str,
+    input: jevia_core::ExecutionRecording,
+) -> Result<RouteRecord> {
+    update(path, run_id, |record| apply_application(record, input))
+}
+
+/// A single immutable, caller-reported attempt. Exact retries are idempotent;
+/// conflicting submissions, native executions and active runs are never overwritten.
+pub(super) fn apply_application(
+    record: &mut RouteRecord,
+    input: jevia_core::ExecutionRecording,
+) -> Result<()> {
+    let execution = input.into_evidence().map_err(anyhow::Error::msg)?;
+    if record.execution.as_ref() == Some(&execution)
+        && record
+            .lifecycle
+            .as_ref()
+            .is_some_and(|l| l.state == RunState::Completed)
+    {
+        return Ok(());
+    }
+    if record.execution.is_some()
+        || !record
+            .lifecycle
+            .as_ref()
+            .is_some_and(|l| l.state == RunState::Routed)
+    {
+        bail!(
+            "execution recording requires a routed app-owned run; existing executions cannot be replaced"
+        );
+    }
+    let now = now_ms();
+    record.lifecycle = Some(RunLifecycle {
+        state: RunState::Completed,
+        started_at_ms: None, // Duration is caller-reported; do not invent a start timestamp.
+        finished_at_ms: Some(now),
+    });
+    record.execution = Some(execution);
+    // Preserve independently supplied manual feedback. Never create an outcome
+    // or a process/verification assertion from caller-reported activity.
+    Ok(())
+}
+
 /// Replace a cumulative snapshot, never append it as a new attempt or outcome.
 pub(super) fn apply_observations(
     record: &mut RouteRecord,
@@ -487,7 +532,7 @@ enum LockMode {
     Exclusive,
 }
 
-fn acquire_lock(path: &Path, mode: LockMode) -> Result<File> {
+fn acquire_lock(path: &Path, mode: LockMode) -> Result<crate::lease::FileLock> {
     let lock_path = path.with_extension("lock");
     let lock = private_lock_options()
         .open(&lock_path)
@@ -497,7 +542,7 @@ fn acquire_lock(path: &Path, mode: LockMode) -> Result<File> {
         LockMode::Exclusive => lock.lock(),
     }
     .with_context(|| format!("could not acquire history lock at {}", lock_path.display()))?;
-    Ok(lock)
+    Ok(crate::lease::FileLock::new(lock))
 }
 
 fn private_append_options() -> OpenOptions {
