@@ -10,6 +10,23 @@ use jevia_core::{RECORD_SCHEMA_VERSION, RouteRecord};
 
 use super::{LockMode, acquire_lock};
 
+/// Basic health still validates every record, without retaining the whole history.
+pub fn count(path: &Path) -> Result<usize> {
+    let parent = path
+        .parent()
+        .context("run history path has no parent directory")?;
+    if !parent.exists() {
+        return Ok(0);
+    }
+    let _lock = acquire_lock(path, LockMode::Shared)?;
+    let mut count = 0;
+    super::read_records(path, |_| {
+        count += 1;
+        Ok(())
+    })?;
+    Ok(count)
+}
+
 /// Retain IDs, not entire records. The ID set is required to detect duplicates
 /// anywhere in a JSONL file; unlike SQL there is no primary-key constraint.
 pub fn check_deep(path: &Path) -> Result<usize> {

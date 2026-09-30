@@ -1208,6 +1208,13 @@ By default Jevia stores task text in the selected backend so it can supply usefu
 future decisions. Set `store_task_text = false` under `[privacy]` to retain only
 routing metadata.
 
+In the unreleased CLI, JSONL updates and basic health checks stream the complete
+history instead of retaining every record in memory. Updates still take an
+exclusive lock and atomically replace the file only after all records validate;
+a missing run, rejected change, malformed suffix, or write failure leaves the
+original file intact. This reduces memory use, not the linear scan/rewrite cost.
+Deep checks still retain run identities to detect duplicates.
+
 In JSONL mode, `jevia doctor` validates the complete history and reports malformed records
 without deleting or rewriting them.
 
