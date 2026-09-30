@@ -1,5 +1,14 @@
 # Jevia reference
 
+## CLI 0.1.7: storage, replay, and diagnostics
+
+CLI 0.1.7 adds bounded-memory JSONL updates, consistent routing snapshots,
+passive-history SQL indexes, bounded replay and lock waits, recording maintenance,
+terminal-safe application output, routing explanations, and structured storage
+checks. Node SDK 0.1.3 adds `checkStorageReport()` for CLI 0.1.7 or newer.
+Record schema 6 and SQL schema 1 are unchanged; automatic recording/history use
+and optional feedback/verification keep their existing defaults.
+
 ## CLI 0.1.6: passive routing context
 
 ### Application-owned execution recording
@@ -54,7 +63,7 @@ older snapshot. Unreadable, corrupt, or subsequently changed journals remain on
 disk for recovery; cleanup only removes a journal matching the saved snapshot.
 This does not infer task success or run additional verification.
 
-### Private recording files and Git (unreleased)
+### Private recording files and Git
 
 Project-local `.jevia/.gitignore` rules cover history, caches, native journals,
 loss markers, journal-checkpoint temporary files, event locks, and generated
@@ -204,7 +213,7 @@ The same budget applies to recovery replay. Busy journal/history locks are skipp
 immediately, not waited on once per journal; an expired attempt retains its files
 for a later invocation. File scanning and journal/history reads run off the async
 task so the replay timer remains responsive.
-In the next unreleased CLI, a private atomic cursor in `.jevia/replay-state/`
+Since CLI 0.1.7, a private atomic cursor in `.jevia/replay-state/`
 rotates this candidate window between invocations, including past busy, corrupt,
 or ambiguous attempts. Concurrent replay passes do not race the cursor; explicit
 `runs recover <id>` does not move it. The two-second budget still applies.
@@ -214,7 +223,7 @@ ambiguous. Oversized directories require inspection/maintenance; the cursor is
 not an unbounded background repair service or a guarantee against slow storage.
 Routing receives bounded event counts and model summaries, not session IDs/raw events.
 
-Replay's unreleased JSONL workers also check the remaining budget between read
+In CLI 0.1.7, replay's JSONL workers also check the remaining budget between read
 chunks and records, after decoding, and before publishing a checkpoint rewrite.
 Expiry releases the history lock and discards unpublished temporary output; the
 journal remains available for retry. This is cooperative cancellation, not a hard
@@ -223,7 +232,7 @@ an atomic publication already in progress cannot be preempted. Required routing
 history still validates completely; a replay timeout never substitutes partial
 history or invents an outcome. Ordinary readers reuse their line buffer as well.
 
-#### File-lock contention (unreleased)
+#### File-lock contention
 
 Cache lock acquisition waits at most 500 ms per operation; a busy routing cache
 falls back to a live request without overwriting that cache. JSONL history lock
@@ -249,7 +258,7 @@ exit, and lifecycle state). Each uses `router.history_limit`; pending and active
 runs do not crowd out either window. New observations also invalidate stale routing
 cache entries. Stored task text follows the existing privacy setting.
 
-In the unreleased CLI, both windows come from one consistent history snapshot.
+In CLI 0.1.7, both windows come from one consistent history snapshot.
 Concurrent feedback cannot move an attempt between categories midway through
 the read. JSONL validates once under a shared lock and retains only the two
 bounded windows; SQL uses a read snapshot without holding a project write lock.
@@ -264,7 +273,7 @@ This is the complete CLI and operations reference. Start with the
 [project README](../README.md) or the [product documentation](https://jevia.dev/docs)
 for the shorter installation and integration path.
 
-The unreleased CLI escapes control characters in human-readable routing/run
+CLI 0.1.7 escapes control characters in human-readable routing/run
 metadata, feedback confirmations, and harness names. Imported values cannot add
 terminal commands or spoof extra output lines through these displays. Stored
 values, harness arguments, and JSON/SDK responses retain their original contents;
@@ -330,7 +339,7 @@ PostgreSQL storage checks do connect to the configured database.
 To install the exact crates.io release with Rust 1.92 or newer:
 
 ```bash
-cargo install jevia --version 0.1.6 --locked
+cargo install jevia --version 0.1.7 --locked
 ```
 
 To try unreleased development changes instead:
@@ -774,7 +783,7 @@ processes. After a supervisor crash, inspect any surviving child processes and
 workspace changes before starting new work. Legacy unknown outcomes are not
 assumed to represent interrupted executions. Feedback on active runs is refused.
 
-The unreleased JSONL lookup retains only the requested record while validating
+The CLI 0.1.7 JSONL lookup retains only the requested record while validating
 the full history under its shared lock. `runs show` and journal replay no longer
 load all records into memory. Reads remain linear in file size and still report
 corrupt/unsupported records anywhere in the file; busy background replay defers
@@ -866,10 +875,10 @@ to 4096 bytes and are never sent to Jev. Setting the outcome to `unknown` remove
 it from the known-outcome window; any finished execution facts remain eligible as
 passive observations. These records are not a tamper-proof audit log.
 
-## Routing explanations (unreleased)
+## Routing explanations
 
 Use `jevia route "task" --explain` or `jevia run agent "task" --explain` to
-inspect routing facts. This is not available in CLI 0.1.6. Explanation lines go
+inspect routing facts. This requires CLI 0.1.7 or newer. Explanation lines go
 to stderr, before harness launch; `--json` stdout and saved run records keep
 their existing format. No explanation is printed unless requested.
 
@@ -1044,7 +1053,7 @@ namespace is **not authorization or tenant isolation**: anyone with access to th
 database tables can access other projects. Separate database roles/databases or a
 future authenticated managed API are needed for mutually untrusted users.
 
-### Passive history lookup (unreleased)
+### Passive history lookup
 
 SQLite and PostgreSQL 16+ use a database-maintained partial index for finished
 executions without a known assessed outcome. The latest observation window is
@@ -1067,7 +1076,7 @@ Resolve contention before retrying; a build that exceeds the timeout even while
 idle needs a separately planned maintenance operation, not repeated routing calls.
 PostgreSQL before 16 retains the compatible paginated lookup without this index.
 
-In the unreleased CLI, `storage check`, `storage check --deep`, `doctor`, and
+In CLI 0.1.7, `storage check`, `storage check --deep`, `doctor`, and
 `check` also report the passive index as present, missing, unavailable,
 unsupported (PostgreSQL before 16), or not applicable (JSONL). Missing-index
 guidance points to the explicit initialization above; diagnostics never build or
@@ -1077,7 +1086,9 @@ original storage health result remains separate: a missing performance index is
 not data corruption. SDK `checkStorage()` returns the additional human-readable
 line without changing its API.
 
-### Structured storage checks (unreleased)
+### Structured storage checks
+
+Available in CLI 0.1.7 and Node SDK 0.1.3.
 
 ```sh
 jevia storage check --json
@@ -1100,10 +1111,10 @@ They summarize sequential checks, not one atomic database-wide snapshot. The
 existing basic/deep guarantees below apply; neither mode initializes storage or
 repairs records/indexes, and no Jev credential or request is needed.
 
-The unreleased Node SDK adds `checkStorageReport({ deep?: boolean, signal? })`.
+Node SDK 0.1.3 adds `checkStorageReport({ deep?: boolean, signal? })`.
 It validates schema and report/exit-code consistency and returns typed healthy
 **or failed** reports; check `report.ok`. Process, timeout, cancellation, and
-protocol errors still throw. This method requires a CLI with `--json` support;
+protocol errors still throw. This method requires CLI 0.1.7 or newer;
 older CLIs fail explicitly rather than falling back to parsing text.
 `checkStorage()` remains the unchanged human-readable API.
 
@@ -1251,7 +1262,7 @@ By default Jevia stores task text in the selected backend so it can supply usefu
 future decisions. Set `store_task_text = false` under `[privacy]` to retain only
 routing metadata.
 
-In the unreleased CLI, JSONL updates and basic health checks stream the complete
+In CLI 0.1.7, JSONL updates and basic health checks stream the complete
 history instead of retaining every record in memory. Updates still take an
 exclusive lock and atomically replace the file only after all records validate;
 a missing run, rejected change, malformed suffix, or write failure leaves the
@@ -1351,7 +1362,7 @@ blind import. For JSONL restoration, stop writers and save current history befor
 manual replacement; an older backup would otherwise discard newer runs. SQL
 snapshots do not replace a database-native disaster-recovery backup strategy.
 
-## Recording artifact maintenance (unreleased)
+## Recording artifact maintenance
 
 ```sh
 jevia recordings inspect --json

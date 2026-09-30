@@ -4,7 +4,8 @@ Typed, shell-free access to Jevia from Node.js. The package invokes the Jevia
 CLI's JSON interface so routing policy, local storage, caching, privacy, and
 outcome eligibility stay consistent with the Rust implementation.
 
-> SDK 0.1.2 supports schema-6 application recording and passive routing context
+> SDK 0.1.3 adds typed storage reports with CLI 0.1.7 or newer.
+> Schema-6 application recording and passive routing context remain supported
 > with CLI 0.1.6. CLI 0.1.4–0.1.5 used different verification defaults. Back up
 > history and upgrade all readers/writers sharing a store together.
 
@@ -14,7 +15,7 @@ Install the Jevia CLI first, then add the Node package:
 
 ```sh
 curl -fsSL https://jevia.dev/install.sh | sh
-npm install jevia
+npm install jevia@0.1.3
 ```
 
 The npm package does not download or execute an installer during `npm install`.
@@ -321,7 +322,7 @@ console.log(await jevia.checkStorage());
 console.log(await jevia.checkStorage({ deep: true }));
 ```
 
-The **unreleased SDK and CLI** also provide typed diagnostics (older CLI versions
+**SDK 0.1.3 and CLI 0.1.7 or newer** also provide typed diagnostics (older CLI versions
 do not support this method):
 
 ```ts
