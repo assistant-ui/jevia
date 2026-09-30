@@ -53,9 +53,10 @@ mod tests {
             assert!(error.to_string().contains("file-lock wait expired"));
             assert!(start.elapsed() < Duration::from_secs(1));
             assert!(matches!(open().try_lock(), Err(TryLockError::WouldBlock)));
-            assert_eq!(std::fs::read_to_string(&path).unwrap(), "keep");
         }
         owner.unlock().unwrap();
+        // Windows mandatory file locks also deny reads through other handles.
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "keep");
         drop(acquire(open(), false, Duration::ZERO, "fixture").unwrap());
         acquire(open(), true, Duration::ZERO, "fixture").unwrap();
     }

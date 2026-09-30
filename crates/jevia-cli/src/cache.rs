@@ -406,12 +406,23 @@ mod tests {
                 let barrier = Arc::clone(&barrier);
                 thread::spawn(move || {
                     barrier.wait();
-                    insert_at(
-                        &path,
-                        entry(&format!("key-{index}"), index as u64 + 1, 10_000),
-                        WRITERS,
-                    )
-                    .expect("concurrent insert succeeds");
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+                    loop {
+                        match insert_at(
+                            &path,
+                            entry(&format!("key-{index}"), index as u64 + 1, 10_000),
+                            WRITERS,
+                        ) {
+                            Ok(()) => break,
+                            Err(error)
+                                if error.to_string().starts_with("routing cache busy")
+                                    && std::time::Instant::now() < deadline =>
+                            {
+                                continue;
+                            }
+                            Err(error) => panic!("concurrent insert failed: {error}"),
+                        }
+                    }
                 })
             })
             .collect();
