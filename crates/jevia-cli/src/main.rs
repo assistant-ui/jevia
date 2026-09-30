@@ -166,6 +166,9 @@ enum StorageAction {
         /// Does not test write permissions or perform repairs.
         #[arg(long)]
         deep: bool,
+        /// Emit a versioned, payload-free report; exit 1 for failed checks.
+        #[arg(long)]
+        json: bool,
     },
     /// Preview importing JSONL into the configured database; source is never changed.
     ImportJsonl {
@@ -418,10 +421,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             cache_command(action)?;
             Ok(ExitCode::SUCCESS)
         }
-        Command::Storage { action } => {
-            storage_command(action).await?;
-            Ok(ExitCode::SUCCESS)
-        }
+        Command::Storage { action } => storage_command(action).await,
     }
 }
 
@@ -1249,10 +1249,20 @@ async fn local_diagnostics() -> Result<Config> {
     Ok(config)
 }
 
-async fn storage_command(action: StorageAction) -> Result<()> {
+async fn storage_command(action: StorageAction) -> Result<ExitCode> {
+    if let StorageAction::Check { deep, json: true } = action {
+        let report = storage::report::inspect(deep).await;
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(if report.ok {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        });
+    }
     let paths = ProjectPaths::discover()?;
     if let StorageAction::Setup(options) = action {
-        return setup::run(&paths, options).await;
+        setup::run(&paths, options).await?;
+        return Ok(ExitCode::SUCCESS);
     }
     let config = load_config(&paths)?;
     let storage = Storage::open(&config, &paths, matches!(action, StorageAction::Init)).await?;
@@ -1265,7 +1275,7 @@ async fn storage_command(action: StorageAction) -> Result<()> {
                 storage.name()
             );
         }
-        StorageAction::Check { deep } => {
+        StorageAction::Check { deep, .. } => {
             let count = if deep {
                 storage.check_deep().await?
             } else {
@@ -1298,7 +1308,7 @@ async fn storage_command(action: StorageAction) -> Result<()> {
             println!("Exported {count} records. Protect the snapshot: it may contain task text.");
         }
     }
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
 
 fn required_api_key(command: &str) -> Result<String> {

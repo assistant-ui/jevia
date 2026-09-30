@@ -1,7 +1,8 @@
 use super::{Database, db, observations::INDEX};
 use anyhow::Result;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ObservationIndexStatus {
     Present,
     Missing,

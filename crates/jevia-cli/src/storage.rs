@@ -3,6 +3,7 @@
 
 mod database;
 mod import;
+pub mod report;
 #[cfg(test)]
 mod tests;
 
