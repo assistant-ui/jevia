@@ -206,6 +206,18 @@ for a later invocation. File scanning and journal/history reads run off the asyn
 task so the replay timer remains responsive.
 Routing receives bounded event counts and model summaries, not session IDs/raw events.
 
+#### File-lock contention (unreleased)
+
+Cache lock acquisition waits at most 500 ms per operation; a busy routing cache
+falls back to a live request without overwriting that cache. JSONL history lock
+acquisition waits at most two seconds per operation, then returns an explicit
+`run history busy` error. Required history is never silently replaced by an empty
+window. This also bounds lock acquisition for writes and maintenance; a failed
+terminal write retains the journal and may require explicit recovery after the
+other writer finishes. Locks are never force-unlocked or deleted.
+These are lock-acquisition budgets, not whole-command, filesystem-I/O, SQL-query,
+or harness deadlines. Cache expiry is checked after loading the locked cache.
+
 New records use schema 6 (schemas 1–5 stay readable). Older CLI versions reject
 newer schemas rather than silently erasing metadata. Back up history and upgrade
 all clients sharing a store together to CLI 0.1.6 and Node SDK 0.1.2. SQL database

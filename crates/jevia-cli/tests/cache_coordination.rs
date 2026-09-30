@@ -173,6 +173,64 @@ fn route_with_options(root: &Path, no_cache: bool, explain: bool) -> Child {
     command.spawn().unwrap()
 }
 
+fn wait_bounded(mut child: Child) -> std::process::Output {
+    let deadline = std::time::Instant::now() + Duration::from_secs(8);
+    while child.try_wait().unwrap().is_none() {
+        if std::time::Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("routing waited indefinitely for a file lock");
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    child.wait_with_output().unwrap()
+}
+
+#[test]
+fn busy_cache_falls_back_live_and_busy_history_fails_without_omitting_evidence() {
+    let root = tempdir().unwrap();
+    let server = Server::new(false);
+    server.configure(root.path());
+    let cache = root.path().join(".jevia/cache.lock");
+    let lock = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&cache)
+        .unwrap();
+    lock.lock().unwrap();
+    let output = wait_bounded(route_with_options(root.path(), false, true));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("explain cache=unavailable"));
+    assert_eq!(server.requests.load(Ordering::SeqCst), 1);
+    assert!(!root.path().join(".jevia/cache.jsonl").exists());
+    lock.unlock().unwrap();
+
+    let history = root.path().join(".jevia/runs.jsonl");
+    let original = fs::read(&history).unwrap();
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(history.with_extension("lock"))
+        .unwrap();
+    lock.lock().unwrap();
+    for no_cache in [false, true] {
+        let output = wait_bounded(route(root.path(), no_cache));
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("run history busy"));
+        assert!(output.stdout.is_empty());
+        assert_eq!(server.requests.load(Ordering::SeqCst), 1);
+        assert_eq!(fs::read(&history).unwrap(), original);
+    }
+    lock.unlock().unwrap();
+    assert!(wait_bounded(route(root.path(), false)).status.success());
+}
+
 #[test]
 fn concurrent_misses_share_one_request_and_keep_distinct_runs() {
     let root = tempdir().unwrap();

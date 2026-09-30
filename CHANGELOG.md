@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bound cache/JSONL file-lock acquisition; route live on cache contention and
+  explicitly fail on unavailable history without dropping recorded evidence.
 - Ignore native recording journals, loss markers, event locks, temporary snapshots,
   and generated plugins in Git; safely repair older project ignore rules before
   capture without changing configuration or untracking existing files.
