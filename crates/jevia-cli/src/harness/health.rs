@@ -48,7 +48,7 @@ fn latest(records: &[RouteRecord], name: &str) -> Option<Latest> {
             Some(ObservationStatus::Unsupported) => "No native adapter matched this launch. Use a supported direct executable or an explicitly compatible wrapper.",
             Some(ObservationStatus::Unavailable) => "Capture setup was unavailable. Check the tested version, platform, conflicting settings, and writable project directory; the saved status does not identify one exact cause.",
             Some(ObservationStatus::NoEvents) => "No native events were saved. Check harness hook/plugin policy and, for Codex, review /hooks. This does not prove trust was denied or recording is broken; an active run may not have checkpointed yet.",
-            Some(ObservationStatus::Partial) => "Capture is incomplete. Some inputs were discarded or a journal read failed; retain journals and inspect storage access. Do not assume missing events never happened.",
+            Some(ObservationStatus::Partial) => "Capture is incomplete. Inputs were discarded, a hook write failed, or a journal read failed. Discarded inputs can be a lower bound when writes failed; retain journals and inspect storage access. Do not assume missing events never happened.",
             Some(ObservationStatus::Recorded) => "Native events were received. This confirms some coverage, not complete coverage or task correctness.",
         };
         Some(Latest {
