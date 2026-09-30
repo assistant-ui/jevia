@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Keep agent deadlines/cancellation responsive during observation checkpoints;
+  skip busy JSONL checkpoint locks and reject stale terminal supervisor writes.
+- Bound recovery replay to one two-second budget, skip busy journals/history,
+  and retain pending snapshots for later retry.
+- Expose detected hook-write loss as partial coverage and a conservative lost-input
+  lower bound, with a private, payload-free marker and idempotent recovery.
+- Add opt-in `route --explain` and `run --explain` diagnostics on stderr for
+  cache hits/miss reasons, coordination/cache writes, separate counts of known
+  outcomes and passive execution observations,
+  confidence fallback, and routing time. Keep task text out of explanations and
+  preserve existing JSON output and persisted record formats.
+
 ## 0.1.6 — 2026-09-29
 
 - Record harness execution automatically without requiring feedback or additional

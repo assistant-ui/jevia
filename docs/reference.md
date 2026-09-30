@@ -797,6 +797,41 @@ to 4096 bytes and are never sent to Jev. Setting the outcome to `unknown` remove
 it from the known-outcome window; any finished execution facts remain eligible as
 passive observations. These records are not a tamper-proof audit log.
 
+## Routing explanations (unreleased)
+
+Use `jevia route "task" --explain` or `jevia run agent "task" --explain` to
+inspect routing facts. This is not available in CLI 0.1.6. Explanation lines go
+to stderr, before harness launch; `--json` stdout and saved run records keep
+their existing format. No explanation is printed unless requested.
+
+```text
+jevia: explain cache=miss:not_found coordination=acquired write=stored
+jevia: explain known_outcomes=2 passive_observations=8 history_limit_per_kind=20
+jevia: explain source=live confidence=0.94 floor=0.65 fallback=not_applied elapsed_ms=120
+```
+
+`known_outcomes` counts the bounded, eligible outcome records supplied to the
+router. `passive_observations` counts the separate window of finished executions
+without eligible outcome evidence, including process-only, unknown, and partial
+capture. A run is not counted in both windows. Active/routed-only executions are
+not passive history. Feedback and additional verification remain optional, and
+recorded history is included automatically. On cache hits these are the inputs
+used to match the cached decision, not a new provider request.
+
+Cache status distinguishes `hit`, `miss:not_found`, `miss:expired`, `disabled`,
+`bypassed`, `unavailable`, and `key_unavailable`. Coordination reports
+`not_needed`, `acquired`, `waited`, `timed_out`, or `unavailable`; cache writes
+report `stored`, `skipped`, or `failed`. A fingerprint miss cannot identify which
+input changed. Confidence/floor and `fallback=below_confidence_floor` describe
+the policy applied to the returned signal, not the model's internal reasoning.
+Elapsed time includes startup replay and routing, but not harness execution.
+
+Explanation lines contain only fixed labels and numeric facts: no task text,
+model/tier names, credentials, record IDs, session IDs, or cache fingerprints.
+This does not suppress ordinary CLI/harness output or change task-text storage
+and provider privacy settings. A failed route does not print a successful
+decision explanation or create a synthetic run.
+
 ## Routing cache
 
 Jevia caches equivalent routing decisions locally so repeated work does not

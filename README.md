@@ -148,6 +148,14 @@ recorded CLI observations and other eligible outcomes. No history argument or
 manual fetch is needed. The SDK does not instrument an externally launched agent
 merely because your application called `route()`.
 
+## Routing explanations (unreleased)
+
+Use `jevia route "task" --explain` or `jevia run agent "task" --explain` to
+inspect cache behavior, the counts of known outcomes and passive observations,
+and confidence fallback. Diagnostics go to stderr; JSON output stays unchanged.
+These are observed routing facts, not the model's internal reasoning. See the
+[routing explanation reference](docs/reference.md#routing-explanations-unreleased).
+
 ## Documentation
 
 - [Product documentation](https://jevia.dev/docs) — install, adaptive routing,

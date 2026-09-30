@@ -28,8 +28,19 @@ pub struct CacheStats {
     pub expired: usize,
 }
 
-pub fn lookup(path: &Path, key: &str) -> Result<Option<RouteDecision>> {
-    lookup_at(path, key, now_ms())
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MissReason {
+    NotFound,
+    Expired,
+}
+
+pub enum Lookup {
+    Hit(RouteDecision),
+    Miss(MissReason),
+}
+
+pub fn lookup(path: &Path, key: &str) -> Result<Lookup> {
+    lookup_status_at(path, key, now_ms())
 }
 
 pub fn insert(
@@ -90,13 +101,24 @@ pub fn clear(path: &Path) -> Result<bool> {
     }
 }
 
+#[cfg(test)]
 fn lookup_at(path: &Path, key: &str, now: u64) -> Result<Option<RouteDecision>> {
+    Ok(match lookup_status_at(path, key, now)? {
+        Lookup::Hit(decision) => Some(decision),
+        Lookup::Miss(_) => None,
+    })
+}
+
+fn lookup_status_at(path: &Path, key: &str, now: u64) -> Result<Lookup> {
     let entries = load(path)?;
-    Ok(entries
-        .into_iter()
-        .rev()
-        .find(|entry| entry.key == key && entry.expires_at_ms > now)
-        .map(|entry| entry.decision))
+    let mut miss = MissReason::NotFound;
+    for entry in entries.into_iter().rev().filter(|entry| entry.key == key) {
+        if entry.expires_at_ms > now {
+            return Ok(Lookup::Hit(entry.decision));
+        }
+        miss = MissReason::Expired;
+    }
+    Ok(Lookup::Miss(miss))
 }
 
 fn insert_at(path: &Path, entry: CacheEntry, max_entries: usize) -> Result<()> {
@@ -277,6 +299,18 @@ mod tests {
 
         assert!(lookup_at(&path, "key", 199).expect("cache reads").is_some());
         assert!(lookup_at(&path, "key", 200).expect("cache reads").is_none());
+        assert!(matches!(
+            lookup_status_at(&path, "key", 199).unwrap(),
+            Lookup::Hit(_)
+        ));
+        assert!(matches!(
+            lookup_status_at(&path, "key", 200).unwrap(),
+            Lookup::Miss(MissReason::Expired)
+        ));
+        assert!(matches!(
+            lookup_status_at(&path, "other", 200).unwrap(),
+            Lookup::Miss(MissReason::NotFound)
+        ));
     }
 
     #[test]
@@ -302,6 +336,21 @@ mod tests {
                 .expect("cache reads")
                 .is_some()
         );
+    }
+
+    #[test]
+    fn expired_duplicate_does_not_hide_a_still_valid_matching_entry() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("cache.jsonl");
+        write_unlocked(&path, &[entry("key", 100, 300), entry("key", 150, 200)]).unwrap();
+        assert!(matches!(
+            lookup_status_at(&path, "key", 200).unwrap(),
+            Lookup::Hit(_)
+        ));
+        assert!(matches!(
+            lookup_status_at(&path, "key", 300).unwrap(),
+            Lookup::Miss(MissReason::Expired)
+        ));
     }
 
     #[test]
