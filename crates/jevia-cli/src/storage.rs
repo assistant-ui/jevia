@@ -6,6 +6,7 @@ mod import;
 #[cfg(test)]
 mod tests;
 
+pub use database::ObservationIndexStatus;
 pub use import::validate_import;
 
 use crate::{lease, paths::ProjectPaths, store};
@@ -233,6 +234,14 @@ impl Storage {
         match self {
             Self::Jsonl(paths) => Ok(store::load(&paths.runs)?.len()),
             Self::Database(db) => db.check().await,
+        }
+    }
+
+    /// Read-only performance metadata; never initialize, backfill, or repair.
+    pub async fn observation_index_status(&self) -> Result<ObservationIndexStatus> {
+        match self {
+            Self::Jsonl(_) => Ok(ObservationIndexStatus::NotApplicable),
+            Self::Database(db) => db.observation_index_status().await,
         }
     }
 

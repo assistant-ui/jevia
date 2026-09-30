@@ -2,7 +2,7 @@
 //! no new application-maintained flag that an older writer could leave stale.
 use super::*;
 
-const INDEX: &str = "jevia_runs_observations_v1";
+pub(super) const INDEX: &str = "jevia_runs_observations_v1";
 
 // Keep this equivalent to is_execution_observation && !is_learning_evidence.
 // CASE protects JSON access to corrupt text. Invalid JSON stays a candidate so
