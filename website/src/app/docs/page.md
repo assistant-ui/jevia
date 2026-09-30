@@ -103,19 +103,19 @@ later routing automatically, even when task success is unknown.
 jevia run codex "fix the failing test"
 ```
 
-Unreleased: additional verification is opt-in. CLI 0.1.4–0.1.5 enabled test
+CLI 0.1.6: additional verification is opt-in. CLI 0.1.4–0.1.5 enabled test
 discovery by default; existing explicit checks are preserved. Set `auto_verify = true`
 only if you want root Rust/Node test discovery, or configure your own optional
 verifier. Recording itself works with Python, Go, and mixed-language projects
 without tests. Passing tests is evidence, not proof of every requirement.
 
-Unreleased native capture supports Claude Code 2.1.251+, tested Codex 0.158.x
+CLI 0.1.6 native capture supports Claude Code 2.1.251+, tested Codex 0.158.x
 on macOS/Linux (with normal hook trust), and OpenCode v1 >= 1.18.33.
 Unsupported versions and remote sessions keep process-level
 observations. Capture is best-effort: reported models, switches, and tool activity
 do not prove which model solved a task. Raw prompts, tool contents, and transcripts
 are not retained. Inspect `execution.observations` for coverage and recorded events.
-Upgrade the CLI and SDK together for schema 5. See the
+Back up history and upgrade to CLI 0.1.6 and SDK 0.1.2 together for schema 6. See the
 [capture contract and limits](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#native-harness-observations).
 
 Optional verification runs when the agent process/session finishes, not after each internal
@@ -127,16 +127,16 @@ for supported tests, deadlines, and opt-in settings.
 
 ## Use the Node.js SDK
 
-Unreleased: `recordExecution(runId, { harness, model, duration_ms, exit_code?, events? })`
+SDK 0.1.2: `recordExecution(runId, { harness, model, duration_ms, exit_code?, events? })`
 optionally saves one finished app-owned execution as passive, application-reported
 facts. Outcome stays unknown unless separately assessed; feedback and extra
 verification remain optional. Subsequent `route()` calls automatically include
 the recorded history and update cache eligibility. Exact retries are idempotent;
 conflicting snapshots or supervised executions cannot be overwritten. Do not call
 this after `jevia run`, which records automatically. Inputs are bounded to 256
-allowlisted events / 256 KiB; no raw prompt/tool content. Requires matching
-unreleased CLI/SDK with schema 6. See the
-[complete example](https://github.com/assistant-ui/jevia/tree/main/packages/jevia-node#optional-passive-execution-recording-unreleased).
+allowlisted events / 256 KiB; no raw prompt/tool content. Requires CLI 0.1.6+
+and SDK 0.1.2+ with schema 6. See the
+[complete example](https://github.com/assistant-ui/jevia/tree/main/packages/jevia-node#optional-passive-execution-recording).
 
 Map Jevia's tier to your harness model and let your application run the work.
 Feedback and verification are optional. SDK routing does not launch an agent or

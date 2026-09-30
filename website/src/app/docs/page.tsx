@@ -515,7 +515,7 @@ export default function DocsPage() {
               label="Run a configured harness"
             />
             <p className="docs-body-copy">
-              Unreleased: additional verification is opt-in. CLI 0.1.4–0.1.5 enabled
+              CLI 0.1.6: additional verification is opt-in. CLI 0.1.4–0.1.5 enabled
               test discovery by default; existing explicit checks are preserved.
               Set <code>auto_verify = true</code> only if you want root Rust/Node
               test discovery, or configure your own optional verifier. Recording
@@ -523,14 +523,14 @@ export default function DocsPage() {
               Passing tests is evidence, not proof of every requirement.
             </p>
             <p className="docs-body-copy">
-              Unreleased native capture supports Claude Code 2.1.251+, tested
+              CLI 0.1.6 native capture supports Claude Code 2.1.251+, tested
               Codex 0.158.x on macOS/Linux (with normal hook trust), and OpenCode
               v1 ≥ 1.18.33. Unsupported versions and remote sessions keep
               process-level observations. Capture is best-effort: reported models,
               switches, and tool activity do not prove which model solved a task.
               Raw prompts, tool contents, and transcripts are not retained. Inspect
               <code> execution.observations</code> for coverage and recorded events.
-              Upgrade the CLI and SDK together for schema 5. See the{" "}
+              Back up history and upgrade to CLI 0.1.6 and SDK 0.1.2 together for schema 6. See the{" "}
               <a href="https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#native-harness-observations">
                 capture contract and limits
               </a>.
@@ -557,15 +557,15 @@ export default function DocsPage() {
             <CommandBlock command="npm install jevia" label="Install the Node.js SDK" />
             <CodeBlock code={SDK_EXAMPLE} label="Programmatic harness integration" />
             <p className="docs-body-copy">
-              Unreleased: optionally call <code>recordExecution()</code> after
+              SDK 0.1.2: optionally call <code>recordExecution()</code> after
               app-owned work finishes to save execution facts and bounded events.
               These are application-reported observations, not verified success.
               Later <code>route()</code> calls automatically reuse the history;
               feedback and extra verification remain optional. Exact retries are
               idempotent; existing supervised executions cannot be overwritten.
               Do not call this after <code>jevia run</code>, which records automatically.
-              Requires matching unreleased CLI/SDK with schema 6. See the{" "}
-              <a href="https://github.com/assistant-ui/jevia/tree/main/packages/jevia-node#optional-passive-execution-recording-unreleased">SDK recording example</a>.
+              Requires CLI 0.1.6+ and SDK 0.1.2+ with schema 6. See the{" "}
+              <a href="https://github.com/assistant-ui/jevia/tree/main/packages/jevia-node#optional-passive-execution-recording">SDK recording example</a>.
             </p>
             <p className="docs-body-copy">
               For SDK integrations, map Jevia&apos;s tier to your harness model and let

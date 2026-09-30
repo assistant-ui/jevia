@@ -36,7 +36,7 @@ test("shows the persisted run shape and explains outcome provenance", async () =
 test("documents passive history separately from optional verification in both formats", async () => {
   for (const url of [docsPage, docsMarkdown]) {
     const contents = await readFile(url, "utf8");
-    assert.match(contents, /Unreleased: additional verification is opt-in/);
+    assert.match(contents, /CLI 0\.1\.6: additional verification is opt-in/);
     assert.match(contents, /Claude Code 2\.1\.251/);
     assert.match(contents, /Codex 0\.158\.x/);
     assert.match(contents, /OpenCode\s+v1/);

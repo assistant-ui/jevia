@@ -331,7 +331,7 @@ export class JeviaClient {
    * Optionally save one finished app-owned execution for automatic routing history.
    * Leaves outcome unknown (or preserves separate feedback). Does not run verification.
    * Exact retries are idempotent; conflicting retries and supervised runs are rejected.
-   * Requires the unreleased CLI recording API, not CLI 0.1.5 or the current npm release.
+   * Available in SDK 0.1.2; requires CLI 0.1.6 or newer.
    */
   async recordExecution(runId: string, execution: ExecutionRecording, options: CommandOptions = {}): Promise<RouteRecord> {
     requireText(runId, "runId");

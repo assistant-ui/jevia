@@ -20,6 +20,19 @@ assert!(config.tiers.contains_key(&config.router.fallback_tier));
 
 Requires Rust 1.92 or newer. The API is experimental.
 
+## Upgrading to 0.1.6
+
+This experimental patch adds observation configuration, execution observation
+fields/types, whole-session counters, and `ExecutionRecording`. Review direct
+struct construction and exhaustive enum matches when upgrading; this is not
+source-compatible with every 0.1.5 caller. Omitted `auto_verify` now defaults to
+false, while explicit verifiers and opt-in settings remain enabled.
+
+New records use schema 6; schemas 1–5 remain readable. Upgrade all CLI/SDK readers
+and writers sharing history together (CLI/core 0.1.6, Node SDK 0.1.2), and back up
+history before upgrading. Native/application observations inform routing without
+asserting task success; feedback and extra verification remain optional.
+
 ## Error privacy in 0.1.4
 
 Provider and transport errors retain only safe categories, JSON locations, and
