@@ -152,9 +152,11 @@ timeouts, and asynchronous events after session exit can lose events: capture is
 best-effort, not an audit log.
 When a hook detects a failed write (including lock contention), it attempts to
 create one private, empty `.loss` sidecar beside its journal. The next checkpoint
-or replay reports `partial` coverage and adds a lower bound of one lost input to
-`discarded_inputs`, regardless of repeated failures. Re-reading does not increase
-that count; successfully recorded events and task outcomes remain unchanged. No
+or replay reports `partial` coverage and adds one unconfirmed input to
+`discarded_inputs`, regardless of repeated failures. This means at least one
+capture attempt failed; a write may have reached disk before reporting an error,
+so it is not an exact count or proof that an event is absent. Re-reading does not
+increase that count; recorded events and task outcomes remain unchanged. No
 raw input is queued. The marker and journal are removed only after the matching
 snapshot is saved. If storage also prevents the marker, the hook emits a fixed,
 redacted diagnostic and still exits zero. A killed hook or an event arriving after
