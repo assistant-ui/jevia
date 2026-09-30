@@ -6,8 +6,8 @@ mod observations;
 mod route;
 
 pub use observations::{
-    HarnessEvent, HarnessEventKind, HarnessObservations, MAX_HARNESS_EVENTS, ObservationMode,
-    ObservationSource, ObservationStatus, valid_identifier,
+    HarnessEvent, HarnessEventKind, HarnessObservations, MAX_HARNESS_EVENTS, MAX_OBSERVED_MODELS,
+    ObservationMode, ObservationSource, ObservationStatus, ObservationTotals, valid_identifier,
 };
 
 pub use config::{

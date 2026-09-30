@@ -98,7 +98,7 @@ function assertAutomaticPipelineDocs(content) {
   assert.match(text, /Claude Code 2\.1\.251/);
   assert.match(text, /other harnesses currently provide process-level observations/);
   assert.match(text, /execution\.observations/);
-  assert.match(text, /schema 4/);
+  assert.match(text, /schema 5/);
   assert.match(text, /each history window/);
   assert.doesNotMatch(text, /verifies it, and records|Unknown, active, and process-exit-only records are excluded/);
   assert.match(text, /when the agent process\/session finishes/);

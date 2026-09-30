@@ -288,7 +288,7 @@ const STORAGE_OPTIONS = [
 
 const STORED_RUN = [
   "{",
-  '  "schema_version": 4,',
+  '  "schema_version": 5,',
   '  "run_id": "7b65a69a-0a6f-4a89-bd73-88f090954dd9",',
   '  "tier": "balanced",',
   '  "suggested_tier": "balanced",',
@@ -529,7 +529,7 @@ export default function DocsPage() {
               switches, and tool activity do not prove which model solved a task.
               Raw prompts, tool contents, and transcripts are not retained. Inspect
               <code> execution.observations</code> for coverage and recorded events.
-              Upgrade the CLI and SDK together for schema 4. See the{" "}
+              Upgrade the CLI and SDK together for schema 5. See the{" "}
               <a href="https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#native-harness-observations">
                 capture contract and limits
               </a>.

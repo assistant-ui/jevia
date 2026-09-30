@@ -304,7 +304,7 @@ for (const backend of ["jsonl", "sqlite", "postgres"]) {
     const { stdout } = await run(0);
     assert.equal(stdout, "unchanged harness output");
     const [record] = await client.runs({ limit: 1 });
-    assert.equal(record.schema_version, 4);
+    assert.equal(record.schema_version, 5);
     assert.equal(record.outcome, "unknown");
     assert.equal(record.feedback, undefined);
     assert.equal(record.execution.verification, undefined);

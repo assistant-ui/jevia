@@ -22,11 +22,39 @@ const isEventKind = oneOf("session_started", "session_ended", "turn_started", "t
   "tool_succeeded", "tool_failed", "task_reported_complete", "model_changed", "subagent_started", "subagent_stopped");
 const isHarnessEvent: Guard = (value) => isObject(value) && isEventKind(value.kind) && isUnsigned(value.recorded_at_ms) &&
   ["session_id", "agent_id", "model", "previous_model", "tool_name"].every((key) => optional(value[key], isIdentifier));
+const isEventCounts = (value: unknown): value is Record<string, number> => isObject(value) &&
+  Object.entries(value).every(([kind, count]) => isEventKind(kind) && isUnsigned(count));
+const isTotals: Guard = (value) => {
+  if (!isObject(value) || !isEventCounts(value.event_counts) || !isEventCounts(value.unattributed_event_counts) ||
+    !isEventCounts(value.omitted_model_event_counts) || !isObject(value.models) || Object.keys(value.models).length > 32 ||
+    typeof value.models_truncated !== "boolean" || !isUnsigned(value.discarded_inputs)) return false;
+  if (Object.keys(value.omitted_model_event_counts).length > 0 && !value.models_truncated) return false;
+  const sum = { ...value.unattributed_event_counts };
+  for (const [model, counts] of Object.entries(value.models)) if (!isIdentifier(model) || !isEventCounts(counts)) return false;
+  for (const counts of [...Object.values(value.models), value.omitted_model_event_counts] as Record<string, number>[]) {
+    for (const [kind, count] of Object.entries(counts)) sum[kind] = (sum[kind] ?? 0) + count;
+  }
+  return isUnsigned(Object.values(value.event_counts).reduce((a, b) => a + b, 0)) &&
+    Object.keys(sum).length === Object.keys(value.event_counts).length &&
+    Object.entries(sum).every(([kind, count]) => count === (value.event_counts as Record<string, number>)[kind]);
+};
+const matchesTotals = (value: Record<string, unknown>): boolean => {
+  if (value.totals === undefined) return true;
+  if (!isTotals(value.totals)) return false;
+  const totals = value.totals as { event_counts: Record<string, number>; discarded_inputs: number };
+  const events = value.events as { kind: string }[];
+  const count = Object.values(totals.event_counts).reduce((a, b) => a + b, 0);
+  const sample: Record<string, number> = {};
+  for (const event of events) sample[event.kind] = (sample[event.kind] ?? 0) + 1;
+  return count >= events.length && (count === 0 || events.length > 0) &&
+    (totals.discarded_inputs === 0 || value.status === "partial") &&
+    Object.entries(sample).every(([kind, n]) => n <= (totals.event_counts[kind] ?? 0));
+};
 const isObservations: Guard = (value) => isObject(value) && nullable(oneOf("claude_hooks"))(value.source) &&
   oneOf("unsupported", "disabled", "unavailable", "no_events", "recorded", "partial")(value.status) &&
   Array.isArray(value.events) && value.events.length <= 256 && value.events.every(isHarnessEvent) &&
   (value.events.length === 0 || (value.source !== null && (value.status === "recorded" || value.status === "partial"))) &&
-  (value.status !== "recorded" || value.events.length > 0);
+  (value.status !== "recorded" || value.events.length > 0) && matchesTotals(value);
 
 const isVerification: Guard = (value) => isObject(value) &&
   isText(value.command) && typeof value.launched === "boolean" &&
@@ -48,7 +76,7 @@ const isFeedback: Guard = (value) => Array.isArray(value) && value.every(isFeedb
 export function isRouteRecord(value: unknown): value is RouteRecord {
   if (!isObject(value)) return false;
   return (
-    (value.schema_version === 1 || value.schema_version === 2 || value.schema_version === 3 || value.schema_version === 4) &&
+    (value.schema_version === 1 || value.schema_version === 2 || value.schema_version === 3 || value.schema_version === 4 || value.schema_version === 5) &&
     isText(value.run_id) && isText(value.tier) && isText(value.suggested_tier) &&
     isProbability(value.confidence) && isObject(value.probabilities) &&
     Object.values(value.probabilities).every(isProbability) &&
