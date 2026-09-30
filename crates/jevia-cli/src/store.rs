@@ -20,6 +20,9 @@ pub use history::routing_history;
 pub(crate) use maintenance::archivable;
 pub use maintenance::{Maintenance, Report as MaintenanceReport, maintain};
 
+mod lookup;
+pub use lookup::{get, try_get};
+
 pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
     let parent = path
         .parent()
@@ -29,15 +32,6 @@ pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
     }
 
     let _lock = acquire_lock(path, LockMode::Shared)?;
-    load_unlocked(path)
-}
-
-/// Background recovery must never wait behind a live history writer.
-pub fn try_load(path: &Path) -> Result<Vec<RouteRecord>> {
-    let lock = private_lock_options().open(path.with_extension("lock"))?;
-    lock.try_lock_shared()
-        .context("history busy; replay deferred")?;
-    let _guard = crate::lease::FileLock::new(lock);
     load_unlocked(path)
 }
 

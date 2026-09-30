@@ -59,10 +59,7 @@ impl Storage {
 
     pub async fn get(&self, id: &str) -> Result<RouteRecord> {
         match self {
-            Self::Jsonl(paths) => store::load(&paths.runs)?
-                .into_iter()
-                .find(|r| r.decision.run_id == id)
-                .context("run id was not found in history"),
+            Self::Jsonl(paths) => store::get(&paths.runs, id),
             Self::Database(db) => db.get(id).await,
         }
     }
@@ -73,13 +70,7 @@ impl Storage {
             Self::Jsonl(paths) => {
                 let path = paths.runs.clone();
                 let id = id.to_owned();
-                tokio::task::spawn_blocking(move || {
-                    store::try_load(&path)?
-                        .into_iter()
-                        .find(|r| r.decision.run_id == id)
-                        .context("run id was not found in history")
-                })
-                .await?
+                tokio::task::spawn_blocking(move || store::try_get(&path, &id)).await?
             }
             Self::Database(db) => db.get(id).await,
         }
