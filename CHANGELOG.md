@@ -7,6 +7,9 @@
 - Ignore native recording journals, loss markers, event locks, temporary snapshots,
   and generated plugins in Git; safely repair older project ignore rules before
   capture without changing configuration or untracking existing files.
+- Add payload-free `recordings inspect` and preview-first `recordings cleanup`;
+  explicitly confirmed cleanup archives only provably redundant auxiliary files,
+  retaining active runs, journals, loss markers, and unpersisted snapshots.
 - Keep agent deadlines/cancellation responsive during observation checkpoints;
   skip busy JSONL checkpoint locks and reject stale terminal supervisor writes.
 - Bound recovery replay to one two-second budget, skip busy journals/history,

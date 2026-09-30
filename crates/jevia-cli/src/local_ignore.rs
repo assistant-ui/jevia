@@ -22,6 +22,7 @@ const RULES: &[&str] = &[
     "replay-state/",
     "history-backups/",
     "history-archives/",
+    "recording-archives/",
     "runs.jsonl",
     "runs.lock",
     "cache.jsonl",

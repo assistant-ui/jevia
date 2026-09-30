@@ -447,6 +447,21 @@ enum Entry {
     Snapshot(HarnessObservations),
 }
 
+pub(crate) fn checkpoint_matches(bytes: &[u8], saved: &HarnessObservations) -> bool {
+    if bytes.len() as u64 > JOURNAL_LIMIT {
+        return false;
+    }
+    // Compare complete JSON values, not a lossy typed parse that could ignore
+    // newer fields. Unknown data is retained for a compatible reader.
+    match (
+        serde_json::from_slice::<serde_json::Value>(bytes),
+        serde_json::to_value(Entry::Snapshot(saved.clone())),
+    ) {
+        (Ok(actual), Ok(expected)) => actual == expected,
+        _ => false,
+    }
+}
+
 /// Stable striped locks survive atomic journal replacement and are never
 /// unlinked. At most 256 sidecars per project, independent of session length.
 fn journal_guard(path: &Path) -> Result<crate::lease::FileLock> {
@@ -477,7 +492,10 @@ fn save_journal(path: &Path, observations: HarnessObservations) -> Result<()> {
     }
     let parent = path.parent().context("invalid journal directory")?;
     let mut temp = tempfile::Builder::new()
-        .prefix(".jevia-event-checkpoint-")
+        .prefix(&crate::recordings::asset_prefix(
+            ".jevia-event-checkpoint-",
+            path,
+        ))
         .tempfile_in(parent)?;
     temp.write_all(&bytes)?;
     temp.as_file().sync_all()?;
