@@ -162,6 +162,21 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn repairs_preserve_existing_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(".gitignore");
+        fs::write(&path, "custom\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
+        ensure(&path).unwrap();
+        assert_eq!(
+            fs::metadata(path).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn symlink_ignore_and_lock_files_are_not_followed() {
         use std::os::unix::fs::symlink;
         for name in [".gitignore", ".gitignore.lock"] {

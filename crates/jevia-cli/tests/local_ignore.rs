@@ -63,6 +63,12 @@ fn initialized_projects_ignore_runtime_artifacts_but_not_policy() {
             .status
             .success()
     );
+    assert_cmd::Command::cargo_bin("jevia")
+        .unwrap()
+        .current_dir(root.path())
+        .args(["init", "--force"])
+        .assert()
+        .success();
     let tracked = git(root.path(), &["ls-files", "--", ".jevia/runs.jsonl"]);
     assert_eq!(
         String::from_utf8(tracked.stdout).unwrap().trim(),

@@ -68,7 +68,8 @@ If ignore-rule repair fails, native capture stays unavailable and process-level
 recording continues; no native journal/plugin is created by that attempt.
 Git ignore rules prevent ordinary accidental additions, not access to local data.
 They do not untrack files already committed or staged, delete existing files, or
-override explicit force-adds. Review any previously tracked `.jevia` runtime data
+override explicit force-adds; custom Git rules can also negate exclusions.
+Review any previously tracked `.jevia` runtime data
 separately. Retained journals can contain allowlisted model/session/tool metadata
 even though raw prompts and tool contents are not captured.
 
