@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Rotate bounded observation replay across retained candidates, preventing a
+  corrupt/busy prefix from starving later journals; defer incomplete scans safely.
 - Ignore native recording journals, loss markers, event locks, temporary snapshots,
   and generated plugins in Git; safely repair older project ignore rules before
   capture without changing configuration or untracking existing files.
