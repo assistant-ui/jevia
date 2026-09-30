@@ -321,6 +321,28 @@ console.log(await jevia.checkStorage());
 console.log(await jevia.checkStorage({ deep: true }));
 ```
 
+The **unreleased SDK and CLI** also provide typed diagnostics (older CLI versions
+do not support this method):
+
+```ts
+const report = await jevia.checkStorageReport({ deep: true });
+if (!report.ok) {
+  console.error(report.error?.code, report.error?.message);
+} else if (report.passive_history_index === "missing") {
+  // Schedule explicit storage initialization after backup and maintenance review.
+  console.log("Storage is healthy, but its passive-history index is missing.");
+}
+```
+
+Report schema 1 includes `backend`, `check`, `ok`, `records`,
+`passive_history_index`, and a safe `error` object. Unavailable values are `null`;
+missing indexes are separate from failed health checks. Reported health failures
+return `ok: false`; process failures, timeouts, cancellation, unsupported CLI
+flags, and invalid/version-mismatched responses still throw. These diagnostics
+never initialize/repair storage and contain no database URLs or record contents.
+Basic checks retain the rollback-only SQL write probe; deep checks do not test
+write permission. Counts and index metadata are checked sequentially.
+
 SQLite paths are relative to the project root (an absolute path is also allowed).
 For PostgreSQL, provision a database and set its connection URL in the process
 environment or a secret manager before constructing the client:
@@ -354,7 +376,7 @@ history inside a shared database; it is not an authorization boundary.
 - `checkStorage()` checks access using the CLI's rollback-only write probe for SQL.
   `{ deep: true }` validates records and metadata without a write probe or repairs.
   Neither initializes missing storage. These reports are not stable JSON APIs.
-- Both methods accept `signal`; client timeout/buffer limits apply. Increase the
+- Storage methods accept `signal`; client timeout/buffer limits apply. Increase the
   timeout explicitly for large imports. Routes, feedback, and run queries then use
   the selected backend with no new per-request option.
 - This is explicit JSONL-to-database setup, not SQL-to-SQL migration, database

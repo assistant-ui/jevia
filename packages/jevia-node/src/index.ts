@@ -1,6 +1,6 @@
 import type { ExecFileException } from "node:child_process";
 import { constants } from "node:os";
-import { isRouteRecord, isExecutionRecording } from "./protocol.js";
+import { isRouteRecord, isExecutionRecording, isStorageCheckReport } from "./protocol.js";
 import { runCommand } from "./command.js";
 
 export type Outcome = "success" | "failure" | "unknown";
@@ -162,6 +162,20 @@ export type StorageSetupOptions = CommandOptions & {
 export interface StorageCheckOptions extends CommandOptions {
   /** Scan records without a write probe. Does not repair data or test write access. */
   deep?: boolean;
+}
+
+export type StorageIndexStatus = "present" | "missing" | "unavailable" | "unsupported" | "not_applicable";
+export type StorageCheckErrorCode = "configuration_unavailable" | "storage_unavailable" | "history_check_failed" | "index_check_failed";
+
+/** Versioned health report. A missing performance index alone is not a failed check. */
+export interface StorageCheckReport {
+  schema_version: 1;
+  backend: "jsonl" | "sqlite" | "postgres" | null;
+  check: "basic" | "deep";
+  ok: boolean;
+  records: number | null;
+  passive_history_index: StorageIndexStatus | null;
+  error: { code: StorageCheckErrorCode; message: string } | null;
 }
 
 export interface JeviaClientOptions {
@@ -410,6 +424,25 @@ export class JeviaClient {
   async checkStorage(options: StorageCheckOptions = {}): Promise<string> {
     requireOptionalBoolean(options.deep, "deep");
     return this.execute(["storage", "check", ...(options.deep === true ? ["--deep"] : [])], options.signal);
+  }
+
+  /** Structured health, including reported check failures. Process/protocol errors still reject. */
+  async checkStorageReport(options: StorageCheckOptions = {}): Promise<StorageCheckReport> {
+    requireOptionalBoolean(options.deep, "deep");
+    let output: string;
+    let failed = false;
+    try {
+      output = await this.execute(["storage", "check", "--json", ...(options.deep === true ? ["--deep"] : [])], options.signal);
+    } catch (error) {
+      if (!(error instanceof JeviaCommandError) || error.kind !== "exit" || error.exitCode !== 1) throw error;
+      output = error.stdout;
+      failed = true;
+    }
+    const report = this.json(output);
+    if (!isStorageCheckReport(report) || report.ok === failed || report.check !== (options.deep ? "deep" : "basic")) {
+      throw new JeviaProtocolError("Jevia returned an invalid storage check report");
+    }
+    return report;
   }
 
   private record(output: string): RouteRecord {

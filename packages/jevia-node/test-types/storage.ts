@@ -1,4 +1,4 @@
-import { JeviaClient, type StorageTarget } from "../src/index.js";
+import { JeviaClient, type StorageTarget, type StorageCheckReport } from "../src/index.js";
 
 const client = new JeviaClient();
 const sqlite: StorageTarget = { backend: "sqlite", path: ".jevia/history.db" };
@@ -6,6 +6,10 @@ void client.setupStorage(sqlite);
 void client.setupStorage(sqlite, { apply: true, confirmStopped: true, importJsonl: true });
 void client.setupStorage({ backend: "postgres", project: "app", urlEnv: "APP_DB" });
 void client.checkStorage({ deep: true, signal: new AbortController().signal });
+const report: Promise<StorageCheckReport> = client.checkStorageReport({ deep: true });
+void report;
+// @ts-expect-error deep must be a boolean
+void client.checkStorageReport({ deep: "true" });
 // @ts-expect-error apply requires writer confirmation
 void client.setupStorage(sqlite, { apply: true });
 // @ts-expect-error confirmation is only allowed with apply

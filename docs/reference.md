@@ -1064,6 +1064,36 @@ original storage health result remains separate: a missing performance index is
 not data corruption. SDK `checkStorage()` returns the additional human-readable
 line without changing its API.
 
+### Structured storage checks (unreleased)
+
+```sh
+jevia storage check --json
+jevia storage check --deep --json
+```
+
+JSON mode emits one report on stdout, exits 0 when `ok` is true and 1 when a
+check fails. Argument errors still use the normal CLI usage error (exit 2).
+Report schema 1 contains `backend` (`jsonl`, `sqlite`, `postgres`, or `null` before
+configuration is available), `check` (`basic` or `deep`), `ok`, `records`,
+`passive_history_index`, and `error`. Unavailable counts/index status are `null`,
+not zero or missing. Index statuses are `present`, `missing`, `unavailable`,
+`unsupported`, and `not_applicable`; a missing/unexpected index does not itself
+make a successful storage health check fail.
+
+Failures use static messages and one of `configuration_unavailable`,
+`storage_unavailable`, `history_check_failed`, or `index_check_failed`. Reports
+contain no paths, project names, URLs, credentials, run IDs, or record contents.
+They summarize sequential checks, not one atomic database-wide snapshot. The
+existing basic/deep guarantees below apply; neither mode initializes storage or
+repairs records/indexes, and no Jev credential or request is needed.
+
+The unreleased Node SDK adds `checkStorageReport({ deep?: boolean, signal? })`.
+It validates schema and report/exit-code consistency and returns typed healthy
+**or failed** reports; check `report.ok`. Process, timeout, cancellation, and
+protocol errors still throw. This method requires a CLI with `--json` support;
+older CLIs fail explicitly rather than falling back to parsing text.
+`checkStorage()` remains the unchanged human-readable API.
+
 Routing validates the selected SQL history windows, not every unrelated record.
 Malformed JSON remains an index candidate and fails closed if selected. Use
 `jevia storage check --deep` for full-store integrity validation; the optimization

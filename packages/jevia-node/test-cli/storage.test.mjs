@@ -55,6 +55,12 @@ async function migrateAndVerify(t, target, env) {
   assert.equal(await readFile(historyPath, "utf8"), history, "feedback must use SQL, not retained JSONL");
   assert.match(await client.checkStorage(), new RegExp(`backend=${target.backend}, records=1`));
   assert.match(await client.checkStorage({ deep: true }), /check=deep/);
+  const report = await client.checkStorageReport({ deep: true });
+  assert.equal(report.ok, true);
+  assert.equal(report.backend, target.backend);
+  assert.equal(report.records, 1);
+  assert.ok(["present", "unsupported"].includes(report.passive_history_index));
+  assert.equal(report.error, null);
 }
 
 test("SQLite setup previews, imports explicitly, and uses selected storage for SDK calls", async (t) => {
@@ -82,6 +88,10 @@ test("checks never initialize a missing SQLite database", async (t) => {
   assert.notEqual(await readFile(configPath, "utf8"), config);
   await assert.rejects(client.checkStorage(), JeviaCommandError);
   await assert.rejects(client.checkStorage({ deep: true }), JeviaCommandError);
+  const report = await client.checkStorageReport({ deep: true });
+  assert.equal(report.ok, false);
+  assert.equal(report.records, null);
+  assert.equal(report.error.code, "storage_unavailable");
   await assert.rejects(readFile(join(cwd, ".jevia/missing.db")), { code: "ENOENT" });
 });
 
