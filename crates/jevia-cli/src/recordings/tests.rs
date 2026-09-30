@@ -1,0 +1,307 @@
+use super::*;
+use jevia_core::{
+    Config, ExecutionEvidence, HarnessObservations, ObservationStatus, Outcome, RouteRecord,
+    RunLifecycle, StorageConfig,
+};
+
+struct Fixture {
+    _directory: tempfile::TempDir,
+    paths: ProjectPaths,
+    storage: Storage,
+    record: RouteRecord,
+}
+
+impl Fixture {
+    async fn new(backend: StorageConfig) -> Self {
+        let directory = tempfile::tempdir().unwrap();
+        let paths = ProjectPaths::at(directory.path().into());
+        fs::create_dir_all(&paths.directory).unwrap();
+        let storage = Storage::open(
+            &Config {
+                storage: backend,
+                ..Config::default()
+            },
+            &paths,
+            true,
+        )
+        .await
+        .unwrap();
+        let sample = crate::tests::sample_record();
+        let mut record = RouteRecord::new(sample.decision, sample.task);
+        record.decision.run_id = uuid::Uuid::new_v4().to_string();
+        record.lifecycle = Some(RunLifecycle {
+            state: RunState::Completed,
+            started_at_ms: Some(1),
+            finished_at_ms: Some(2),
+        });
+        record.execution = Some(ExecutionEvidence {
+            harness: "opencode".into(),
+            model: "requested".into(),
+            duration_ms: 1,
+            exit_code: Some(0),
+            verification: None,
+            observations: Some(HarnessObservations {
+                source: Some(ObservationSource::OpencodePlugin),
+                status: ObservationStatus::NoEvents,
+                events: vec![],
+                totals: None,
+            }),
+        });
+        Self {
+            _directory: directory,
+            paths,
+            storage,
+            record,
+        }
+    }
+
+    fn file(&self, prefix: &str, suffix: &str, bytes: &[u8]) -> PathBuf {
+        let path = self.paths.directory.join(format!(
+            "{prefix}{}-fixture{suffix}",
+            self.record.decision.run_id
+        ));
+        fs::write(&path, bytes).unwrap();
+        path
+    }
+
+    fn plugin(&self) -> PathBuf {
+        self.file(
+            "jevia-observer-",
+            ".mjs",
+            include_bytes!("../observations/opencode.mjs"),
+        )
+    }
+
+    fn checkpoint(&self) -> PathBuf {
+        let bytes = serde_json::to_vec(&serde_json::json!({"type":"snapshot", "event":self.record.execution.as_ref().unwrap().observations})).unwrap();
+        self.file(".jevia-event-checkpoint-", "", &bytes)
+    }
+}
+
+fn local_backends() -> [StorageConfig; 2] {
+    [
+        StorageConfig::Jsonl,
+        StorageConfig::Sqlite {
+            url: "sqlite://.jevia/runs.db".into(),
+        },
+    ]
+}
+
+async fn contract(backend: StorageConfig) {
+    let f = Fixture::new(backend).await;
+    f.storage.append(&f.record).await.unwrap();
+    let plugin = f.plugin();
+    let checkpoint = f.checkpoint();
+    let before = f.storage.get(&f.record.decision.run_id).await.unwrap();
+    let preview = cleanup(&f.paths, &f.storage, false).await.unwrap();
+    assert_eq!(preview.eligible, 2);
+    assert_eq!(preview.moved, 0);
+    assert!(!preview.applied);
+    assert!(preview.archive.is_none());
+    assert!(!f.paths.directory.join("recording-archives").exists());
+    assert!(plugin.exists() && checkpoint.exists());
+    let applied = cleanup(&f.paths, &f.storage, true).await.unwrap();
+    assert_eq!(applied.moved, 2);
+    assert!(applied.applied);
+    let archive = applied.archive.unwrap();
+    assert_eq!(
+        fs::read(archive.join(plugin.file_name().unwrap())).unwrap(),
+        include_bytes!("../observations/opencode.mjs")
+    );
+    assert!(archive.join(checkpoint.file_name().unwrap()).exists());
+    assert!(!plugin.exists() && !checkpoint.exists());
+    assert_eq!(
+        f.storage.get(&f.record.decision.run_id).await.unwrap(),
+        before
+    );
+    assert_eq!(before.outcome, Outcome::Unknown);
+    assert!(
+        fs::read_to_string(f.paths.directory.join(".gitignore"))
+            .unwrap()
+            .contains("recording-archives/")
+    );
+    assert_eq!(cleanup(&f.paths, &f.storage, true).await.unwrap().moved, 0);
+}
+
+#[tokio::test]
+async fn cleanup_previews_then_archives_without_changing_history() {
+    for backend in local_backends() {
+        contract(backend).await;
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL test database"]
+async fn postgres_recording_cleanup_contract() {
+    contract(StorageConfig::Postgres {
+        url_env: "JEVIA_TEST_POSTGRES_URL".into(),
+        project: uuid::Uuid::new_v4().to_string(),
+        allow_insecure_localhost: true,
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn active_pending_unknown_and_missing_owners_are_retained() {
+    for backend in local_backends() {
+        for state in [
+            Some(RunState::Running),
+            Some(RunState::Verifying),
+            Some(RunState::Routed),
+            None,
+        ] {
+            let mut f = Fixture::new(backend.clone()).await;
+            f.record.lifecycle = state.map(|state| RunLifecycle {
+                state,
+                started_at_ms: Some(1),
+                finished_at_ms: None,
+            });
+            f.storage.append(&f.record).await.unwrap();
+            let plugin = f.plugin();
+            assert_eq!(cleanup(&f.paths, &f.storage, true).await.unwrap().moved, 0);
+            assert!(plugin.exists());
+        }
+        let f = Fixture::new(backend).await;
+        let plugin = f.plugin();
+        assert_eq!(cleanup(&f.paths, &f.storage, true).await.unwrap().moved, 0);
+        assert!(plugin.exists());
+    }
+}
+
+#[tokio::test]
+async fn apply_rechecks_execution_lease_journals_and_loss_markers() {
+    for backend in local_backends() {
+        let f = Fixture::new(backend).await;
+        f.storage.append(&f.record).await.unwrap();
+        let plugin = f.plugin();
+        assert_eq!(
+            cleanup(&f.paths, &f.storage, false).await.unwrap().eligible,
+            1
+        );
+        let lease = f
+            .storage
+            .execution_guard(&f.record.decision.run_id)
+            .await
+            .unwrap();
+        let applied = cleanup(&f.paths, &f.storage, true).await.unwrap();
+        assert_eq!(applied.moved, 0);
+        assert_eq!(applied.retained["execution_busy"], 1);
+        assert!(plugin.exists());
+        drop(lease);
+        for extension in [".jsonl", ".loss"] {
+            let journal = f.file("jevia-events-", extension, b"PRIVATE unpersisted input");
+            let applied = cleanup(&f.paths, &f.storage, true).await.unwrap();
+            assert_eq!(applied.moved, 0);
+            assert_eq!(applied.retained["replay_source"], 1);
+            assert_eq!(applied.retained["pending_journal_or_marker"], 1);
+            assert_eq!(fs::read(&journal).unwrap(), b"PRIVATE unpersisted input");
+            assert!(plugin.exists());
+            fs::remove_file(journal).unwrap();
+        }
+    }
+}
+
+#[tokio::test]
+async fn unproven_contents_and_legacy_names_are_never_moved() {
+    let f = Fixture::new(StorageConfig::Jsonl).await;
+    f.storage.append(&f.record).await.unwrap();
+    let checkpoint = f.checkpoint();
+    let saved = fs::read(&checkpoint).unwrap();
+    // A valid but newer snapshot is not cleanup-safe.
+    let mut newer: serde_json::Value = serde_json::from_slice(&saved).unwrap();
+    newer["event"]["status"] = "partial".into();
+    fs::write(&checkpoint, serde_json::to_vec(&newer).unwrap()).unwrap();
+    let plugin = f.file("jevia-observer-", ".mjs", b"PRIVATE custom plugin");
+    let legacy = f.paths.directory.join("jevia-observer-legacy.mjs");
+    fs::write(&legacy, include_bytes!("../observations/opencode.mjs")).unwrap();
+    let applied = cleanup(&f.paths, &f.storage, true).await.unwrap();
+    assert_eq!(applied.moved, 0);
+    assert_eq!(applied.retained["unknown_ownership"], 1);
+    assert_eq!(applied.retained["contents_not_known_saved"], 2);
+    for path in [&checkpoint, &plugin, &legacy] {
+        assert!(path.exists());
+    }
+    let encoded = serde_json::to_string(&applied).unwrap();
+    assert!(!encoded.contains("PRIVATE") && !encoded.contains(&f.record.decision.run_id));
+    let mut unknown: serde_json::Value = serde_json::from_slice(&saved).unwrap();
+    unknown["event"]["future_field"] = "unpersisted".into();
+    fs::write(&checkpoint, serde_json::to_vec(&unknown).unwrap()).unwrap();
+    assert_eq!(cleanup(&f.paths, &f.storage, true).await.unwrap().moved, 0);
+    assert!(checkpoint.exists());
+    fs::write(&checkpoint, vec![b'x'; FILE_LIMIT as usize + 1]).unwrap();
+    assert!(read_regular(&checkpoint).is_err());
+}
+
+#[tokio::test]
+async fn archive_failure_preserves_source_and_history() {
+    let f = Fixture::new(StorageConfig::Jsonl).await;
+    f.storage.append(&f.record).await.unwrap();
+    let plugin = f.plugin();
+    fs::write(
+        f.paths.directory.join("recording-archives"),
+        "not a directory",
+    )
+    .unwrap();
+    let history = fs::read(&f.paths.runs).unwrap();
+    assert!(cleanup(&f.paths, &f.storage, true).await.is_err());
+    assert_eq!(
+        fs::read(plugin).unwrap(),
+        include_bytes!("../observations/opencode.mjs")
+    );
+    assert_eq!(fs::read(&f.paths.runs).unwrap(), history);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn linked_files_and_archive_directory_are_rejected() {
+    let f = Fixture::new(StorageConfig::Jsonl).await;
+    f.storage.append(&f.record).await.unwrap();
+    let plugin = f.plugin();
+    let other = f.paths.directory.join("other");
+    fs::hard_link(&plugin, &other).unwrap();
+    assert!(read_regular(&plugin).is_err());
+    fs::remove_file(&plugin).unwrap();
+    std::os::unix::fs::symlink(&other, &plugin).unwrap();
+    assert_eq!(cleanup(&f.paths, &f.storage, true).await.unwrap().moved, 0);
+    assert!(fs::symlink_metadata(&plugin).unwrap().is_symlink());
+    let destination = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(
+        destination.path(),
+        f.paths.directory.join("recording-archives"),
+    )
+    .unwrap();
+    assert!(archive_directory(&f.paths.directory).is_err());
+    assert_eq!(fs::read_dir(destination.path()).unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn truncated_scan_cannot_apply_partial_cleanup() {
+    let f = Fixture::new(StorageConfig::Jsonl).await;
+    f.storage.append(&f.record).await.unwrap();
+    let plugin = f.plugin();
+    for i in 0..SCAN_LIMIT {
+        fs::write(f.paths.directory.join(format!("unrelated-{i}")), "").unwrap();
+    }
+    let inspected = scan(&f.paths.directory).unwrap();
+    assert!(!inspected.report.scan_complete);
+    assert_eq!(inspected.report.scanned_entries, SCAN_LIMIT);
+    assert!(cleanup(&f.paths, &f.storage, true).await.is_err());
+    assert!(plugin.exists());
+    assert!(!f.paths.directory.join("recording-archives").exists());
+}
+
+#[test]
+fn auxiliary_prefix_retains_only_valid_journal_ownership() {
+    let id = uuid::Uuid::new_v4().to_string();
+    assert_eq!(
+        asset_prefix(
+            "jevia-observer-",
+            Path::new(&format!("jevia-events-{id}-tmp.jsonl"))
+        ),
+        format!("jevia-observer-{id}-")
+    );
+    assert_eq!(
+        asset_prefix("jevia-observer-", Path::new("jevia-events-legacy.jsonl")),
+        "jevia-observer-"
+    );
+}

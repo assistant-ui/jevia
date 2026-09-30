@@ -1226,6 +1226,52 @@ blind import. For JSONL restoration, stop writers and save current history befor
 manual replacement; an older backup would otherwise discard newer runs. SQL
 snapshots do not replace a database-native disaster-recovery backup strategy.
 
+## Recording artifact maintenance (unreleased)
+
+```sh
+jevia recordings inspect --json
+jevia recordings cleanup --json
+# Only after all local/remote harnesses and hook processes have stopped:
+jevia recordings cleanup --apply --confirm-stopped --json
+```
+
+`inspect` counts local journal, loss-marker, generated-plugin, and temporary
+checkpoint filenames. It does not read their payloads, parse configuration or
+history, contact providers/databases, replay events, or change files. It reports
+aggregate counts, not run IDs or event data. Project discovery still requires a
+`.jevia/config.toml` file. Scans stop at 4,096 directory entries (including
+unrelated files); incomplete inspection reports `scan_complete: false` and exits
+nonzero. Cleanup refuses an incomplete scan before moving anything; a very large
+directory needs manual inspection, not repeated partial cleanup.
+
+`cleanup` without `--apply` is an advisory preview using the configured JSONL,
+SQLite, or PostgreSQL history. It may open normal storage/locking sidecars, but
+does not alter history or create an archive. Apply additionally requires
+`--confirm-stopped`, repairs private ignore rules, and rechecks each run under
+its execution lease. For PostgreSQL this uses the shared session advisory lock;
+the explicit confirmation covers remote or orphaned children that Jevia cannot
+prove have stopped. Preview is not a reservation: the applied count may change.
+
+Cleanup **never moves journals or loss markers**, infers outcomes, or deletes
+history. Active/routed runs, unknown owners, missing/unreadable history, pending
+journals/markers, unsafe files, and unmatched contents are retained with aggregate
+reason counts. A temporary checkpoint must exactly match the saved observation
+snapshot of a terminal run; a generated OpenCode plugin must match the current
+bundled plugin and a terminal OpenCode recording. New auxiliary filenames retain
+the owning run UUID; older unowned files are intentionally left for manual review.
+Symlinks are rejected; Unix hard-linked files are also retained. This is
+cooperating-process maintenance, not a sandbox against arbitrary filesystem
+writers. Keep the project directory protected with filesystem permissions/ACLs.
+
+Eligible files are **moved, not deleted**, into a unique ignored
+`.jevia/recording-archives/cleanup-*` directory. The report includes the archive
+path. Files already moved remain recoverable even if a later operation fails;
+inspect this directory after an error. To restore, stop writers, review the
+archive, and move selected files back to `.jevia/` only when their original names
+are absent. Archives are never overwritten or automatically pruned; cleanup
+reduces loose artifacts, not total disk usage. No extra verification or feedback
+is required, and recorded history continues to inform routing automatically.
+
 ## Repository structure
 
 - `crates/jevia-core` contains configuration, typed API contracts, policy, and
