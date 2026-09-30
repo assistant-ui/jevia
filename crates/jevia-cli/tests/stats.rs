@@ -56,6 +56,22 @@ fn fixture() -> Vec<Value> {
         if index < 3 {
             record["execution"]["verification"] = json!({"command": "private-verifier", "launched": true, "duration_ms": 5, "exit_code": if index == 1 { 1 } else { 0 }});
         }
+        if index == 0 {
+            record["schema_version"] = json!(5);
+            record["execution"]["observations"] = json!({
+                "source": "claude_hooks", "status": "partial",
+                "events": [
+                    {"kind":"tool_failed", "recorded_at_ms":1, "session_id":"private-session", "model":"actual-a"},
+                    {"kind":"model_changed", "recorded_at_ms":2, "previous_model":"actual-a", "model":"actual-b"}
+                ],
+                "totals": {
+                    "event_counts": {"tool_failed":300,"model_changed":1},
+                    "models": {"actual-a":{"tool_failed":290},"actual-b":{"model_changed":1}},
+                    "unattributed_event_counts":{"tool_failed":10}, "omitted_model_event_counts":{},
+                    "models_truncated":false, "discarded_inputs":1
+                }
+            });
+        }
         if index == 2 {
             record["feedback"] = json!([
                 {"previous_outcome": "success", "previous_source": "verification", "outcome": "failure", "recorded_at_ms": 3, "reason": "private-reason"},
@@ -130,6 +146,19 @@ fn exercise(backend: StorageConfig, name: &str) -> Value {
     assert!(report["tiers"]["strong"]["verified_success_rate"].is_null());
     assert!(report["tiers"].get("retired-tier").is_some());
     assert!(report["tiers"].get("balanced").is_none());
+    assert_eq!(report["observations"]["coverage"]["partial"], 1);
+    assert_eq!(report["observations"]["coverage"]["not_reported"], 3);
+    assert_eq!(report["observations"]["sampled_runs"], 1);
+    assert_eq!(report["observations"]["event_counts"]["tool_failed"], 300);
+    assert_eq!(
+        report["observations"]["models"]["actual-a"]["event_counts"]["tool_failed"],
+        290
+    );
+    assert_eq!(report["observations"]["models"]["actual-b"]["runs"], 1);
+    assert_eq!(
+        report["observations"]["unattributed_event_counts"]["tool_failed"],
+        10
+    );
     let subdir = root.join("nested");
     fs::create_dir(&subdir).unwrap();
     assert_eq!(stats(&subdir, &[]), report);
@@ -153,6 +182,8 @@ fn exercise(backend: StorageConfig, name: &str) -> Value {
     let output = String::from_utf8(output).unwrap();
     assert!(output.contains("Verified success: 1/2 (50.0%)"));
     assert!(output.contains("Manual ok/fail"));
+    assert!(output.contains("Observed model switches: 1"));
+    assert!(output.contains("actual-a"));
     assert!(output.contains("n/a"));
     assert!(!output.contains("private-"));
     assert!(!report.to_string().contains("private-"));
@@ -179,6 +210,7 @@ fn stats_jsonl_and_sqlite_have_identical_aggregates() {
     );
     assert_eq!(jsonl["totals"], sqlite["totals"]);
     assert_eq!(jsonl["tiers"], sqlite["tiers"]);
+    assert_eq!(jsonl["observations"], sqlite["observations"]);
 }
 
 #[test]
@@ -197,6 +229,7 @@ fn postgres_stats_matches_jsonl_and_is_project_scoped() {
         );
         assert_eq!(jsonl["totals"], postgres["totals"]);
         assert_eq!(jsonl["tiers"], postgres["tiers"]);
+        assert_eq!(jsonl["observations"], postgres["observations"]);
     }
 }
 

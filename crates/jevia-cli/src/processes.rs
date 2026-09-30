@@ -75,6 +75,8 @@ async fn wait_until_group_empty(mut probe: impl FnMut() -> nix::Result<()>) -> s
 
 pub struct Runner {
     supervised: bool,
+    ci: bool,
+    environment: Vec<(String, String)>,
     #[cfg(unix)]
     signals: Option<(tokio::signal::unix::Signal, tokio::signal::unix::Signal)>,
     #[cfg(windows)]
@@ -100,8 +102,16 @@ impl Runner {
         };
         Ok(Self {
             supervised,
+            ci: false,
+            environment: vec![],
             signals,
         })
+    }
+
+    pub fn automatic_verification() -> Result<Self> {
+        let mut runner = Self::new(true)?;
+        runner.ci = true;
+        Ok(runner)
     }
 
     pub async fn run(
@@ -115,6 +125,7 @@ impl Runner {
             return Ok(ProcessResult::Exited(
                 tokio::process::Command::new(program)
                     .args(args)
+                    .envs(self.environment.iter().cloned())
                     .current_dir(root)
                     .status()
                     .await?,
@@ -136,16 +147,43 @@ impl Runner {
                 Ok(())
             }
         };
-        supervise(program, args, root, timeout, cancel).await
+        supervise_with_ci(
+            program,
+            args,
+            root,
+            timeout,
+            cancel,
+            self.ci,
+            &self.environment,
+        )
+        .await
+    }
+
+    /// Per-child overrides only. Never mutate the supervisor's environment.
+    pub fn set_environment(&mut self, environment: &[(String, String)]) {
+        self.environment = environment.to_vec();
     }
 }
 
+#[cfg(test)]
 async fn supervise(
     program: &str,
     args: &[String],
     root: &Path,
     timeout: Option<Duration>,
     cancel: impl Future<Output = std::io::Result<()>>,
+) -> Result<ProcessResult> {
+    supervise_with_ci(program, args, root, timeout, cancel, false, &[]).await
+}
+
+async fn supervise_with_ci(
+    program: &str,
+    args: &[String],
+    root: &Path,
+    timeout: Option<Duration>,
+    cancel: impl Future<Output = std::io::Result<()>>,
+    ci: bool,
+    environment: &[(String, String)],
 ) -> Result<ProcessResult> {
     tokio::pin!(cancel);
     tokio::select! {
@@ -158,6 +196,10 @@ async fn supervise(
     }
     let mut command = CommandWrap::with_new(program, |command| {
         command.args(args).current_dir(root).stdin(Stdio::null());
+        command.envs(environment.iter().cloned());
+        if ci {
+            command.env("CI", "true");
+        }
     });
     command.wrap(KillOnDrop);
     #[cfg(unix)]

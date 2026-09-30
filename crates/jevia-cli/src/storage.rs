@@ -11,7 +11,9 @@ pub use import::validate_import;
 use crate::{lease, paths::ProjectPaths, store};
 use anyhow::{Context, Result, bail};
 use database::Database;
-use jevia_core::{Config, ExecutionEvidence, Outcome, RouteRecord, RunState, StorageConfig};
+use jevia_core::{
+    Config, ExecutionEvidence, HarnessObservations, Outcome, RouteRecord, RunState, StorageConfig,
+};
 use std::{fs::File, path::PathBuf};
 
 pub enum Storage {
@@ -22,7 +24,7 @@ pub enum Storage {
 // Keep the lock alive through both harness execution and its verifier. Database
 // guards own a detached connection so a session lock is never returned to a pool.
 pub enum ExecutionGuard {
-    File { _file: File },
+    File { _file: lease::FileLock },
     Postgres { _connection: sqlx::AnyConnection },
 }
 
@@ -65,6 +67,45 @@ impl Storage {
         }
     }
 
+    /// Best-effort recovery reads skip locked JSONL history rather than waiting.
+    pub async fn get_for_replay(&self, id: &str) -> Result<RouteRecord> {
+        match self {
+            Self::Jsonl(paths) => {
+                let path = paths.runs.clone();
+                let id = id.to_owned();
+                tokio::task::spawn_blocking(move || {
+                    store::try_load(&path)?
+                        .into_iter()
+                        .find(|r| r.decision.run_id == id)
+                        .context("run id was not found in history")
+                })
+                .await?
+            }
+            Self::Database(db) => db.get(id).await,
+        }
+    }
+
+    /// Separate windows prevent passive activity from displacing known outcomes.
+    /// Each window retains append order; the provider consumes them separately.
+    pub async fn routing_history(&self, limit: usize) -> Result<Vec<RouteRecord>> {
+        let mut history = self.recent(limit, true).await?;
+        let observations = match self {
+            Self::Jsonl(paths) => store::recent_observations(&paths.runs, limit)?,
+            Self::Database(db) => db.recent_observations(limit).await?,
+        };
+        // A concurrent feedback write can move a run between the two windows.
+        // Do not duplicate it or credit the same attempt twice.
+        for record in observations {
+            if !history
+                .iter()
+                .any(|known| known.decision.run_id == record.decision.run_id)
+            {
+                history.push(record);
+            }
+        }
+        Ok(history)
+    }
+
     pub async fn append(&self, record: &RouteRecord) -> Result<()> {
         match self {
             Self::Jsonl(paths) => store::append(&paths.runs, record),
@@ -84,6 +125,25 @@ impl Storage {
         }
     }
 
+    pub async fn complete_external(
+        &self,
+        id: &str,
+        outcome: Outcome,
+        reason: Option<&str>,
+        confirmed_stopped: bool,
+    ) -> Result<RouteRecord> {
+        if !confirmed_stopped {
+            bail!(
+                "external completion requires --confirm-stopped after all external work and verification have stopped"
+            );
+        }
+        let _guard = self.execution_guard(id).await?;
+        match self {
+            Self::Jsonl(paths) => store::complete_external(&paths.runs, id, outcome, reason),
+            Self::Database(db) => db.complete_external(id, outcome, reason).await,
+        }
+    }
+
     pub async fn state(
         &self,
         id: &str,
@@ -94,6 +154,44 @@ impl Storage {
         match self {
             Self::Jsonl(paths) => store::record_state(&paths.runs, id, state, outcome, execution),
             Self::Database(db) => db.state(id, state, outcome, execution, false).await,
+        }
+    }
+
+    pub async fn record_application(
+        &self,
+        id: &str,
+        input: jevia_core::ExecutionRecording,
+    ) -> Result<RouteRecord> {
+        let _guard = self.execution_guard(id).await?;
+        match self {
+            Self::Jsonl(paths) => store::record_application(&paths.runs, id, input),
+            Self::Database(db) => db.record_application(id, input).await,
+        }
+    }
+
+    /// The caller holds the execution lease. A supervisor must still own its SQL run.
+    pub async fn checkpoint_observations(
+        &self,
+        id: &str,
+        observations: HarnessObservations,
+        supervisor: bool,
+    ) -> Result<RouteRecord> {
+        match self {
+            Self::Jsonl(paths) => {
+                let path = paths.runs.clone();
+                let id = id.to_owned();
+                // No synchronous file I/O on the process supervisor's task. The
+                // worker never waits for a busy history lock; the journal is the
+                // durable retry source. A late supervisor write rejects terminal runs.
+                tokio::task::spawn_blocking(move || {
+                    store::checkpoint_observations(&path, &id, observations, supervisor)
+                })
+                .await?
+            }
+            Self::Database(db) => {
+                db.checkpoint_observations(id, observations, supervisor)
+                    .await
+            }
         }
     }
 

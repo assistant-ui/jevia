@@ -2,10 +2,101 @@
 
 ## Unreleased
 
+- Keep agent deadlines/cancellation responsive during observation checkpoints;
+  skip busy JSONL checkpoint locks and reject stale terminal supervisor writes.
+- Bound recovery replay to one two-second budget, skip busy journals/history,
+  and retain pending snapshots for later retry.
+- Expose detected hook-write loss as partial coverage and a conservative lost-input
+  lower bound, with a private, payload-free marker and idempotent recovery.
 - Add opt-in `route --explain` and `run --explain` diagnostics on stderr for
-  cache hits/miss reasons, coordination/cache writes, eligible evidence count,
+  cache hits/miss reasons, coordination/cache writes, separate counts of known
+  outcomes and passive execution observations,
   confidence fallback, and routing time. Keep task text out of explanations and
   preserve existing JSON output and persisted record formats.
+
+## 0.1.6 — 2026-09-29
+
+- Record harness execution automatically without requiring feedback or additional
+  tests. Keep task outcomes unknown unless separately assessed; use passive
+  observations and known outcomes as distinct routing context and cache inputs.
+- Make additional verification opt-in while preserving explicitly configured
+  verifiers and `auto_verify = true` settings.
+- Capture allowlisted native activity for Claude Code 2.1.251+, tested Codex
+  0.158.x on macOS/Linux with normal hook trust, and OpenCode v1 >= 1.18.33.
+  Unsupported versions/configurations retain process-level recording.
+- Checkpoint live observations, replay recoverable journals, retain whole-session
+  counters beyond the bounded recent sample, and preserve durable events when
+  final reads fail. Keep unreadable or subsequently changed journals for recovery.
+- Add passive per-model activity/coverage to `stats` and read-only
+  `harness health <name> [--json]` diagnostics. Neither infers task correctness.
+- Add CI tests against pinned real harness binaries and loopback model endpoints,
+  preserving normal hook trust and avoiding paid model calls.
+- Release Node SDK `jevia@0.1.2` with optional `recordExecution()` for finished
+  app-owned work. Save application-reported events without requiring feedback or
+  verification; automatically reuse their summaries in subsequent routes.
+- Bound and validate recording input, keep it off command arguments, support
+  idempotent retries, and prevent replacement of active or supervised executions
+  consistently across JSONL, SQLite, and PostgreSQL.
+- Explicitly release execution, journal, history, and cache locks when their
+  operation ends, even while a duplicated/inherited Unix descriptor remains open.
+  Prevent false-active recovery failures and delayed lock release.
+
+### Compatibility and upgrade
+
+Back up history and upgrade every CLI/SDK reader and writer sharing a store
+together: CLI/core 0.1.6 and Node SDK 0.1.2 use record schema 6. Schemas 1–5 remain
+readable, but older clients reject newer records. SQL database schema 1 is
+unchanged. Do not downgrade against updated history or silently switch to an old
+JSONL copy. The SDK recording API requires CLI 0.1.6 or newer.
+
+In CLI 0.1.4–0.1.5, omitted `auto_verify` enabled test discovery. In 0.1.6 it
+defaults to false; opt in explicitly if you want Jevia to run additional tests.
+Native events are best-effort operational facts, not verified success or complete
+model attribution. Existing task-text privacy settings still apply to routing.
+
+This experimental patch also adds Rust struct fields and enum variants; callers
+constructing harness/execution structs or exhaustively matching observation types
+must review their code. It is not source-compatible with every 0.1.5 library
+caller. Rust 1.92 and Node.js 20 remain the minimum supported versions.
+
+## 0.1.5 — 2026-09-29
+
+- Add guided, shell-free harness presets for Codex, Claude Code, OpenCode, and
+  Gemini CLI while keeping model IDs, credentials, and permissions explicit.
+- Add a native Windows release binary and checksum-verifying PowerShell
+  installer alongside the existing macOS and Linux installers.
+- Document persisted run snapshots, default history locations, custom SQLite
+  paths, and the distinction between routing decisions and verified outcomes.
+- Automate real installer smoke tests on Linux, macOS, and Windows before
+  updating the website's pinned release.
+- Publish an SPDX SBOM and signed build-provenance and SBOM attestations for
+  every release binary, then verify both from the installed executables.
+- Add required CodeQL scanning for GitHub Actions, JavaScript/TypeScript, and
+  Rust, and pin third-party workflow actions to immutable commits.
+
+Existing configuration and history formats are unchanged. Rust 1.92 and Node.js
+20 remain the minimum supported versions.
+
+## 0.1.4 — 2026-09-28
+
+- Validate live and cached routing decisions against the current tier policy
+  before recording or reusing them. Invalid cached values fail open to a live
+  request; invalid live responses fail without entering history or cache.
+- Add `jevia runs complete` for explicitly finishing externally executed work
+  with manual outcome evidence after the caller confirms that work has stopped.
+- Automatically discover existing root Rust or Node test commands for harnesses
+  without an explicit verifier, with preview, persistent opt-out, bounded
+  execution, and process-tree cleanup.
+- Redact provider, transport, SDK, and CLI diagnostics while retaining stable,
+  allowlisted error categories and useful status/location metadata.
+- Release `jevia@0.1.1` with storage setup/check methods, external completion,
+  stricter runtime protocol validation, bounded command execution, process-tree
+  cleanup, and privacy-safe error categories.
+- Upgrade `process-wrap` to 10.0.1 after passing the full Rust, Node, storage,
+  website, Linux, macOS, and Windows test matrix.
+
+Existing configuration and history formats are unchanged. Rust 1.92 and Node.js
+20 remain the minimum supported versions.
 
 ## 0.1.3 — 2026-09-28
 

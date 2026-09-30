@@ -67,6 +67,28 @@ fn record(index: usize) -> RouteRecord {
     })).unwrap()
 }
 
+#[tokio::test]
+async fn sqlite_external_completion_refuses_stale_supervisor_ownership() {
+    let f = Fixture::new(false).await;
+    let mut pending = record(0);
+    pending.lifecycle = Some(Default::default());
+    pending.execution = None;
+    pending.outcome_evidence = None;
+    f.storage.append(&pending).await.unwrap();
+    sqlx::query("UPDATE jevia_runs SET owner = 'stale-owner' WHERE project = $1")
+        .bind(&f.db().project)
+        .execute(&f.db().pool)
+        .await
+        .unwrap();
+    assert!(
+        f.storage
+            .complete_external("run-0", jevia_core::Outcome::Success, None, true)
+            .await
+            .is_err()
+    );
+    assert_eq!(f.storage.get("run-0").await.unwrap(), pending);
+}
+
 async fn contract(postgres: bool) {
     let f = Fixture::new(postgres).await;
     assert_eq!(f.storage.check_deep().await.unwrap(), 0);
@@ -111,12 +133,21 @@ async fn corruption(postgres: bool) {
     wrong_id.decision.run_id = "private-wrong-id".into();
     let mut empty_id = record(404);
     empty_id.decision.run_id.clear();
+    let mut bad_probability = record(404);
+    bad_probability
+        .decision
+        .probabilities
+        .insert("private-tier".into(), 2.0);
+    let mut blank_model = record(404);
+    blank_model.decision.jev_model = " \t".into();
     let valid = serde_json::to_string(&record(404)).unwrap();
     for invalid in [
         "{private-invalid".into(),
         serde_json::to_string(&unsupported).unwrap(),
         serde_json::to_string(&wrong_id).unwrap(),
         serde_json::to_string(&empty_id).unwrap(),
+        serde_json::to_string(&bad_probability).unwrap(),
+        serde_json::to_string(&blank_model).unwrap(),
     ] {
         sqlx::query("UPDATE jevia_runs SET record = $2 WHERE project = $1 AND run_id = 'run-404'")
             .bind(&f.db().project)

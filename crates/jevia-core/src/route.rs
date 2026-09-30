@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Current version of a persisted run record.
-pub const RECORD_SCHEMA_VERSION: u32 = 3;
+pub const RECORD_SCHEMA_VERSION: u32 = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -140,6 +140,35 @@ pub struct RouteDecision {
 }
 
 impl RouteDecision {
+    /// Shared validation for provider output, persisted history, and cached decisions.
+    /// Errors describe fields only; provider values must never enter diagnostics.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if [
+            &self.run_id,
+            &self.tier,
+            &self.suggested_tier,
+            &self.jev_model,
+        ]
+        .iter()
+        .any(|value| value.trim().is_empty())
+        {
+            return Err("routing identity, tiers, and model must be nonempty");
+        }
+        if !self.confidence.is_finite() || !(0.0..=1.0).contains(&self.confidence) {
+            return Err("routing confidence must be finite and between 0 and 1");
+        }
+        // Empty maps remain valid for older providers/records. Do not require
+        // a sum of one: providers may return only a subset of tier scores.
+        if self
+            .probabilities
+            .values()
+            .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
+        {
+            return Err("routing probabilities must be finite and between 0 and 1");
+        }
+        Ok(())
+    }
+
     /// Reuse the decision signal while giving a cache hit its own run identity.
     pub fn for_cache_hit(&self) -> Self {
         let mut decision = self.clone();
@@ -161,6 +190,9 @@ pub struct ExecutionEvidence {
     /// Present when a configured verifier ran after the harness succeeded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification: Option<VerificationEvidence>,
+    /// Best-effort native activity; never a task-success assertion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observations: Option<crate::HarnessObservations>,
 }
 
 /// Observable facts from a configured post-run verifier.
@@ -182,7 +214,7 @@ pub struct RouteRecord {
     /// Omitted when `privacy.store_task_text` is disabled.
     pub task: Option<String>,
     pub outcome: Outcome,
-    /// Present when Jevia launched and observed a configured harness.
+    /// Present for supervised harnesses or explicitly recorded app-owned executions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<ExecutionEvidence>,
     /// Absent in legacy schema-version-1 records; never infer execution from it.
@@ -195,6 +227,16 @@ pub struct RouteRecord {
 }
 
 impl RouteRecord {
+    /// Finished executions provide operational context, not a quality label.
+    /// Routed-only and active runs must not be mistaken for completed attempts.
+    pub fn is_execution_observation(&self) -> bool {
+        self.execution.is_some()
+            && self
+                .lifecycle
+                .as_ref()
+                .is_some_and(|life| !life.state.is_active() && life.state != RunState::Routed)
+    }
+
     pub fn new(decision: RouteDecision, task: Option<String>) -> Self {
         Self {
             schema_version: RECORD_SCHEMA_VERSION,

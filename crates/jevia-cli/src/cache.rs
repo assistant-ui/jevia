@@ -122,6 +122,7 @@ fn lookup_status_at(path: &Path, key: &str, now: u64) -> Result<Lookup> {
 }
 
 fn insert_at(path: &Path, entry: CacheEntry, max_entries: usize) -> Result<()> {
+    entry.decision.validate().map_err(anyhow::Error::msg)?;
     let parent = path
         .parent()
         .context("cache path does not have a parent directory")?;
@@ -179,6 +180,16 @@ fn load_unlocked(path: &Path) -> Result<Vec<CacheEntry>> {
                 path.display()
             );
         }
+        entry
+            .decision
+            .validate()
+            .map_err(anyhow::Error::msg)
+            .with_context(|| {
+                format!(
+                    "invalid cached decision on line {} (contents redacted)",
+                    index + 1
+                )
+            })?;
         entries.push(entry);
     }
     Ok(entries)
@@ -217,7 +228,7 @@ enum LockMode {
     Exclusive,
 }
 
-fn acquire_lock(path: &Path, mode: LockMode) -> Result<File> {
+fn acquire_lock(path: &Path, mode: LockMode) -> Result<crate::lease::FileLock> {
     let lock_path = path.with_extension("lock");
     let lock = private_lock_options()
         .open(&lock_path)
@@ -227,7 +238,7 @@ fn acquire_lock(path: &Path, mode: LockMode) -> Result<File> {
         LockMode::Exclusive => lock.lock(),
     }
     .with_context(|| format!("could not acquire cache lock at {}", lock_path.display()))?;
-    Ok(lock)
+    Ok(crate::lease::FileLock::new(lock))
 }
 
 fn private_lock_options() -> OpenOptions {
@@ -411,6 +422,24 @@ mod tests {
             fs::read_to_string(path).expect("cache remains readable"),
             malformed
         );
+    }
+
+    #[test]
+    fn invalid_decisions_cannot_be_inserted_or_reused() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("cache.jsonl");
+        let mut invalid = entry("key", 0, 1000);
+        invalid
+            .decision
+            .probabilities
+            .insert("private-tier".into(), 2.0);
+        assert!(insert_at(&path, invalid.clone(), 10).is_err());
+        assert!(!path.exists());
+        // Simulate a cache written by an older version; the caller treats this
+        // error as a cache miss and asks the provider again.
+        fs::write(&path, serde_json::to_string(&invalid).unwrap()).unwrap();
+        let error = lookup_at(&path, "key", 1).unwrap_err();
+        assert!(!format!("{error:#}").contains("private-tier"));
     }
 
     fn entry(key: &str, created_at_ms: u64, expires_at_ms: u64) -> CacheEntry {

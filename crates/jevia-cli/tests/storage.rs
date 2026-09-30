@@ -135,6 +135,8 @@ fn flow(postgres: bool) {
     config.harnesses.insert(
         "test".into(),
         HarnessConfig {
+            auto_verify: true,
+            observations: Default::default(),
             command: "rustc".into(),
             args: vec![
                 "--version".into(),
@@ -232,6 +234,98 @@ fn flow(postgres: bool) {
 #[test]
 fn sqlite_cli_flow_and_shared_evidence_cache_invalidation() {
     flow(false);
+}
+
+fn automatic_rust_flow(storage: StorageConfig) {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    command(root).arg("init").assert().success();
+    let server = Server::start();
+    let mut config = Config {
+        storage,
+        ..Config::default()
+    };
+    config.jev.base_url = server.url.clone();
+    config.harnesses.insert(
+        "agent".into(),
+        HarnessConfig {
+            command: "rustc".into(),
+            args: vec![
+                "--version".into(),
+                "--cfg".into(),
+                "task=\"{task}\"".into(),
+                "--cfg".into(),
+                "model=\"{model}\"".into(),
+            ],
+            models: config
+                .tiers
+                .keys()
+                .map(|tier| (tier.clone(), "test".into()))
+                .collect(),
+            auto_verify: true,
+            observations: Default::default(),
+            verification: None,
+        },
+    );
+    fs::write(root.join(".jevia/config.toml"), config.to_toml().unwrap()).unwrap();
+    if !matches!(config.storage, StorageConfig::Jsonl) {
+        command(root).args(["storage", "init"]).assert().success();
+    }
+    fs::write(root.join("Cargo.toml"), "[package]\nname='verification-fixture'\nversion='0.1.0'\nedition='2021'\n[lib]\npath='lib.rs'\n").unwrap();
+    fs::write(
+        root.join("lib.rs"),
+        "#[test] fn verified() { assert_eq!(std::env::var(\"CI\").unwrap(), \"true\"); }",
+    )
+    .unwrap();
+    command(root)
+        .env("CARGO_NET_OFFLINE", "true")
+        .env("CARGO_TARGET_DIR", root.join("build"))
+        .args(["run", "agent", "first task"])
+        .assert()
+        .success();
+    let first = json(root, &["runs", "--limit", "1", "--json"]);
+    assert_eq!(first[0]["lifecycle"]["state"], "completed");
+    assert_eq!(first[0]["outcome"], "success");
+    assert_eq!(first[0]["outcome_evidence"]["source"], "verification");
+    assert_eq!(first[0]["execution"]["verification"]["command"], "cargo");
+    assert!(first[0].get("feedback").is_none());
+    fs::write(
+        root.join("lib.rs"),
+        "#[test] fn regression() { panic!(\"test failed\"); }",
+    )
+    .unwrap();
+    command(root)
+        .env("CARGO_NET_OFFLINE", "true")
+        .env("CARGO_TARGET_DIR", root.join("build"))
+        .args(["run", "agent", "second task"])
+        .assert()
+        .failure();
+    let second = json(root, &["runs", "--limit", "1", "--json"]);
+    assert_eq!(second[0]["outcome"], "failure");
+    assert_eq!(second[0]["lifecycle"]["state"], "completed");
+    assert_eq!(second[0]["outcome_evidence"]["source"], "verification");
+    assert_eq!(
+        server.requests.lock().unwrap()[1]["state"]["recent_completed_outcomes"][0]["outcome_source"],
+        "verification"
+    );
+}
+
+#[test]
+fn automatic_rust_verification_records_and_learns_without_manual_feedback() {
+    automatic_rust_flow(StorageConfig::Jsonl);
+    automatic_rust_flow(StorageConfig::Sqlite {
+        url: "sqlite://.jevia/auto.db".into(),
+    });
+}
+
+#[test]
+#[ignore = "requires an isolated PostgreSQL database in JEVIA_TEST_POSTGRES_URL"]
+fn postgres_automatic_rust_verification_records_and_learns() {
+    automatic_rust_flow(StorageConfig::Postgres {
+        url_env: "JEVIA_TEST_POSTGRES_URL".into(),
+        project: format!("auto-{}", uuid::Uuid::new_v4()),
+        allow_insecure_localhost: true,
+    });
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail};
-use clap::Args;
+use clap::{Args, ValueEnum};
 use jevia_core::{HarnessConfig, VerificationConfig};
 use toml_edit::{Array, DocumentMut, Item, Table, Value, value};
 
@@ -10,35 +10,110 @@ use crate::{
     paths::ProjectPaths,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Preset {
+    /// OpenAI Codex CLI in non-interactive exec mode.
+    Codex,
+    /// Anthropic Claude Code in non-interactive print mode.
+    Claude,
+    /// OpenCode in non-interactive run mode.
+    Opencode,
+    /// Google Gemini CLI in non-interactive prompt mode.
+    Gemini,
+}
+
+impl Preset {
+    fn command(self) -> &'static str {
+        match self {
+            Self::Codex => "codex",
+            Self::Claude => "claude",
+            Self::Opencode => "opencode",
+            Self::Gemini => "gemini",
+        }
+    }
+
+    fn args(self) -> &'static [&'static str] {
+        match self {
+            Self::Codex => &["exec", "--model", "{model}", "{task}"],
+            Self::Claude => &["--print", "--model", "{model}", "{task}"],
+            Self::Opencode => &["run", "--model", "{model}", "{task}"],
+            Self::Gemini => &["--model", "{model}", "--prompt", "{task}"],
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Codex => "codex",
+            Self::Claude => "claude",
+            Self::Opencode => "opencode",
+            Self::Gemini => "gemini",
+        }
+    }
+}
+
 #[derive(Debug, Args)]
 pub struct Options {
     /// Local adapter name (letters, digits, hyphens, underscores).
     name: String,
+    /// Use a built-in command template; model IDs remain explicit.
+    #[arg(long, value_enum, conflicts_with_all = ["command", "args"])]
+    preset: Option<Preset>,
     /// Executable name or path, not a shell command. Never put credentials here.
-    #[arg(long)]
-    command: String,
+    #[arg(long, required_unless_present = "preset")]
+    command: Option<String>,
     /// Repeat in execution order; use --arg=--flag for leading hyphens.
     /// Include {model} and {task}. Nothing is shell-expanded.
-    #[arg(long = "arg", value_name = "ARG", required = true)]
+    #[arg(
+        long = "arg",
+        value_name = "ARG",
+        required_unless_present = "preset",
+        conflicts_with = "preset"
+    )]
     args: Vec<String>,
     /// Repeat once per configured tier, e.g. --model fast=provider/small.
     #[arg(long = "model", value_name = "TIER=MODEL", required = true, value_parser = model_mapping)]
     models: Vec<(String, String)>,
     /// Optional verifier executable; omission preserves an existing verifier.
-    #[arg(long, conflicts_with = "no_verification")]
+    #[arg(long, conflicts_with_all = ["no_verification", "auto_verification"])]
     verify_command: Option<String>,
     /// Repeat verifier arguments; use --verify-arg=--flag for leading hyphens.
     #[arg(long = "verify-arg", value_name = "ARG", requires = "verify_command")]
     verify_args: Vec<String>,
-    /// Explicitly remove verification (a process exit alone is not learning evidence).
+    /// Disable both explicit and automatic verification (process-only records).
     #[arg(long, conflicts_with = "verify_command")]
     no_verification: bool,
+    /// Opt in to automatic project tests instead of an explicit verifier.
+    #[arg(long, conflicts_with_all = ["no_verification", "verify_command"])]
+    auto_verification: bool,
     /// Back up and atomically save the previewed harness configuration.
     #[arg(long)]
     apply: bool,
     /// Allow --apply to change an existing harness. Unrelated settings are preserved.
     #[arg(long)]
     replace: bool,
+}
+
+impl Options {
+    fn command_template(&self) -> Result<(String, Vec<String>)> {
+        if let Some(preset) = self.preset {
+            if self.command.is_some() || !self.args.is_empty() {
+                bail!("--preset cannot be combined with --command or --arg");
+            }
+            return Ok((
+                preset.command().into(),
+                preset.args().iter().map(|arg| (*arg).into()).collect(),
+            ));
+        }
+
+        let command = self
+            .command
+            .clone()
+            .context("supply either --preset or --command with at least one --arg")?;
+        if self.args.is_empty() {
+            bail!("custom harness setup requires at least one --arg");
+        }
+        Ok((command, self.args.clone()))
+    }
 }
 
 fn model_mapping(input: &str) -> Result<(String, String), String> {
@@ -60,10 +135,10 @@ fn prepare(paths: &ProjectPaths, options: &Options) -> Result<ConfigEdit> {
     {
         bail!("harness name must contain only letters, digits, hyphens, and underscores");
     }
-    if options.command.trim().is_empty()
-        || options.command.contains('\0')
-        || options
-            .args
+    let (command, args) = options.command_template()?;
+    if command.trim().is_empty()
+        || command.contains('\0')
+        || args
             .iter()
             .chain(&options.verify_args)
             .any(|arg| arg.contains('\0'))
@@ -98,14 +173,22 @@ fn prepare(paths: &ProjectPaths, options: &Options) -> Result<ConfigEdit> {
                 command: command.clone(),
                 args: options.verify_args.clone(),
             })
-        } else if options.no_verification {
+        } else if options.no_verification || options.auto_verification {
             None
         } else {
             previous.and_then(|harness| harness.verification.clone())
         };
         let harness = HarnessConfig {
-            command: options.command.clone(),
-            args: options.args.clone(),
+            observations: previous.map(|h| h.observations).unwrap_or_default(),
+            auto_verify: if options.no_verification {
+                false
+            } else if options.auto_verification {
+                true
+            } else {
+                previous.is_some_and(|h| h.auto_verify)
+            },
+            command,
+            args,
             models,
             verification,
         };
@@ -139,6 +222,22 @@ fn prepare(paths: &ProjectPaths, options: &Options) -> Result<ConfigEdit> {
     })
 }
 
+pub fn print_presets() {
+    println!("Built-in harness templates (model IDs are not guessed):");
+    for preset in Preset::value_variants() {
+        println!(
+            "  {:<8} {} {}",
+            preset.name(),
+            preset.command(),
+            preset.args().join(" ")
+        );
+    }
+    println!(
+        "Preview one with `jevia harness setup <name> --preset <preset> --model <tier>=<model> ...`."
+    );
+    println!("Setup never installs or launches the selected harness.");
+}
+
 pub fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
     let _lock = if options.apply {
         Some(config_lock(paths)?)
@@ -158,9 +257,15 @@ pub fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
         options.name
     );
     if harness.verification.is_none() {
-        println!(
-            "No verifier configured: a successful process exit is not verified learning evidence."
-        );
+        if harness.auto_verify {
+            println!(
+                "Automatic project tests are enabled; use harness check to preview detection. No manual feedback is needed after a verified run."
+            );
+        } else {
+            println!(
+                "Verification disabled: a successful process exit is not verified learning evidence."
+            );
+        }
     }
     if !options.apply {
         println!("No files changed, programs launched, or API/database requests made.");
@@ -203,6 +308,8 @@ fn harness_item(harness: &HarnessConfig) -> Item {
     let mut table = Table::new();
     table["command"] = value(&harness.command);
     table["args"] = arguments(&harness.args);
+    table["auto_verify"] = value(harness.auto_verify);
+    table["observations"] = value(harness.observations.as_str());
     let mut models = Table::new();
     for (tier, model) in &harness.models {
         models[tier] = value(model);

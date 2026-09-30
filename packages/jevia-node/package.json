@@ -1,6 +1,6 @@
 {
   "name": "jevia",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Typed Node.js client for the Jevia CLI",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "type-check": "tsc --noEmit -p tsconfig.json",
+    "type-check": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
     "test": "pnpm build && node --test test/*.test.mjs",
     "test:cli": "pnpm build && node --test test-cli/*.test.mjs",
     "prepack": "pnpm build"

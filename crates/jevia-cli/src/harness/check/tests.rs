@@ -9,6 +9,8 @@ fn fixture() -> (tempfile::TempDir, ProjectPaths, Config) {
     config.harnesses.insert(
         "agent".into(),
         HarnessConfig {
+            auto_verify: true,
+            observations: Default::default(),
             command: env::current_exe().unwrap().to_str().unwrap().into(),
             args: vec!["{model}".into(), "{task}".into()],
             models: config
@@ -73,4 +75,27 @@ fn preflight_warns_without_verifier_and_rejects_nul_arguments() {
             .any(|check| check.code == "invalid_arguments")
     );
     assert!(!serde_json::to_string(&report).unwrap().contains("private-"));
+}
+
+#[test]
+fn preflight_previews_auto_detection_and_honors_disable_without_running_tests() {
+    let (_dir, paths, mut config) = fixture();
+    fs::write(paths.root.join("Cargo.toml"), "[workspace]\nmembers=[]\n").unwrap();
+    let report = inspect(&paths, "agent");
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.code == "automatic_verification")
+    );
+    assert!(!paths.root.join("target").exists());
+    config.harnesses.get_mut("agent").unwrap().auto_verify = false;
+    fs::write(&paths.config, config.to_toml().unwrap()).unwrap();
+    let report = inspect(&paths, "agent");
+    assert!(
+        report
+            .checks
+            .iter()
+            .any(|check| check.code == "verification_disabled")
+    );
 }

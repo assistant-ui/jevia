@@ -1,5 +1,6 @@
 //! Explicit harness onboarding. These commands never run configured programs.
 mod check;
+mod health;
 mod setup;
 
 use crate::paths::ProjectPaths;
@@ -9,6 +10,8 @@ use std::process::ExitCode;
 
 #[derive(Debug, Subcommand)]
 pub enum Action {
+    /// List built-in shell-free command templates for supported harnesses.
+    Presets,
     /// Preview a harness configuration; --apply backs up and saves it.
     Setup(setup::Options),
     /// Check local configuration and executable candidates without running anything.
@@ -19,12 +22,20 @@ pub enum Action {
         #[arg(long)]
         json: bool,
     },
+    /// Inspect recording configuration and recent stored capture; never launch an agent.
+    Health {
+        name: String,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
-pub fn run(paths: &ProjectPaths, action: Action) -> Result<ExitCode> {
+pub async fn run(paths: &ProjectPaths, action: Action) -> Result<ExitCode> {
     match action {
+        Action::Presets => setup::print_presets(),
         Action::Setup(options) => setup::run(paths, options)?,
         Action::Check { name, json } => return check::run(paths, &name, json),
+        Action::Health { name, json } => return health::run(paths, &name, json).await,
     }
     Ok(ExitCode::SUCCESS)
 }

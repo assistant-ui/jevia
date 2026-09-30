@@ -7,8 +7,8 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use jevia_core::{
-    ExecutionEvidence, FeedbackEvent, Outcome, OutcomeEvidence, OutcomeSource,
-    RECORD_SCHEMA_VERSION, RouteRecord, RunState,
+    ExecutionEvidence, FeedbackEvent, HarnessObservations, Outcome, OutcomeEvidence, OutcomeSource,
+    RECORD_SCHEMA_VERSION, RouteRecord, RunLifecycle, RunState,
 };
 use tempfile::NamedTempFile;
 
@@ -30,6 +30,15 @@ pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
     load_unlocked(path)
 }
 
+/// Background recovery must never wait behind a live history writer.
+pub fn try_load(path: &Path) -> Result<Vec<RouteRecord>> {
+    let lock = private_lock_options().open(path.with_extension("lock"))?;
+    lock.try_lock_shared()
+        .context("history busy; replay deferred")?;
+    let _guard = crate::lease::FileLock::new(lock);
+    load_unlocked(path)
+}
+
 fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
     let mut records = Vec::new();
     read_records(path, |record| {
@@ -42,6 +51,22 @@ fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
 /// Validate the full JSONL stream while retaining only the requested tail.
 /// Memory scales with the window, not with the size of the retained history.
 pub fn recent(path: &Path, limit: usize, evidence_only: bool) -> Result<Vec<RouteRecord>> {
+    recent_matching(path, limit, |record| {
+        !evidence_only || record.is_learning_evidence()
+    })
+}
+
+pub fn recent_observations(path: &Path, limit: usize) -> Result<Vec<RouteRecord>> {
+    recent_matching(path, limit, |record| {
+        record.is_execution_observation() && !record.is_learning_evidence()
+    })
+}
+
+fn recent_matching(
+    path: &Path,
+    limit: usize,
+    eligible: impl Fn(&RouteRecord) -> bool,
+) -> Result<Vec<RouteRecord>> {
     let parent = path
         .parent()
         .context("run history path does not have a parent directory")?;
@@ -51,7 +76,7 @@ pub fn recent(path: &Path, limit: usize, evidence_only: bool) -> Result<Vec<Rout
     let _lock = acquire_lock(path, LockMode::Shared)?;
     let mut records = VecDeque::new();
     read_records(path, |record| {
-        if limit != 0 && (!evidence_only || record.is_learning_evidence()) {
+        if limit != 0 && eligible(&record) {
             if records.len() == limit {
                 records.pop_front();
             }
@@ -143,12 +168,23 @@ fn read_records_from(
                 path.display()
             );
         }
+        record
+            .decision
+            .validate()
+            .map_err(anyhow::Error::msg)
+            .with_context(|| {
+                format!(
+                    "invalid routing decision on line {} (contents redacted)",
+                    index + 1
+                )
+            })?;
         visit(record)?;
     }
     Ok(())
 }
 
 pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
+    record.decision.validate().map_err(anyhow::Error::msg)?;
     let parent = path
         .parent()
         .context("run history path does not have a parent directory")?;
@@ -230,6 +266,48 @@ pub(super) fn apply_outcome(
     Ok(())
 }
 
+pub fn complete_external(
+    path: &Path,
+    run_id: &str,
+    outcome: Outcome,
+    reason: Option<&str>,
+) -> Result<RouteRecord> {
+    update(path, run_id, |record| {
+        apply_external_completion(record, outcome, reason)
+    })
+}
+
+pub(super) fn apply_external_completion(
+    record: &mut RouteRecord,
+    outcome: Outcome,
+    reason: Option<&str>,
+) -> Result<()> {
+    if record.execution.is_some()
+        || record.lifecycle.as_ref().is_some_and(|life| {
+            life.state != RunState::Routed
+                || life.started_at_ms.is_some()
+                || life.finished_at_ms.is_some()
+        })
+        || record
+            .outcome_evidence
+            .as_ref()
+            .is_some_and(|evidence| evidence.source != OutcomeSource::Manual)
+    {
+        bail!(
+            "only pending, externally executed runs can be completed; inspect or recover supervised runs instead"
+        );
+    }
+    // Preserve manual provenance and correction rules. No invented harness,
+    // verifier, start time, or process-exit evidence for work we did not observe.
+    apply_outcome(record, outcome, reason)?;
+    record.lifecycle = Some(RunLifecycle {
+        state: RunState::Completed,
+        started_at_ms: None,
+        finished_at_ms: Some(now_ms()),
+    });
+    Ok(())
+}
+
 #[cfg(test)]
 pub fn record_execution(
     path: &Path,
@@ -250,6 +328,100 @@ pub fn record_state(
     update(path, run_id, |record| {
         apply_state(record, state, outcome, execution)
     })
+}
+
+pub fn checkpoint_observations(
+    path: &Path,
+    run_id: &str,
+    observations: HarnessObservations,
+    supervisor: bool,
+) -> Result<RouteRecord> {
+    let lock = private_lock_options().open(path.with_extension("lock"))?;
+    lock.try_lock()
+        .context("history busy; observation journal retained for retry")?;
+    let _guard = crate::lease::FileLock::new(lock);
+    update_unlocked(path, run_id, |record| {
+        if supervisor
+            && !record
+                .lifecycle
+                .as_ref()
+                .is_some_and(|life| life.state.is_active())
+        {
+            bail!("run is no longer active; refusing a stale observation checkpoint");
+        }
+        apply_observations(record, observations)
+    })
+}
+
+pub fn record_application(
+    path: &Path,
+    run_id: &str,
+    input: jevia_core::ExecutionRecording,
+) -> Result<RouteRecord> {
+    update(path, run_id, |record| apply_application(record, input))
+}
+
+/// A single immutable, caller-reported attempt. Exact retries are idempotent;
+/// conflicting submissions, native executions and active runs are never overwritten.
+pub(super) fn apply_application(
+    record: &mut RouteRecord,
+    input: jevia_core::ExecutionRecording,
+) -> Result<()> {
+    let execution = input.into_evidence().map_err(anyhow::Error::msg)?;
+    if record.execution.as_ref() == Some(&execution)
+        && record
+            .lifecycle
+            .as_ref()
+            .is_some_and(|l| l.state == RunState::Completed)
+    {
+        return Ok(());
+    }
+    if record.execution.is_some()
+        || !record
+            .lifecycle
+            .as_ref()
+            .is_some_and(|l| l.state == RunState::Routed)
+    {
+        bail!(
+            "execution recording requires a routed app-owned run; existing executions cannot be replaced"
+        );
+    }
+    let now = now_ms();
+    record.lifecycle = Some(RunLifecycle {
+        state: RunState::Completed,
+        started_at_ms: None, // Duration is caller-reported; do not invent a start timestamp.
+        finished_at_ms: Some(now),
+    });
+    record.execution = Some(execution);
+    // Preserve independently supplied manual feedback. Never create an outcome
+    // or a process/verification assertion from caller-reported activity.
+    Ok(())
+}
+
+/// Replace a cumulative snapshot, never append it as a new attempt or outcome.
+pub(super) fn apply_observations(
+    record: &mut RouteRecord,
+    observations: HarnessObservations,
+) -> Result<()> {
+    let execution = record
+        .execution
+        .as_mut()
+        .context("run has no execution to checkpoint")?;
+    // Also validate callers constructing structs directly, not only wire input.
+    let observations: HarnessObservations =
+        serde_json::from_value(serde_json::to_value(observations)?)?;
+    if let Some(previous) = &execution.observations {
+        if previous.source != observations.source {
+            bail!("observation source does not match the run");
+        }
+        if observations.event_count() < previous.event_count()
+            || observations.counts().discarded_inputs < previous.counts().discarded_inputs
+        {
+            bail!("refusing an older observation snapshot");
+        }
+    }
+    execution.observations = Some(observations);
+    Ok(())
 }
 
 pub(super) fn apply_state(
@@ -278,7 +450,27 @@ pub(super) fn apply_state(
         life.finished_at_ms = Some(now);
     }
     record.outcome = outcome;
-    if let Some(execution) = execution {
+    if let Some(mut execution) = execution {
+        if let Some(previous) = record
+            .execution
+            .as_ref()
+            .and_then(|e| e.observations.as_ref())
+        {
+            let incoming = execution.observations.as_ref();
+            if incoming.is_none_or(|next| {
+                next.source != previous.source
+                    || next.event_count() < previous.event_count()
+                    || next.counts().discarded_inputs < previous.counts().discarded_inputs
+            }) {
+                let mut retained = previous.clone();
+                if incoming
+                    .is_some_and(|next| next.status == jevia_core::ObservationStatus::Partial)
+                {
+                    retained.status = jevia_core::ObservationStatus::Partial;
+                }
+                execution.observations = Some(retained);
+            }
+        }
         record.execution = Some(execution);
     }
     record.outcome_evidence = if state == RunState::Completed {
@@ -317,6 +509,14 @@ fn update(
     update_record: impl FnOnce(&mut RouteRecord) -> Result<()>,
 ) -> Result<RouteRecord> {
     let _lock = acquire_lock(path, LockMode::Exclusive)?;
+    update_unlocked(path, run_id, update_record)
+}
+
+fn update_unlocked(
+    path: &Path,
+    run_id: &str,
+    update_record: impl FnOnce(&mut RouteRecord) -> Result<()>,
+) -> Result<RouteRecord> {
     let mut records = load_unlocked(path)?;
     let updated = records
         .iter_mut()
@@ -362,7 +562,7 @@ enum LockMode {
     Exclusive,
 }
 
-fn acquire_lock(path: &Path, mode: LockMode) -> Result<File> {
+fn acquire_lock(path: &Path, mode: LockMode) -> Result<crate::lease::FileLock> {
     let lock_path = path.with_extension("lock");
     let lock = private_lock_options()
         .open(&lock_path)
@@ -372,7 +572,7 @@ fn acquire_lock(path: &Path, mode: LockMode) -> Result<File> {
         LockMode::Exclusive => lock.lock(),
     }
     .with_context(|| format!("could not acquire history lock at {}", lock_path.display()))?;
-    Ok(lock)
+    Ok(crate::lease::FileLock::new(lock))
 }
 
 fn private_append_options() -> OpenOptions {
@@ -657,6 +857,7 @@ mod tests {
         let path = directory.path().join("runs.jsonl");
         append(&path, &sample_record()).expect("record appends");
         let execution = ExecutionEvidence {
+            observations: None,
             harness: "agent".to_owned(),
             model: "provider/model".to_owned(),
             duration_ms: 42,
@@ -779,6 +980,32 @@ mod tests {
             fs::read(&path).expect("history remains readable"),
             malformed
         );
+    }
+
+    #[test]
+    fn external_completion_rejects_nonpending_states_without_mutation() {
+        for state in [
+            RunState::Running,
+            RunState::Verifying,
+            RunState::Completed,
+            RunState::Interrupted,
+            RunState::LaunchFailed,
+            RunState::Cancelled,
+            RunState::TimedOut,
+        ] {
+            let mut record = sample_record();
+            record.lifecycle = Some(RunLifecycle {
+                state,
+                ..Default::default()
+            });
+            let before = record.clone();
+            assert!(apply_external_completion(&mut record, Outcome::Success, None).is_err());
+            assert_eq!(record, before);
+        }
+        let mut legacy = sample_record();
+        apply_external_completion(&mut legacy, Outcome::Unknown, None).unwrap();
+        assert_eq!(legacy.lifecycle.unwrap().state, RunState::Completed);
+        assert!(legacy.execution.is_none());
     }
 
     fn sample_record() -> RouteRecord {

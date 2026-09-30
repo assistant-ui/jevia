@@ -2,7 +2,8 @@ use std::{fs, future::Future, path::PathBuf, str::FromStr, time::Duration};
 
 use anyhow::{Context, Result, anyhow, bail};
 use jevia_core::{
-    ExecutionEvidence, Outcome, RECORD_SCHEMA_VERSION, RouteRecord, RunState, StorageConfig,
+    ExecutionEvidence, HarnessObservations, Outcome, RECORD_SCHEMA_VERSION, RouteRecord, RunState,
+    StorageConfig,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{
@@ -276,6 +277,39 @@ impl Database {
         decode(&row.context("run id was not found in this project's history")?)
     }
 
+    pub async fn recent_observations(&self, limit: usize) -> Result<Vec<RouteRecord>> {
+        let mut records = Vec::new();
+        if limit == 0 {
+            return Ok(records);
+        }
+        let mut tx = self.read_snapshot().await?;
+        let mut before = i64::MAX;
+        loop {
+            let rows: Vec<(i64, String)> = db(sqlx::query_as(
+                "SELECT ordinal, record FROM jevia_runs WHERE project = $1 AND ordinal < $2 ORDER BY ordinal DESC LIMIT 128",
+            ).bind(&self.project).bind(before).fetch_all(&mut *tx)).await?;
+            if rows.is_empty() {
+                break;
+            }
+            for (ordinal, encoded) in rows {
+                before = ordinal;
+                let record = decode(&encoded)?;
+                if record.is_execution_observation() && !record.is_learning_evidence() {
+                    records.push(record);
+                    if records.len() == limit {
+                        break;
+                    }
+                }
+            }
+            if records.len() == limit {
+                break;
+            }
+        }
+        db(tx.commit()).await?;
+        records.reverse();
+        Ok(records)
+    }
+
     async fn insert(&self, tx: &mut Transaction<'_, Any>, record: &RouteRecord) -> Result<()> {
         validate_record(record)?;
         let ordinal: i64 = db(sqlx::query_scalar("UPDATE jevia_projects SET next_seq = next_seq + 1 WHERE project = $1 RETURNING next_seq")
@@ -299,8 +333,20 @@ impl Database {
         outcome: Outcome,
         reason: Option<&str>,
     ) -> Result<RouteRecord> {
-        self.mutate(id, None, false, |record| {
+        self.mutate(id, None, false, false, false, |record| {
             store::apply_outcome(record, outcome, reason)
+        })
+        .await
+    }
+
+    pub async fn complete_external(
+        &self,
+        id: &str,
+        outcome: Outcome,
+        reason: Option<&str>,
+    ) -> Result<RouteRecord> {
+        self.mutate(id, None, false, true, false, |record| {
+            store::apply_external_completion(record, outcome, reason)
         })
         .await
     }
@@ -313,8 +359,31 @@ impl Database {
         execution: Option<ExecutionEvidence>,
         recover: bool,
     ) -> Result<RouteRecord> {
-        self.mutate(id, Some(state), recover, |record| {
+        self.mutate(id, Some(state), recover, false, false, |record| {
             store::apply_state(record, state, outcome, execution)
+        })
+        .await
+    }
+
+    pub async fn record_application(
+        &self,
+        id: &str,
+        input: jevia_core::ExecutionRecording,
+    ) -> Result<RouteRecord> {
+        self.mutate(id, None, false, true, false, |record| {
+            store::apply_application(record, input)
+        })
+        .await
+    }
+
+    pub async fn checkpoint_observations(
+        &self,
+        id: &str,
+        observations: HarnessObservations,
+        supervisor: bool,
+    ) -> Result<RouteRecord> {
+        self.mutate(id, None, false, false, supervisor, |record| {
+            store::apply_observations(record, observations)
         })
         .await
     }
@@ -324,6 +393,8 @@ impl Database {
         id: &str,
         state: Option<RunState>,
         recover: bool,
+        require_unowned: bool,
+        require_owner: bool,
         mutation: impl FnOnce(&mut RouteRecord) -> Result<()>,
     ) -> Result<RouteRecord> {
         let mut tx = self.write().await?;
@@ -342,6 +413,12 @@ impl Database {
         let owner: String = row
             .try_get("owner")
             .map_err(|_| anyhow!("invalid stored owner"))?;
+        if require_unowned && !owner.is_empty() {
+            bail!("run belongs to a supervisor; external completion refused");
+        }
+        if require_owner && owner != self.owner {
+            bail!("run ownership was revoked; refusing a stale observation checkpoint");
+        }
         if let Some(next) = state {
             if next == RunState::Running {
                 if !owner.is_empty() {
@@ -472,6 +549,7 @@ fn decode(raw: &str) -> Result<RouteRecord> {
 }
 
 fn validate_record(record: &RouteRecord) -> Result<()> {
+    record.decision.validate().map_err(anyhow::Error::msg)?;
     if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
         bail!("unsupported history record schema; refusing to read or modify it");
     }

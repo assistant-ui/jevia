@@ -17,9 +17,9 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-process-wrap = { version = "9.0.3", features = ["tokio1"] }
+process-wrap = { version = "10.0.1", features = ["tokio1"] }
 clap.workspace = true
-jevia-core = { version = "0.1.3", path = "../jevia-core" }
+jevia-core = { version = "0.1.6", path = "../jevia-core" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

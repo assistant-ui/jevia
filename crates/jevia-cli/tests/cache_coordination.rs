@@ -19,6 +19,7 @@ struct Server {
     url: String,
     requests: Arc<AtomicUsize>,
     evidence_counts: Arc<Mutex<Vec<usize>>>,
+    observation_counts: Arc<Mutex<Vec<usize>>>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -31,6 +32,8 @@ impl Server {
         let requests = Arc::new(AtomicUsize::new(0));
         let evidence_counts = Arc::new(Mutex::new(Vec::new()));
         let counts = Arc::clone(&evidence_counts);
+        let observation_counts = Arc::new(Mutex::new(Vec::new()));
+        let observations = Arc::clone(&observation_counts);
         let stop = Arc::new(AtomicBool::new(false));
         let counter = Arc::clone(&requests);
         let stopping = Arc::clone(&stop);
@@ -41,8 +44,9 @@ impl Server {
                     Ok((stream, _)) => {
                         let index = counter.fetch_add(1, Ordering::SeqCst);
                         let counts = Arc::clone(&counts);
+                        let observations = Arc::clone(&observations);
                         handlers.push(thread::spawn(move || {
-                            respond(stream, fail_first && index == 0, &counts)
+                            respond(stream, fail_first && index == 0, &counts, &observations)
                         }));
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -59,6 +63,7 @@ impl Server {
             url,
             requests,
             evidence_counts,
+            observation_counts,
             stop,
             thread: Some(thread),
         }
@@ -88,7 +93,12 @@ impl Drop for Server {
     }
 }
 
-fn respond(mut stream: TcpStream, fail: bool, counts: &Mutex<Vec<usize>>) {
+fn respond(
+    mut stream: TcpStream,
+    fail: bool,
+    counts: &Mutex<Vec<usize>>,
+    observations: &Mutex<Vec<usize>>,
+) {
     // Accepted sockets can inherit the listener's non-blocking mode on macOS
     // and Windows. Worker threads use blocking reads with a bounded timeout.
     stream.set_nonblocking(false).unwrap();
@@ -115,6 +125,12 @@ fn respond(mut stream: TcpStream, fail: bool, counts: &Mutex<Vec<usize>>) {
                     serde_json::from_slice(&request[end + 4..end + 4 + length]).unwrap();
                 counts.lock().unwrap().push(
                     body["state"]["recent_completed_outcomes"]
+                        .as_array()
+                        .unwrap()
+                        .len(),
+                );
+                observations.lock().unwrap().push(
+                    body["state"]["recent_execution_observations"]
                         .as_array()
                         .unwrap()
                         .len(),
@@ -360,7 +376,7 @@ fn explanations_distinguish_miss_hit_expiry_bypass_and_disabled_without_changing
     let (record, first) = explained(root.path(), false);
     assert_eq!(record["source"], "live");
     assert!(first.contains("cache=miss:not_found coordination=acquired write=stored"));
-    assert!(first.contains("eligible_evidence=0"));
+    assert!(first.contains("known_outcomes=0 passive_observations=0"));
     assert!(first.contains("fallback=not_applied"));
     let (_, hit) = explained(root.path(), false);
     assert!(hit.contains("cache=hit coordination=not_needed write=skipped"));
@@ -406,7 +422,7 @@ fn explanations_distinguish_miss_hit_expiry_bypass_and_disabled_without_changing
 }
 
 #[test]
-fn explanations_count_only_request_evidence_and_report_confidence_fallback() {
+fn explanations_match_both_request_windows_and_report_confidence_fallback() {
     let root = tempdir().unwrap();
     let server = Server::new(false);
     server.configure(root.path());
@@ -426,6 +442,8 @@ fn explanations_count_only_request_evidence_and_report_confidence_fallback() {
         ("process_exit", "completed", "success"),
         ("manual", "running", "success"),
         ("manual", "completed", "unknown"),
+        ("process_exit", "completed", "unknown"),
+        ("process_exit", "timed_out", "unknown"),
     ]
     .into_iter()
     .enumerate()
@@ -436,6 +454,11 @@ fn explanations_count_only_request_evidence_and_report_confidence_fallback() {
         seed["outcome"] = outcome.into();
         seed["lifecycle"]["state"] = state.into();
         seed["outcome_evidence"] = serde_json::json!({"source": source, "recorded_at_ms": 1});
+        seed["execution"] = serde_json::json!({
+            "harness":"PRIVATE_HARNESS", "model":"PRIVATE_MODEL", "duration_ms":1,
+            "exit_code":0, "verification":null,
+            "observations": {"source":"application", "status":"partial", "events":[]}
+        });
         history.push(seed.to_string());
     }
     fs::write(
@@ -444,14 +467,24 @@ fn explanations_count_only_request_evidence_and_report_confidence_fallback() {
     )
     .unwrap();
     let (_, explanation) = explained(root.path(), false);
-    assert!(explanation.contains("eligible_evidence=2 history_limit=2"));
-    assert!(!explanation.contains("PRIVATE_EVIDENCE_TASK"));
+    assert!(
+        explanation.contains("known_outcomes=2 passive_observations=2 history_limit_per_kind=2")
+    );
+    assert!(!explanation.contains("PRIVATE_"));
     assert_eq!(*server.evidence_counts.lock().unwrap(), [0, 2]);
+    assert_eq!(*server.observation_counts.lock().unwrap(), [0, 2]);
     let (_, cached) = explained(root.path(), false);
     assert!(cached.contains("cache=hit"));
-    assert!(cached.contains("eligible_evidence=2 history_limit=2"));
+    assert!(cached.contains("known_outcomes=2 passive_observations=2 history_limit_per_kind=2"));
     assert!(cached.contains("fallback=below_confidence_floor"));
     assert_eq!(server.requests.load(Ordering::SeqCst), 2);
+
+    // Remove window saturation to detect double-counting and active-run leaks.
+    edit_config(root.path(), |config| config.router.history_limit = 20);
+    let (_, expanded) = explained(root.path(), false);
+    assert!(expanded.contains("known_outcomes=3 passive_observations=4 history_limit_per_kind=20"));
+    assert_eq!(*server.evidence_counts.lock().unwrap(), [0, 2, 3]);
+    assert_eq!(*server.observation_counts.lock().unwrap(), [0, 2, 4]);
 }
 
 #[test]
@@ -502,6 +535,8 @@ fn run_explanation_is_opt_in_and_precedes_the_harness() {
                     .map(|tier| (tier.clone(), "private-model".into()))
                     .collect(),
                 verification: None,
+                auto_verify: false,
+                observations: jevia_core::ObservationMode::Off,
             },
         );
     });

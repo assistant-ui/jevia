@@ -4,12 +4,14 @@ mod diagnostics;
 mod explain;
 mod harness;
 mod lease;
+mod observations;
 mod paths;
 mod processes;
 mod setup;
 mod stats;
 mod storage;
 mod store;
+mod verification;
 
 use std::{env, fs, io::Write, process::ExitCode, str::FromStr, time::Instant};
 
@@ -37,6 +39,13 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    #[command(hide = true)]
+    CaptureEvent {
+        #[arg(long)]
+        journal: Option<std::path::PathBuf>,
+        #[arg(long, default_value = "claude_hooks", value_parser = ["claude_hooks", "codex_hooks", "opencode_plugin"])]
+        source: String,
+    },
     /// Create project-local Jevia configuration.
     Init {
         /// Replace an existing config.toml with the default configuration.
@@ -167,6 +176,19 @@ enum StorageAction {
 enum RunsAction {
     /// Inspect one complete run record, including its execution lifecycle.
     Show { run_id: String },
+    /// Save one finished app-owned execution from bounded JSON on stdin; no outcome inference.
+    RecordExecution { run_id: String },
+    /// Finish an externally executed pending run with an explicit manual outcome.
+    Complete {
+        run_id: String,
+        outcome: OutcomeArgument,
+        /// Confirm all external work and verification have stopped.
+        #[arg(long, required = true)]
+        confirm_stopped: bool,
+        /// Explanation required when changing a known outcome. Stored in history.
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Mark an execution whose Jevia supervisor exited as interrupted. Never reruns it.
     Recover {
         run_id: String,
@@ -193,9 +215,11 @@ enum RunsAction {
 
 #[derive(Default, Clone, Copy)]
 struct RunOptions {
+    observation_mode: jevia_core::ObservationMode,
     non_interactive: bool,
     timeout_seconds: Option<u64>,
     verification_timeout_seconds: Option<u64>,
+    automatic_verification: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -224,9 +248,24 @@ impl From<OutcomeArgument> for Outcome {
     }
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    match run().await {
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    // Frequent passive hooks need neither an async runtime nor project discovery.
+    if let Command::CaptureEvent { journal, source } = &cli.command {
+        let journal = journal
+            .clone()
+            .or_else(|| std::env::var_os(observations::JOURNAL_ENV).map(Into::into));
+        if let Some(journal) = journal {
+            observations::receive_from(&journal, source, std::io::stdin().lock());
+        }
+        return ExitCode::SUCCESS;
+    }
+    let result = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("could not start runtime")
+        .and_then(|runtime| runtime.block_on(run(cli)));
+    match result {
         Ok(exit_code) => exit_code,
         Err(error) => {
             eprintln!("error: {error:#}");
@@ -235,14 +274,14 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn run() -> Result<ExitCode> {
-    let cli = Cli::parse();
+async fn run(cli: Cli) -> Result<ExitCode> {
     match cli.command {
+        Command::CaptureEvent { .. } => unreachable!("handled before runtime startup"),
         Command::Init { force } => {
             init(force)?;
             Ok(ExitCode::SUCCESS)
         }
-        Command::Harness { action } => harness::run(&ProjectPaths::discover()?, action),
+        Command::Harness { action } => harness::run(&ProjectPaths::discover()?, action).await,
         Command::Route {
             task,
             json,
@@ -272,6 +311,7 @@ async fn run() -> Result<ExitCode> {
                     non_interactive,
                     timeout_seconds,
                     verification_timeout_seconds,
+                    ..Default::default()
                 },
             )
             .await
@@ -284,6 +324,45 @@ async fn run() -> Result<ExitCode> {
             match action {
                 None => runs(limit, json).await?,
                 Some(RunsAction::Show { run_id }) => show_run(&run_id).await?,
+                Some(RunsAction::RecordExecution { run_id }) => {
+                    use std::io::Read;
+                    const LIMIT: u64 = 256 * 1024;
+                    let mut bytes = Vec::new();
+                    std::io::stdin()
+                        .lock()
+                        .take(LIMIT + 1)
+                        .read_to_end(&mut bytes)
+                        .map_err(|_| anyhow::anyhow!("could not read execution recording"))?;
+                    if bytes.len() as u64 > LIMIT {
+                        bail!("execution recording exceeds 256 KiB");
+                    }
+                    let input = serde_json::from_slice::<jevia_core::ExecutionRecording>(&bytes)
+                        .map_err(|_| {
+                            anyhow::anyhow!("invalid execution recording (contents redacted)")
+                        })?;
+                    let paths = ProjectPaths::discover()?;
+                    let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
+                    let record = storage.record_application(&run_id, input).await?;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                }
+                Some(RunsAction::Complete {
+                    run_id,
+                    outcome,
+                    confirm_stopped,
+                    reason,
+                }) => {
+                    let paths = ProjectPaths::discover()?;
+                    let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
+                    let record = storage
+                        .complete_external(
+                            &run_id,
+                            outcome.into(),
+                            reason.as_deref(),
+                            confirm_stopped,
+                        )
+                        .await?;
+                    println!("{}", serde_json::to_string_pretty(&record)?);
+                }
                 Some(RunsAction::Recover {
                     run_id,
                     confirm_stopped,
@@ -383,7 +462,7 @@ async fn run_harness(
     extra_args: &[String],
     no_cache: bool,
     explain: bool,
-    options: RunOptions,
+    mut options: RunOptions,
 ) -> Result<ExitCode> {
     let paths = ProjectPaths::discover()?;
     let config = load_config(&paths)?;
@@ -414,13 +493,30 @@ async fn run_harness(
     )
     .await?;
     let record = &routed.record;
-    let invocation = harness.invocation(
+    let mut invocation = harness.invocation(
         harness_name,
         &record.decision.tier,
         task,
         &record.decision.run_id,
         extra_args,
     )?;
+    options.observation_mode = harness.observations;
+    if invocation.verification.is_none() && harness.auto_verify {
+        match verification::detect(&paths.root) {
+            verification::Detection::Found(plan) => {
+                eprintln!(
+                    "jevia: automatic verification: {} {}",
+                    plan.program,
+                    plan.args.join(" ")
+                );
+                invocation.verification = Some(plan);
+                options.automatic_verification = true;
+            }
+            verification::Detection::Unavailable(message) => {
+                eprintln!("jevia: verification unavailable: {message}")
+            }
+        }
+    }
     storage.append(record).await?;
 
     if explain {
@@ -468,6 +564,44 @@ async fn execute_stored_harness(
     storage: &Storage,
 ) -> Result<ExitCode> {
     let _lease = storage.execution_guard(&record.decision.run_id).await?;
+    let capture = observations::Capture::prepare(
+        options.observation_mode,
+        invocation,
+        &paths.directory,
+        &record.decision.run_id,
+    )
+    .await;
+    let result = execute_observed_harness(
+        paths,
+        harness_name,
+        invocation,
+        record,
+        options,
+        storage,
+        &capture,
+    )
+    .await;
+    if result.is_ok() {
+        // Read the committed snapshot: a concurrent/timed-out checkpoint may have
+        // saved newer observations than the supervisor's in-memory copy.
+        if let Ok(saved) = storage.get(&record.decision.run_id).await
+            && let Some(observations) = saved.execution.and_then(|e| e.observations)
+        {
+            capture.persisted(&observations);
+        }
+    }
+    result
+}
+
+async fn execute_observed_harness(
+    paths: &ProjectPaths,
+    harness_name: &str,
+    invocation: &HarnessInvocation,
+    record: &RouteRecord,
+    options: RunOptions,
+    storage: &Storage,
+    capture: &observations::Capture,
+) -> Result<ExitCode> {
     let mut runner = processes::Runner::new(options.non_interactive)?;
     eprintln!(
         "jevia: run={} tier={} suggested={} confidence={:.2} fallback={}",
@@ -480,6 +614,7 @@ async fn execute_stored_harness(
     eprintln!("jevia: launching harness `{harness_name}`");
 
     let mut execution = ExecutionEvidence {
+        observations: Some(capture.snapshot()),
         harness: harness_name.to_owned(),
         model: invocation.model.clone(),
         duration_ms: 0,
@@ -495,14 +630,40 @@ async fn execute_stored_harness(
         )
         .await?;
     let started = Instant::now();
-    let status = runner
-        .run(
+    let mut previous = execution.observations.clone().expect("capture initialized");
+    runner.set_environment(&capture.environment);
+    let status = {
+        let run = runner.run(
             &invocation.program,
-            &invocation.args,
+            &capture.args,
             &paths.root,
             options.timeout_seconds.map(std::time::Duration::from_secs),
-        )
-        .await;
+        );
+        tokio::pin!(run);
+        let mut timer = tokio::time::interval(std::time::Duration::from_secs(2));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut warned = false;
+        loop {
+            tokio::select! {
+                result = &mut run => break result,
+                _ = timer.tick() => {
+                    // Keep polling process exit, cancellation and the phase deadline
+                    // while recording is pending (including a slow SQL backend).
+                    let checkpoint = tokio::select! {
+                        result = &mut run => break result,
+                        result = tokio::time::timeout(std::time::Duration::from_secs(1), capture.checkpoint(storage, &record.decision.run_id, &mut previous)) => result,
+                    };
+                    if !matches!(checkpoint, Ok(Ok(()))) && !warned {
+                        eprintln!("jevia: observation checkpoint delayed; journal retained (details redacted)");
+                        warned = true;
+                    }
+                }
+            }
+        }
+    };
+    execution.observations = Some(capture.snapshot_after(&previous));
+    // Optional verifiers must not inherit a harness adapter's private config.
+    runner.set_environment(&[]);
     let status = match status {
         Ok(processes::ProcessResult::Exited(status)) => status,
         Ok(processes::ProcessResult::Stopped { state, .. }) => {
@@ -533,11 +694,13 @@ async fn execute_stored_harness(
             .state(
                 &record.decision.run_id,
                 RunState::Completed,
-                Outcome::Failure,
+                Outcome::Unknown,
                 Some(execution),
             )
             .await?;
-        eprintln!("jevia: outcome=failure duration_ms={duration_ms}");
+        eprintln!(
+            "jevia: process=failed outcome=unknown observations=recorded duration_ms={duration_ms}"
+        );
         return Ok(child_exit_code(&status));
     }
 
@@ -546,11 +709,13 @@ async fn execute_stored_harness(
             .state(
                 &record.decision.run_id,
                 RunState::Completed,
-                Outcome::Success,
+                Outcome::Unknown,
                 Some(execution),
             )
             .await?;
-        eprintln!("jevia: outcome=success duration_ms={duration_ms}");
+        eprintln!(
+            "jevia: process=success outcome=unknown verification=not_run observations=recorded duration_ms={duration_ms}"
+        );
         return Ok(child_exit_code(&status));
     };
 
@@ -564,16 +729,28 @@ async fn execute_stored_harness(
         )
         .await?;
     let verification_started = Instant::now();
-    let verification_status = runner
-        .run(
-            &verification.program,
-            &verification.args,
-            &paths.root,
-            options
-                .verification_timeout_seconds
-                .map(std::time::Duration::from_secs),
-        )
-        .await;
+    // Automatic tests must not open a watch session or inherit interactive stdin.
+    // Own their process tree even when the coding agent itself was interactive.
+    let verification_status = async {
+        let mut automatic_runner = if options.automatic_verification {
+            Some(processes::Runner::automatic_verification()?)
+        } else {
+            None
+        };
+        let verifier = automatic_runner.as_mut().unwrap_or(&mut runner);
+        verifier
+            .run(
+                &verification.program,
+                &verification.args,
+                &paths.root,
+                options
+                    .verification_timeout_seconds
+                    .or(options.automatic_verification.then_some(300))
+                    .map(std::time::Duration::from_secs),
+            )
+            .await
+    }
+    .await;
     let verification_status = match verification_status {
         Ok(processes::ProcessResult::Exited(status)) => status,
         Ok(processes::ProcessResult::Stopped { state, launched }) => {
@@ -629,8 +806,13 @@ async fn execute_stored_harness(
             Some(execution),
         )
         .await?;
+    let evidence = if verification_status.code().is_some() {
+        "verification"
+    } else {
+        "process_exit"
+    };
     eprintln!(
-        "jevia: outcome={outcome} duration_ms={duration_ms} verification_duration_ms={verification_duration_ms}"
+        "jevia: outcome={outcome} evidence={evidence} recorded=true duration_ms={duration_ms} verification_duration_ms={verification_duration_ms}"
     );
 
     Ok(child_exit_code(&verification_status))
@@ -689,6 +871,10 @@ async fn routed_record_in(
     paths: &ProjectPaths,
     storage: &Storage,
 ) -> Result<Routed> {
+    let routing_started = Instant::now();
+    // Replay must not turn a slow/offline observation store into an unbounded
+    // startup delay. Cancellation leaves the journal for the next invocation.
+    observations::replay(paths, storage, None).await;
     let wait_started = Instant::now();
     let mut trace = Trace {
         cache: if no_cache {
@@ -706,7 +892,7 @@ async fn routed_record_in(
     // The lease remains held through the HTTP request and cache insertion, never
     // while holding a global history/cache lock. Reload evidence after each wait.
     let (history, cache_key, _request_lease) = loop {
-        let history = storage.recent(config.router.history_limit, true).await?;
+        let history = storage.routing_history(config.router.history_limit).await?;
         if !config.cache.enabled || no_cache {
             break (history, None, None);
         }
@@ -727,7 +913,7 @@ async fn routed_record_in(
                     task,
                     config,
                     &history,
-                    wait_started,
+                    routing_started,
                     trace,
                 ));
             }
@@ -750,7 +936,7 @@ async fn routed_record_in(
                 if !matches!(trace.coordination, Coordination::Waited) {
                     trace.coordination = Coordination::Acquired;
                 }
-                let latest = storage.recent(config.router.history_limit, true).await?;
+                let latest = storage.routing_history(config.router.history_limit).await?;
                 let latest_key = route_cache_key(task, harness_name, config, &latest)?;
                 if latest_key != key {
                     continue;
@@ -766,7 +952,7 @@ async fn routed_record_in(
                             task,
                             config,
                             &latest,
-                            wait_started,
+                            routing_started,
                             trace,
                         ));
                     }
@@ -817,7 +1003,7 @@ async fn routed_record_in(
         task,
         config,
         &history,
-        wait_started,
+        routing_started,
         trace,
     ))
 }
@@ -898,8 +1084,9 @@ async fn runs(limit: usize, print_json: bool) -> Result<()> {
             .map(|evidence| format!("{:?}", evidence.source))
             .unwrap_or_else(|| "legacy".to_owned());
         println!(
-            "state={state} evidence={evidence} learning={}",
-            record.is_learning_evidence()
+            "state={state} evidence={evidence} quality_evidence={} execution_observed={}",
+            record.is_learning_evidence(),
+            record.is_execution_observation()
         );
         if let Some(execution) = &record.execution {
             let verification = match &execution.verification {
@@ -909,7 +1096,7 @@ async fn runs(limit: usize, print_json: bool) -> Result<()> {
                 None => "none",
             };
             println!(
-                "{}  tier={}  model={}  source={}  confidence={:.2}  outcome={}  verification={}  duration={}ms",
+                "{}  tier={}  requested_model={}  source={}  confidence={:.2}  outcome={}  verification={}  duration={}ms",
                 record.decision.run_id,
                 record.decision.tier,
                 execution.model,
@@ -944,7 +1131,9 @@ async fn show_run(run_id: &str) -> Result<()> {
 async fn recover_run(run_id: &str, confirm_stopped: bool) -> Result<()> {
     let paths = ProjectPaths::discover()?;
     let storage = Storage::open(&load_config(&paths)?, &paths, false).await?;
-    let record = storage.recover(run_id, confirm_stopped).await?;
+    storage.recover(run_id, confirm_stopped).await?;
+    observations::replay(&paths, &storage, Some(run_id)).await;
+    let record = storage.get(run_id).await?;
     println!("{}", serde_json::to_string_pretty(&record)?);
     eprintln!(
         "jevia: marked interrupted; no processes were rerun or stopped. Inspect the workspace and any surviving agent before retrying."
@@ -1200,7 +1389,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn successful_harness_process_records_success() {
+    async fn successful_harness_process_keeps_task_outcome_unknown() {
         let directory = tempdir().expect("temporary directory");
         let paths = ProjectPaths::at(directory.path().to_path_buf());
         fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
@@ -1218,7 +1407,7 @@ mod tests {
             .expect("harness succeeds");
 
         let records = store::load(&paths.runs).expect("records load");
-        assert_eq!(records[0].outcome, Outcome::Success);
+        assert_eq!(records[0].outcome, Outcome::Unknown);
         let execution = records[0]
             .execution
             .as_ref()
@@ -1234,7 +1423,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn failed_harness_process_records_failure() {
+    async fn failed_harness_process_keeps_task_outcome_unknown() {
         let directory = tempdir().expect("temporary directory");
         let paths = ProjectPaths::at(directory.path().to_path_buf());
         fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
@@ -1255,7 +1444,7 @@ mod tests {
             .expect("process failure is a recorded outcome, not a Jevia error");
 
         let records = store::load(&paths.runs).expect("records load");
-        assert_eq!(records[0].outcome, Outcome::Failure);
+        assert_eq!(records[0].outcome, Outcome::Unknown);
         let execution = records[0]
             .execution
             .as_ref()
@@ -1446,6 +1635,7 @@ mod tests {
                 non_interactive: true,
                 timeout_seconds: Some(1),
                 verification_timeout_seconds: None,
+                ..Default::default()
             },
         )
         .await
@@ -1455,6 +1645,102 @@ mod tests {
         assert_eq!(stored.outcome, Outcome::Unknown);
         assert_eq!(stored.lifecycle.unwrap().state, RunState::TimedOut);
         assert!(stored.execution.unwrap().verification.is_none());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn busy_history_checkpoint_does_not_delay_killing_the_harness() {
+        use std::time::Duration;
+
+        let dir = tempdir().unwrap();
+        let paths = ProjectPaths::at(dir.path().to_path_buf());
+        let mut record = sample_record();
+        record.decision.run_id = uuid::Uuid::new_v4().to_string();
+        store::append(&paths.runs, &record).unwrap();
+        let storage = Storage::open(&Config::default(), &paths, false)
+            .await
+            .unwrap();
+        let invocation = HarnessInvocation {
+            program: "sh".into(),
+            args: vec![
+                "-c".into(),
+                "touch ready; while :; do printf x >> ticks; sleep 0.05; done".into(),
+            ],
+            model: "test".into(),
+            verification: None,
+        };
+        let capture = observations::Capture::prepare(
+            jevia_core::ObservationMode::ClaudeHooks,
+            &invocation,
+            &paths.directory,
+            &record.decision.run_id,
+        )
+        .await;
+        let settings: serde_json::Value =
+            serde_json::from_str(capture.args.last().unwrap()).unwrap();
+        let journal = std::path::PathBuf::from(
+            settings["hooks"]["Stop"][0]["hooks"][0]["args"][2]
+                .as_str()
+                .unwrap(),
+        );
+        let root = paths.root.clone();
+        let history = paths.runs.with_extension("lock");
+        // A real OS thread holds the lock independently of the Tokio runtime.
+        // Check the child while still locked: delayed final persistence alone
+        // must not be mistaken for delayed process termination.
+        let contender = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !root.join("ready").exists() {
+                assert!(Instant::now() < deadline, "harness did not start");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let file = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(history)
+                .unwrap();
+            file.lock().unwrap();
+            let _lock = lease::FileLock::new(file);
+            observations::receive_from(
+                &journal,
+                "claude_hooks",
+                br#"{"hook_event_name":"Stop","model":"test"}"#.as_slice(),
+            );
+            std::thread::sleep(Duration::from_secs(4));
+            let before = fs::metadata(root.join("ticks")).unwrap().len();
+            std::thread::sleep(Duration::from_millis(400));
+            let after = fs::metadata(root.join("ticks")).unwrap().len();
+            (before, after)
+        });
+        let code = execute_observed_harness(
+            &paths,
+            "test",
+            &invocation,
+            &record,
+            RunOptions {
+                non_interactive: true,
+                timeout_seconds: Some(3),
+                ..Default::default()
+            },
+            &storage,
+            &capture,
+        )
+        .await
+        .unwrap();
+        let (before, after) = contender.join().unwrap();
+        assert!(before > 0);
+        assert_eq!(
+            before, after,
+            "child kept working after its deadline while history was locked"
+        );
+        assert_eq!(code, ExitCode::from(124));
+        let saved = storage.get(&record.decision.run_id).await.unwrap();
+        assert_eq!(saved.lifecycle.unwrap().state, RunState::TimedOut);
+        assert_eq!(saved.outcome, Outcome::Unknown);
+        assert_eq!(
+            saved.execution.unwrap().observations.unwrap().event_count(),
+            1
+        );
     }
 
     #[cfg(unix)]
@@ -1485,6 +1771,7 @@ mod tests {
                 non_interactive: true,
                 timeout_seconds: Some(5),
                 verification_timeout_seconds: Some(5),
+                ..Default::default()
             },
         )
         .await
@@ -1503,40 +1790,44 @@ mod tests {
 
     #[tokio::test]
     async fn verifier_timeout_preserves_successful_harness_evidence() {
-        let dir = tempdir().unwrap();
-        let paths = ProjectPaths::at(dir.path().to_path_buf());
-        let record = sample_record();
-        store::append(&paths.runs, &record).unwrap();
-        let (program, args) = long_process();
-        let invocation = HarnessInvocation {
-            program: "rustc".into(),
-            args: vec!["--version".into()],
-            model: "test".into(),
-            verification: Some(VerificationInvocation { program, args }),
-        };
-        let code = execute_harness_with_options(
-            &paths,
-            "test",
-            &invocation,
-            &record,
-            RunOptions {
-                non_interactive: true,
-                timeout_seconds: None,
-                verification_timeout_seconds: Some(1),
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(code, ExitCode::from(124));
-        let stored = store::load(&paths.runs).unwrap().remove(0);
-        assert_eq!(stored.outcome, Outcome::Unknown);
-        assert_eq!(stored.lifecycle.unwrap().state, RunState::TimedOut);
-        let execution = stored.execution.unwrap();
-        assert_eq!(execution.exit_code, Some(0));
-        assert!(execution.verification.unwrap().launched);
+        for automatic_verification in [false, true] {
+            let dir = tempdir().unwrap();
+            let paths = ProjectPaths::at(dir.path().to_path_buf());
+            let record = sample_record();
+            store::append(&paths.runs, &record).unwrap();
+            let (program, args) = long_process();
+            let invocation = HarnessInvocation {
+                program: "rustc".into(),
+                args: vec!["--version".into()],
+                model: "test".into(),
+                verification: Some(VerificationInvocation { program, args }),
+            };
+            let code = execute_harness_with_options(
+                &paths,
+                "test",
+                &invocation,
+                &record,
+                RunOptions {
+                    non_interactive: !automatic_verification,
+                    timeout_seconds: None,
+                    verification_timeout_seconds: Some(1),
+                    automatic_verification,
+                    observation_mode: Default::default(),
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(code, ExitCode::from(124));
+            let stored = store::load(&paths.runs).unwrap().remove(0);
+            assert_eq!(stored.outcome, Outcome::Unknown);
+            assert_eq!(stored.lifecycle.unwrap().state, RunState::TimedOut);
+            let execution = stored.execution.unwrap();
+            assert_eq!(execution.exit_code, Some(0));
+            assert!(execution.verification.unwrap().launched);
+        }
     }
 
-    fn sample_record() -> RouteRecord {
+    pub(crate) fn sample_record() -> RouteRecord {
         RouteRecord {
             schema_version: 1,
             decision: RouteDecision {

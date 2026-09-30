@@ -1,4 +1,7 @@
-import { execFile, type ExecFileException } from "node:child_process";
+import type { ExecFileException } from "node:child_process";
+import { constants } from "node:os";
+import { isRouteRecord, isExecutionRecording } from "./protocol.js";
+import { runCommand } from "./command.js";
 
 export type Outcome = "success" | "failure" | "unknown";
 export type OutcomeSource = "process_exit" | "verification" | "manual";
@@ -41,10 +44,57 @@ export interface VerificationEvidence {
 
 export interface ExecutionEvidence {
   harness: string;
+  /** Requested model, not proof of the model that executed every turn. */
   model: string;
   duration_ms: number;
   exit_code: number | null;
   verification?: VerificationEvidence;
+  observations?: HarnessObservations;
+}
+
+export type ObservationStatus = "unsupported" | "disabled" | "unavailable" | "no_events" | "recorded" | "partial";
+export type HarnessEventKind = "session_started" | "session_ended" | "turn_started" | "turn_completed" | "turn_failed"
+  | "tool_succeeded" | "tool_failed" | "tool_completed" | "turn_interrupted" | "model_observed"
+  | "task_reported_complete" | "model_changed" | "subagent_started" | "subagent_stopped";
+
+/** Passive, harness-reported facts; none establishes task correctness. */
+export interface HarnessEvent {
+  kind: HarnessEventKind;
+  recorded_at_ms: number;
+  session_id?: string;
+  agent_id?: string;
+  model?: string;
+  previous_model?: string;
+  tool_name?: string;
+}
+
+export interface HarnessObservations {
+  source: "claude_hooks" | "codex_hooks" | "opencode_plugin" | "application" | null;
+  /** recorded means some events arrived, not complete coverage. */
+  status: ObservationStatus;
+  events: HarnessEvent[];
+  totals?: ObservationTotals;
+}
+
+/** One finished app-owned execution; allowlisted facts only, no task-success claim. */
+export interface ExecutionRecording {
+  harness: string;
+  /** Requested model; event.model is the model actually reported for that event. */
+  model: string;
+  duration_ms: number;
+  exit_code?: number | null;
+  /** Up to 256 events. No raw prompts, tool arguments, or output. */
+  events?: HarnessEvent[];
+}
+
+/** Counts across the session, including events no longer in the recent sample. */
+export interface ObservationTotals {
+  event_counts: Partial<Record<HarnessEventKind, number>>;
+  models: Record<string, Partial<Record<HarnessEventKind, number>>>;
+  unattributed_event_counts: Partial<Record<HarnessEventKind, number>>;
+  omitted_model_event_counts: Partial<Record<HarnessEventKind, number>>;
+  models_truncated: boolean;
+  discarded_inputs: number;
 }
 
 export interface RouteDecision {
@@ -81,8 +131,37 @@ export interface FeedbackOptions extends CommandOptions {
   reason?: string;
 }
 
+export interface CompleteOptions extends FeedbackOptions {
+  /** Confirm your external harness and any optional verification have stopped. */
+  confirmStopped: true;
+}
+
 export interface ListRunsOptions extends CommandOptions {
   limit?: number;
+}
+
+export type StorageTarget =
+  | { backend: "sqlite"; path?: string }
+  | {
+      backend: "postgres";
+      project: string;
+      /** Environment variable NAME, never a connection URL. Defaults to JEVIA_DATABASE_URL. */
+      urlEnv?: string;
+      /** Development only: permit plaintext connections to loopback hosts. */
+      allowInsecureLocalhost?: boolean;
+    };
+
+export type StorageSetupOptions = CommandOptions & {
+  /** Explicitly import the current JSONL history, retaining the source file. */
+  importJsonl?: boolean;
+} & (
+  | { apply?: false; confirmStopped?: never }
+  | { apply: true; confirmStopped: true }
+);
+
+export interface StorageCheckOptions extends CommandOptions {
+  /** Scan records without a write probe. Does not repair data or test write access. */
+  deep?: boolean;
 }
 
 export interface JeviaClientOptions {
@@ -100,12 +179,25 @@ export interface JeviaClientOptions {
   maxBufferBytes?: number;
 }
 
+/** Safe, stable categories; never raw operating-system error strings. */
+export type JeviaCommandErrorKind =
+  | "not_found"
+  | "permission_denied"
+  | "timeout"
+  | "aborted"
+  | "output_limit"
+  | "invalid_options"
+  | "exit"
+  | "signal"
+  | "spawn_failed";
+
 export class JeviaCommandError extends Error {
-  readonly command: readonly string[];
+  #command: readonly string[];
+  #stdout: string;
+  #stderr: string;
   readonly exitCode: number | null;
   readonly signal: NodeJS.Signals | null;
-  readonly stdout: string;
-  readonly stderr: string;
+  readonly kind: JeviaCommandErrorKind;
 
   constructor(
     command: readonly string[],
@@ -113,18 +205,32 @@ export class JeviaCommandError extends Error {
     stdout: string,
     stderr: string,
   ) {
-    const detail = stderr.trim() || cause.message;
-    super(`Jevia command failed: ${detail}`, { cause });
+    // Process messages/causes can contain the entire task and captured output.
+    // Keep raw diagnostics behind explicit getters, out of normal error logging.
+    const kind = commandErrorKind(cause);
+    super(kind === "timeout" ? "Jevia command timed out"
+      : kind === "aborted" ? "Jevia command aborted" : "Jevia command failed");
     this.name = "JeviaCommandError";
-    this.command = command;
-    this.exitCode = typeof cause.code === "number" ? cause.code : null;
-    this.signal = cause.signal ?? null;
-    this.stdout = stdout;
-    this.stderr = stderr;
+    this.kind = kind;
+    this.#command = Object.freeze([...command]);
+    this.exitCode = typeof cause.code === "number" && Number.isSafeInteger(cause.code)
+      ? cause.code : null;
+    this.signal = cause.signal && Object.hasOwn(constants.signals, cause.signal)
+      ? cause.signal : null;
+    this.#stdout = stdout;
+    this.#stderr = stderr;
   }
+
+  /** Sensitive: explicitly accessing this getter reveals literal CLI arguments. */
+  get command(): readonly string[] { return this.#command; }
+  /** Sensitive: explicitly accessing this getter reveals raw CLI output. */
+  get stdout(): string { return this.#stdout; }
+  /** Sensitive: explicitly accessing this getter reveals raw CLI diagnostics. */
+  get stderr(): string { return this.#stderr; }
 }
 
 export class JeviaProtocolError extends Error {
+  readonly kind = "protocol" as const;
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "JeviaProtocolError";
@@ -148,8 +254,8 @@ export class JeviaClient {
     this.maxBufferBytes = options.maxBufferBytes ?? 4 * 1024 * 1024;
 
     if (!this.binary.trim()) throw new TypeError("binary cannot be empty");
-    if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs <= 0) {
-      throw new TypeError("timeoutMs must be a positive safe integer");
+    if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs <= 0 || this.timeoutMs > 2_147_483_647) {
+      throw new TypeError("timeoutMs must be an integer between 1 and 2147483647");
     }
     if (!Number.isSafeInteger(this.maxBufferBytes) || this.maxBufferBytes <= 0) {
       throw new TypeError("maxBufferBytes must be a positive safe integer");
@@ -165,6 +271,11 @@ export class JeviaClient {
     return match[1];
   }
 
+  /**
+   * Route using recent eligible outcomes from the project's configured storage.
+   * Recorded feedback is loaded automatically and participates in the cache key;
+   * callers do not need to fetch or resend history. Does not execute the task.
+   */
   async route(task: string, options: RouteOptions = {}): Promise<RouteRecord> {
     requireText(task, "task");
     const args = ["route", "--json"];
@@ -173,6 +284,12 @@ export class JeviaClient {
     return this.record(await this.execute(args, options.signal));
   }
 
+  /**
+   * Record an application-reported outcome for subsequent routing automatically.
+   * Optional: omitting this call leaves the recorded route's outcome unknown.
+   * No built-in verifier is required; provenance remains manual, not verification.
+   * Use unknown when the result is uncertain (excluded from learning).
+   */
   async feedback(
     runId: string,
     outcome: Outcome,
@@ -190,6 +307,38 @@ export class JeviaClient {
     }
     args.push("--", runId, outcome);
     return this.record(await this.execute(args, options.signal));
+  }
+
+  /** Explicitly finish external work; ordinary feedback does not close a run. */
+  async complete(runId: string, outcome: Outcome, options: CompleteOptions): Promise<RouteRecord> {
+    requireText(runId, "runId");
+    if (options?.confirmStopped !== true) {
+      throw new TypeError("external completion requires confirmStopped: true");
+    }
+    if (!(["success", "failure", "unknown"] as const).includes(outcome)) {
+      throw new TypeError("outcome must be success, failure, or unknown");
+    }
+    const args = ["runs", "complete", "--json", "--confirm-stopped"];
+    if (options.reason !== undefined) {
+      requireText(options.reason, "reason");
+      args.push(`--reason=${options.reason}`);
+    }
+    args.push("--", runId, outcome);
+    return this.record(await this.execute(args, options.signal));
+  }
+
+  /**
+   * Optionally save one finished app-owned execution for automatic routing history.
+   * Leaves outcome unknown (or preserves separate feedback). Does not run verification.
+   * Exact retries are idempotent; conflicting retries and supervised runs are rejected.
+   * Available in SDK 0.1.2; requires CLI 0.1.6 or newer.
+   */
+  async recordExecution(runId: string, execution: ExecutionRecording, options: CommandOptions = {}): Promise<RouteRecord> {
+    requireText(runId, "runId");
+    if (!isExecutionRecording(execution)) throw new TypeError("invalid execution recording (contents redacted)");
+    const input = JSON.stringify(execution);
+    if (Buffer.byteLength(input) > 256 * 1024) throw new TypeError("execution recording exceeds 256 KiB");
+    return this.record(await this.execute(["runs", "record-execution", "--json", "--", runId], options.signal, input));
   }
 
   async runs(options: ListRunsOptions = {}): Promise<RouteRecord[]> {
@@ -213,6 +362,56 @@ export class JeviaClient {
     );
   }
 
+  /** Preview by default. Requires initialized project config and CLI >= 0.1.2.
+   * Returns a human-readable CLI report, not a stable machine-readable schema.
+   */
+  async setupStorage(target: StorageTarget, options: StorageSetupOptions = {}): Promise<string> {
+    requireOptionalBoolean(options.apply, "apply");
+    requireOptionalBoolean(options.confirmStopped, "confirmStopped");
+    requireOptionalBoolean(options.importJsonl, "importJsonl");
+    if (options.apply === true ? options.confirmStopped !== true : options.confirmStopped !== undefined) {
+      throw new TypeError("applying storage requires apply: true and confirmStopped: true together");
+    }
+    if (!target || typeof target !== "object" || Array.isArray(target)) {
+      throw new TypeError("storage target must specify sqlite or postgres");
+    }
+    const args = ["storage", "setup"];
+    if (target.backend === "sqlite") {
+      requireKeys(target, ["backend", "path"]);
+      args.push("sqlite");
+      if (target.path !== undefined) {
+        requireText(target.path, "path");
+        if (/[?#]/.test(target.path) || target.path.includes(":memory:")) {
+          throw new TypeError("path must name a persistent SQLite file without query or fragment");
+        }
+        args.push(`--path=${target.path}`);
+      }
+    } else if (target.backend === "postgres") {
+      requireKeys(target, ["backend", "project", "urlEnv", "allowInsecureLocalhost"]);
+      if (typeof target.project !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/.test(target.project)) {
+        throw new TypeError("project must contain 1–128 ASCII letters, digits, dots, dashes, or underscores");
+      }
+      const urlEnv = target.urlEnv === undefined ? "JEVIA_DATABASE_URL" : target.urlEnv;
+      if (typeof urlEnv !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(urlEnv)) {
+        throw new TypeError("urlEnv must be an environment variable name, not a database URL");
+      }
+      requireOptionalBoolean(target.allowInsecureLocalhost, "allowInsecureLocalhost");
+      args.push("postgres", `--project=${target.project}`, `--url-env=${urlEnv}`);
+      if (target.allowInsecureLocalhost === true) args.push("--allow-insecure-localhost");
+    } else {
+      throw new TypeError("storage target must specify sqlite or postgres");
+    }
+    if (options.importJsonl === true) args.push("--import-jsonl");
+    if (options.apply === true) args.push("--apply", "--confirm-stopped");
+    return this.execute(args, options.signal);
+  }
+
+  /** Check configured storage without initializing it. Returns a human-readable CLI report. */
+  async checkStorage(options: StorageCheckOptions = {}): Promise<string> {
+    requireOptionalBoolean(options.deep, "deep");
+    return this.execute(["storage", "check", ...(options.deep === true ? ["--deep"] : [])], options.signal);
+  }
+
   private record(output: string): RouteRecord {
     const value = this.json(output);
     if (!isRouteRecord(value)) {
@@ -224,60 +423,50 @@ export class JeviaClient {
   private json(output: string): unknown {
     try {
       return JSON.parse(output) as unknown;
-    } catch (cause) {
-      throw new JeviaProtocolError("Jevia returned invalid JSON", { cause });
+    } catch {
+      throw new JeviaProtocolError("Jevia returned invalid JSON");
     }
   }
 
-  private execute(args: readonly string[], signal?: AbortSignal): Promise<string> {
+  private execute(args: readonly string[], signal?: AbortSignal, input?: string): Promise<string> {
     const command = [this.binary, ...this.binaryArgs, ...args];
-    return new Promise((resolve, reject) => {
-      execFile(
-        this.binary,
-        [...this.binaryArgs, ...args],
-        {
-          cwd: this.cwd,
-          env: this.env,
-          encoding: "utf8",
-          maxBuffer: this.maxBufferBytes,
-          signal,
-          timeout: this.timeoutMs,
-          windowsHide: true,
-        },
-        (error, stdout, stderr) => {
-          if (error) {
-            reject(new JeviaCommandError(command, error, stdout, stderr));
-            return;
-          }
-          resolve(stdout);
-        },
-      );
-    });
+    return runCommand({
+      binary: this.binary, args: [...this.binaryArgs, ...args], cwd: this.cwd,
+      env: this.env, timeoutMs: this.timeoutMs, maxBufferBytes: this.maxBufferBytes,
+      input,
+    }, signal, (cause, stdout, stderr) => new JeviaCommandError(command, cause, stdout, stderr));
   }
 }
 
 function requireText(value: string, name: string): void {
-  if (!value.trim()) throw new TypeError(`${name} cannot be empty`);
+  if (typeof value !== "string" || !value.trim()) throw new TypeError(`${name} cannot be empty`);
+  if (value.includes("\0")) throw new TypeError(`${name} cannot contain NUL`);
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+function commandErrorKind(cause: ExecFileException): JeviaCommandErrorKind {
+  switch (cause.code) {
+    // ENOENT can mean a missing executable OR cwd. Do not misdiagnose which one.
+    case "ENOENT": case "ENOTDIR": return "not_found";
+    case "EACCES": case "EPERM": return "permission_denied";
+    case "JEVIA_TIMEOUT": return "timeout";
+    case "ABORT_ERR": return "aborted";
+    case "ERR_CHILD_PROCESS_STDIO_MAXBUFFER": return "output_limit";
+    case "ERR_INVALID_ARG_TYPE": case "ERR_INVALID_ARG_VALUE":
+    case "ERR_OUT_OF_RANGE": case "ERR_INVALID_FILE_URL_PATH":
+    case "ERR_INVALID_FILE_URL_HOST": case "ERR_INVALID_URL_SCHEME":
+      return "invalid_options";
+  }
+  if (typeof cause.code === "number" && Number.isSafeInteger(cause.code)) return "exit";
+  if (cause.signal && Object.hasOwn(constants.signals, cause.signal)) return "signal";
+  return "spawn_failed";
 }
 
-function isRouteRecord(value: unknown): value is RouteRecord {
-  if (!isObject(value)) return false;
-  return (
-    typeof value.schema_version === "number" &&
-    typeof value.run_id === "string" &&
-    typeof value.tier === "string" &&
-    typeof value.suggested_tier === "string" &&
-    typeof value.confidence === "number" &&
-    isObject(value.probabilities) &&
-    typeof value.fallback_applied === "boolean" &&
-    typeof value.jev_model === "string" &&
-    typeof value.created_at_ms === "number" &&
-    (value.source === "live" || value.source === "cache") &&
-    (value.task === null || typeof value.task === "string") &&
-    (value.outcome === "success" || value.outcome === "failure" || value.outcome === "unknown")
-  );
+function requireOptionalBoolean(value: unknown, name: string): void {
+  if (value !== undefined && typeof value !== "boolean") throw new TypeError(`${name} must be a boolean`);
+}
+
+function requireKeys(value: object, allowed: readonly string[]): void {
+  if (Object.keys(value).some((key) => !allowed.includes(key))) {
+    throw new TypeError("unsupported storage target option; pass PostgreSQL credentials through the environment");
+  }
 }

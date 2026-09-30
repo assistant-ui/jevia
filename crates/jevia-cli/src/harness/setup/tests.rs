@@ -5,7 +5,8 @@ use std::fs;
 fn options() -> Options {
     Options {
         name: "agent".into(),
-        command: "my-agent".into(),
+        preset: None,
+        command: Some("my-agent".into()),
         args: vec![
             "run".into(),
             "--model".into(),
@@ -20,6 +21,7 @@ fn options() -> Options {
         verify_command: Some("cargo".into()),
         verify_args: vec!["test".into()],
         no_verification: false,
+        auto_verification: false,
         apply: false,
         replace: false,
     }
@@ -69,7 +71,7 @@ fn replacement_preserves_verifier_unless_explicitly_changed_or_removed() {
     first.commit().unwrap();
     let verifier = first.next.harnesses["agent"].verification.clone();
     let mut changed = options();
-    changed.command = "new-agent".into();
+    changed.command = Some("new-agent".into());
     changed.verify_command = None;
     changed.verify_args.clear();
     assert_eq!(
@@ -77,10 +79,56 @@ fn replacement_preserves_verifier_unless_explicitly_changed_or_removed() {
         verifier
     );
     changed.no_verification = true;
+    assert!(!prepare(&paths, &changed).unwrap().next.harnesses["agent"].auto_verify);
     assert!(
         prepare(&paths, &changed).unwrap().next.harnesses["agent"]
             .verification
             .is_none()
+    );
+}
+
+#[test]
+fn automatic_verification_is_opt_in_and_explicit_choices_survive_replacement() {
+    let (_directory, paths) = fixture();
+    let mut opts = options();
+    opts.verify_command = None;
+    opts.verify_args.clear();
+    let automatic = prepare(&paths, &opts).unwrap();
+    assert!(!automatic.next.harnesses["agent"].auto_verify);
+    assert!(automatic.next.harnesses["agent"].verification.is_none());
+    automatic.commit().unwrap();
+    opts.no_verification = true;
+    prepare(&paths, &opts).unwrap().commit().unwrap();
+    opts.no_verification = false;
+    opts.command = Some("changed".into());
+    assert!(!prepare(&paths, &opts).unwrap().next.harnesses["agent"].auto_verify);
+    opts.auto_verification = true;
+    assert!(prepare(&paths, &opts).unwrap().next.harnesses["agent"].auto_verify);
+    prepare(&paths, &opts).unwrap().commit().unwrap();
+    opts.auto_verification = false;
+    assert!(prepare(&paths, &opts).unwrap().next.harnesses["agent"].auto_verify);
+}
+
+#[test]
+fn replacement_preserves_passive_observation_preference() {
+    let (_directory, paths) = fixture();
+    let mut opts = options();
+    prepare(&paths, &opts).unwrap().commit().unwrap();
+    let text = fs::read_to_string(&paths.config)
+        .unwrap()
+        .replace("observations = \"auto\"", "observations = \"off\"");
+    fs::write(&paths.config, text).unwrap();
+    opts.command = Some("changed".into());
+    let updated = prepare(&paths, &opts).unwrap();
+    assert_eq!(
+        updated.next.harnesses["agent"].observations,
+        jevia_core::ObservationMode::Off
+    );
+    updated.commit().unwrap();
+    assert!(
+        fs::read_to_string(&paths.config)
+            .unwrap()
+            .contains("observations = \"off\"")
     );
 }
 
@@ -104,7 +152,7 @@ fn invalid_harness_values_are_rejected_without_echoing_private_arguments() {
             6 => invalid
                 .verify_args
                 .push("{private-verifier-placeholder}".into()),
-            7 => invalid.command = "private-\0command".into(),
+            7 => invalid.command = Some("private-\0command".into()),
             _ => unreachable!(),
         }
         let error = prepare(&paths, &invalid).err().unwrap();
@@ -118,6 +166,45 @@ fn invalid_harness_values_are_rejected_without_echoing_private_arguments() {
     for bad in ["fast", "=model", "fast=", "fast=  "] {
         assert!(model_mapping(bad).is_err());
     }
+}
+
+#[test]
+fn built_in_presets_render_current_shell_free_cli_templates() {
+    let expected = [
+        (
+            Preset::Codex,
+            "codex",
+            ["exec", "--model", "{model}", "{task}"].as_slice(),
+        ),
+        (
+            Preset::Claude,
+            "claude",
+            ["--print", "--model", "{model}", "{task}"].as_slice(),
+        ),
+        (
+            Preset::Opencode,
+            "opencode",
+            ["run", "--model", "{model}", "{task}"].as_slice(),
+        ),
+        (
+            Preset::Gemini,
+            "gemini",
+            ["--model", "{model}", "--prompt", "{task}"].as_slice(),
+        ),
+    ];
+    for (preset, command, args) in expected {
+        assert_eq!(preset.command(), command);
+        assert_eq!(preset.args(), args);
+    }
+
+    let (_directory, paths) = fixture();
+    let mut opts = options();
+    opts.preset = Some(Preset::Codex);
+    opts.command = None;
+    opts.args.clear();
+    let harness = &prepare(&paths, &opts).unwrap().next.harnesses["agent"];
+    assert_eq!(harness.command, "codex");
+    assert_eq!(harness.args, ["exec", "--model", "{model}", "{task}"]);
 }
 
 #[test]

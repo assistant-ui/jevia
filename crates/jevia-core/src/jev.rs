@@ -103,7 +103,7 @@ pub fn route_cache_key(
         "harness": harness,
         "request": request,
     });
-    let encoded = serde_json::to_vec(&material).map_err(JevError::CacheKey)?;
+    let encoded = serde_json::to_vec(&material).map_err(|_| JevError::CacheKey)?;
     let digest = Sha256::digest(encoded);
     let mut key = String::with_capacity(digest.len() * 2);
     for byte in digest {
@@ -144,18 +144,46 @@ fn build_request<'a>(
                 "confidence": record.decision.confidence,
                 "outcome": record.outcome,
                 "outcome_source": record.outcome_evidence.as_ref().map(|evidence| evidence.source),
-                "execution": record.execution,
+                "execution": record.execution.as_ref().map(|execution| json!({
+                    "harness": execution.harness, "model": execution.model,
+                    "duration_ms": execution.duration_ms, "exit_code": execution.exit_code,
+                    "verification": execution.verification,
+                    "harness_observations": execution.observations.as_ref().map(|o| o.routing_summary()),
+                })),
             })
         })
         .collect();
     completed.reverse();
 
+    let mut observations: Vec<_> = history
+        .iter()
+        .rev()
+        .filter(|record| record.is_execution_observation() && !record.is_learning_evidence())
+        .take(config.router.history_limit)
+        .map(|record| {
+            let execution = record.execution.as_ref().expect("observed execution");
+            json!({
+                "task": record.task,
+                "tier": record.decision.tier,
+                "state": record.lifecycle.as_ref().map(|life| life.state),
+                "harness": execution.harness,
+                "requested_model": execution.model,
+                "duration_ms": execution.duration_ms,
+                "process_exit_code": execution.exit_code,
+                "harness_observations": execution.observations.as_ref().map(|o| o.routing_summary()),
+            })
+        })
+        .collect();
+    observations.reverse();
+
     let state = json!({
         "current_task": task,
         "recent_completed_outcomes": completed,
+        "recent_execution_observations": observations,
         "policy": {
             "goal": "Select the least expensive capability tier likely to complete the task successfully.",
-            "use_outcomes": "Treat relevant successes and failures as evidence, not absolute rules. Prefer the safer tier when evidence conflicts."
+            "use_outcomes": "Treat relevant successes and failures as evidence, not absolute rules. Prefer the safer tier when evidence conflicts.",
+            "use_observations": "Execution observations are operational context, not task-success labels. A process exit, duration, or agent-reported completion does not prove correctness. The requested model is not proof of which models actually executed. A model_observed event reports request selection, not a provider completion. tool_completed is neutral and does not establish tool success. Do not infer quality or model capability from missing feedback."
         }
     });
 
@@ -207,13 +235,13 @@ fn decode_decision(body: &[u8], config: &Config) -> Result<RouteDecision, JevErr
     let answer: ChoiceAnswer = serde_json::from_value(answer.clone())?;
 
     if answer.kind != "choice" {
-        return Err(JevError::UnexpectedAnswerType(answer.kind));
+        return Err(JevError::UnexpectedAnswerType);
     }
     if !answer.confidence.is_finite() || !(0.0..=1.0).contains(&answer.confidence) {
-        return Err(JevError::InvalidConfidence(answer.confidence));
+        return Err(JevError::InvalidConfidence);
     }
     if !config.tiers.contains_key(&answer.choice) {
-        return Err(JevError::UnknownTier(answer.choice));
+        return Err(JevError::UnknownTier);
     }
 
     let fallback_applied = answer.confidence < config.router.confidence_floor;
@@ -223,7 +251,7 @@ fn decode_decision(body: &[u8], config: &Config) -> Result<RouteDecision, JevErr
         answer.choice.clone()
     };
 
-    Ok(RouteDecision {
+    let decision = RouteDecision {
         run_id: Uuid::new_v4().to_string(),
         tier,
         suggested_tier: answer.choice,
@@ -233,7 +261,9 @@ fn decode_decision(body: &[u8], config: &Config) -> Result<RouteDecision, JevErr
         jev_model: response.model,
         created_at_ms: now_ms(),
         source: DecisionSource::Live,
-    })
+    };
+    decision.validate().map_err(JevError::InvalidDecision)?;
+    Ok(decision)
 }
 
 fn now_ms() -> u64 {
@@ -246,28 +276,60 @@ fn now_ms() -> u64 {
 
 #[derive(Debug, Error)]
 pub enum JevError {
+    #[error("Jev returned an invalid routing decision: {0} (values redacted)")]
+    InvalidDecision(&'static str),
     #[error("TYPESAFE_API_KEY is missing or empty")]
     MissingApiKey,
     #[error("task cannot be empty")]
     EmptyTask,
     #[error("Jev request failed: {0}")]
-    Request(#[from] reqwest::Error),
+    Request(&'static str),
     #[error("Jev returned HTTP status {0}")]
     ApiStatus(u16),
-    #[error("Jev returned invalid JSON: {0}")]
-    InvalidJson(#[from] serde_json::Error),
-    #[error("could not encode a routing cache key: {0}")]
-    CacheKey(serde_json::Error),
+    #[error("Jev returned invalid JSON at line {line}, column {column} (values redacted)")]
+    InvalidJson { line: usize, column: usize },
+    #[error("could not encode a routing cache key")]
+    CacheKey,
     #[error("Jev response did not contain the `tier` answer")]
     MissingTierAnswer,
-    #[error("Jev returned `{0}` for the tier answer instead of `choice`")]
-    UnexpectedAnswerType(String),
-    #[error("Jev returned invalid confidence {0}")]
-    InvalidConfidence(f64),
-    #[error("Jev selected undefined tier `{0}`")]
-    UnknownTier(String),
+    #[error("Jev returned an unexpected tier answer type; expected `choice` (value redacted)")]
+    UnexpectedAnswerType,
+    #[error("Jev returned invalid confidence; expected a number between 0 and 1 (value redacted)")]
+    InvalidConfidence,
+    #[error("Jev selected an undefined tier (value redacted)")]
+    UnknownTier,
     #[error(transparent)]
     Config(#[from] crate::ConfigError),
+}
+
+// Transport errors may carry credentials in URLs and provider parser errors can
+// quote response values. Discard the raw sources, not just their Display text:
+// Debug and error-chain formatting must be safe too.
+impl From<reqwest::Error> for JevError {
+    fn from(error: reqwest::Error) -> Self {
+        Self::Request(if error.is_timeout() {
+            "timeout"
+        } else if error.is_connect() {
+            "connection failed"
+        } else if error.is_builder() {
+            "invalid request configuration"
+        } else if error.is_body() {
+            "response body failed"
+        } else if error.is_decode() {
+            "response decoding failed"
+        } else {
+            "transport failure"
+        })
+    }
+}
+
+impl From<serde_json::Error> for JevError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::InvalidJson {
+            line: error.line(),
+            column: error.column(),
+        }
+    }
 }
 
 impl From<StatusCode> for JevError {
@@ -283,11 +345,71 @@ mod tests {
     use super::*;
 
     #[test]
+    fn rejects_invalid_probabilities_and_blank_models_without_echoing_values() {
+        let valid = json!({"model": "test", "answers": {"tier": {
+            "type": "choice", "choice": "fast", "confidence": 0.9,
+            "probabilities": {"private-tier": 0.9}
+        }}});
+        for probability in [-1.0, 1.01, 2.0] {
+            let mut body = valid.clone();
+            body["answers"]["tier"]["probabilities"]["private-tier"] = probability.into();
+            let error = decode_decision(&serde_json::to_vec(&body).unwrap(), &Config::default())
+                .unwrap_err();
+            assert!(matches!(error, JevError::InvalidDecision(_)));
+            assert!(!format!("{error:?} {error}").contains("private-tier"));
+        }
+        for model in ["", " \n\t"] {
+            let mut body = valid.clone();
+            body["model"] = model.into();
+            assert!(
+                decode_decision(&serde_json::to_vec(&body).unwrap(), &Config::default()).is_err()
+            );
+        }
+        for probabilities in [json!({}), json!({"fast": 0.0, "strong": 1.0})] {
+            let mut body = valid.clone();
+            body["answers"]["tier"]["probabilities"] = probabilities;
+            let mut decision =
+                decode_decision(&serde_json::to_vec(&body).unwrap(), &Config::default()).unwrap();
+            for number in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                decision.probabilities.insert("private-tier".into(), number);
+                assert!(decision.validate().is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn provider_errors_discard_private_values_in_all_formats() {
+        use std::error::Error as _;
+        const PRIVATE: &str = "PRIVATE_PROVIDER_SENTINEL";
+        let valid = json!({
+            "model": "test", "answers": {"tier": {
+                "type": "choice", "choice": "fast", "confidence": 0.9
+            }}
+        });
+        for field in ["type", "choice", "confidence", "probabilities"] {
+            let mut invalid = valid.clone();
+            invalid["answers"]["tier"][field] = PRIVATE.into();
+            let error = decode_decision(&serde_json::to_vec(&invalid).unwrap(), &Config::default())
+                .unwrap_err();
+            assert!(!format!("{error} {error:?}").contains(PRIVATE));
+            assert!(error.source().is_none());
+        }
+        let error: JevError = reqwest::Client::new()
+            .get(format!("invalid-url-{PRIVATE}"))
+            .build()
+            .unwrap_err()
+            .into();
+        assert!(!format!("{error} {error:?}").contains(PRIVATE));
+        assert!(error.source().is_none());
+    }
+
+    #[test]
     fn request_includes_only_recent_completed_outcomes() {
         let mut config = Config::default();
         config.router.history_limit = 1;
         let mut completed = record("last", "strong", Outcome::Failure);
         completed.execution = Some(ExecutionEvidence {
+            observations: None,
             harness: "agent".to_owned(),
             model: "provider/frontier".to_owned(),
             duration_ms: 42,
@@ -320,6 +442,45 @@ mod tests {
         assert_eq!(outcomes[0]["execution"]["verification"]["command"], "cargo");
         assert_eq!(outcomes[0]["execution"]["verification"]["exit_code"], 1);
         assert_eq!(outcomes[0]["execution"]["verification"]["launched"], true);
+    }
+
+    #[test]
+    fn passive_history_changes_routing_context_without_inventing_success() {
+        let config = Config::default();
+        let mut observed = record("passive", "fast", Outcome::Unknown);
+        observed.lifecycle = Some(crate::RunLifecycle {
+            state: crate::RunState::Completed,
+            started_at_ms: Some(1),
+            finished_at_ms: Some(2),
+        });
+        observed.execution = Some(ExecutionEvidence {
+            observations: None,
+            harness: "agent".into(),
+            model: "requested-model".into(),
+            duration_ms: 42,
+            exit_code: Some(0),
+            verification: None,
+        });
+        let baseline = route_cache_key("task", None, &config, &[]).unwrap();
+        let with_history = route_cache_key("task", None, &config, &[observed.clone()]).unwrap();
+        assert_ne!(baseline, with_history);
+        let request = build_request("task", &config, &[observed.clone()]);
+        assert_eq!(request.state["recent_completed_outcomes"], json!([]));
+        let facts = &request.state["recent_execution_observations"][0];
+        assert_eq!(facts["requested_model"], "requested-model");
+        assert_eq!(facts["process_exit_code"], 0);
+        assert!(facts.get("outcome").is_none());
+        observed.lifecycle.as_mut().unwrap().state = crate::RunState::Running;
+        assert_eq!(
+            baseline,
+            route_cache_key("task", None, &config, &[observed.clone()]).unwrap()
+        );
+        observed.lifecycle.as_mut().unwrap().state = crate::RunState::Cancelled;
+        observed.task = None;
+        let mut disabled = config;
+        disabled.router.history_limit = 0;
+        let request = build_request("task", &disabled, &[observed]);
+        assert_eq!(request.state["recent_execution_observations"], json!([]));
     }
 
     #[test]

@@ -80,7 +80,8 @@ pub struct Trace {
 pub struct Routed {
     pub record: RouteRecord,
     trace: Trace,
-    evidence_count: usize,
+    known_outcomes: usize,
+    passive_observations: usize,
     history_limit: usize,
     confidence_floor: f64,
     elapsed_ms: u128,
@@ -101,9 +102,16 @@ impl Routed {
                 config.privacy.store_task_text.then(|| task.to_owned()),
             ),
             trace,
-            evidence_count: history
+            known_outcomes: history
                 .iter()
+                .rev()
                 .filter(|r| r.is_learning_evidence())
+                .take(config.router.history_limit)
+                .count(),
+            passive_observations: history
+                .iter()
+                .rev()
+                .filter(|r| r.is_execution_observation() && !r.is_learning_evidence())
                 .take(config.router.history_limit)
                 .count(),
             history_limit: config.router.history_limit,
@@ -126,8 +134,8 @@ impl fmt::Display for Routed {
         )?;
         writeln!(
             f,
-            "jevia: explain eligible_evidence={} history_limit={}",
-            self.evidence_count, self.history_limit
+            "jevia: explain known_outcomes={} passive_observations={} history_limit_per_kind={}",
+            self.known_outcomes, self.passive_observations, self.history_limit
         )?;
         write!(
             f,

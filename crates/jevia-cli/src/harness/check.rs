@@ -170,8 +170,29 @@ fn inspect(paths: &ProjectPaths, name: &str) -> Report {
             "verification",
             executable::lookup(&verify.command, &paths.root, path.as_deref(), cfg!(windows)),
         );
+    } else if harness.auto_verify {
+        match crate::verification::detect(&paths.root) {
+            crate::verification::Detection::Found(plan) => {
+                report.add("verification_policy", Status::Pass, "automatic_verification", "Root project tests will run automatically after the agent exits; results are recorded without manual feedback.");
+                report.executable(
+                    "verification",
+                    executable::lookup(&plan.program, &paths.root, path.as_deref(), cfg!(windows)),
+                );
+            }
+            crate::verification::Detection::Unavailable(message) => report.add(
+                "verification",
+                Status::Warning,
+                "verification_not_configured",
+                message,
+            ),
+        }
     } else {
-        report.add("verification", Status::Warning, "verification_not_configured", "No verifier configured. A successful agent exit alone is not eligible learning evidence; configure verification or provide observed feedback.");
+        report.add(
+            "verification",
+            Status::Pass,
+            "verification_disabled",
+            "No additional verification requested. Execution is still recorded; process exit is not proof of task success.",
+        );
     }
     if cfg!(windows) {
         report.add("lookup_scope", Status::Warning, "windows_lookup_scope", "This check searches explicit paths/PATH only, not extra Windows application/system directories. Prefer absolute executable paths; PATHEXT and shell aliases are not expanded.");

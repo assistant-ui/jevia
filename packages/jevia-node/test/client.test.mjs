@@ -18,6 +18,28 @@ test("reports the installed Jevia CLI version", async () => {
   assert.equal(await client().version(), "0.2.0");
 });
 
+test("optionally records passive execution events over stdin, not arguments", async () => {
+  const execution = { harness: "app", model: "requested", duration_ms: 2, events: [
+    { kind: "model_observed", model: "actual", recorded_at_ms: 1 },
+  ] };
+  const recorded = await client().recordExecution("--option-like-id", execution);
+  assert.equal(recorded.outcome, "unknown");
+  assert.equal(recorded.execution.observations.source, "application");
+  assert.deepEqual(recorded.execution.observations.events, execution.events);
+  assert.deepEqual(recorded.jev_model.split("|"), ["runs", "record-execution", "--json", "--", "--option-like-id"]);
+  for (const invalid of [
+    { ...execution, prompt: "PRIVATE" }, { ...execution, outcome: "success" },
+    { ...execution, duration_ms: -1 }, { ...execution, exit_code: 2147483648 },
+    { ...execution, harness: "PRIVATE text" }, { ...execution, model: "" },
+    { ...execution, events: Array(257).fill(execution.events[0]) },
+    { ...execution, events: [{ ...execution.events[0], output: "PRIVATE" }] },
+    { ...execution, events: [{ ...execution.events[0], recorded_at_ms: Number.MAX_SAFE_INTEGER + 1 }] },
+  ]) await assert.rejects(client().recordExecution("run", invalid), (error) => error instanceof TypeError && !String(error).includes("PRIVATE"));
+  const controller = new AbortController();
+  controller.abort("PRIVATE reason");
+  await assert.rejects(client().recordExecution("run", execution, { signal: controller.signal }), (error) => error.kind === "aborted" && !String(error).includes("PRIVATE"));
+});
+
 test("routes a task as one shell-free argument and supports cache bypass", async () => {
   const task = 'fix $(touch should-not-exist) and "quote" this';
   const route = await client().route(task, { noCache: true });
@@ -83,4 +105,15 @@ test("supports timeouts and AbortSignal cancellation", async () => {
 test("validates inputs before starting the CLI", async () => {
   await assert.rejects(client().route("  "), /task cannot be empty/);
   await assert.rejects(client().runs({ limit: 0 }), /limit must be a positive safe integer/);
+});
+
+test("completion is explicit and preserves option-like identifiers and reasons", async () => {
+  for (const options of [undefined, {}, { confirmStopped: false }, { confirmStopped: "true" }]) {
+    await assert.rejects(client().complete("id", "success", options), /confirmStopped/);
+  }
+  const done = await client().complete("--help", "success", { confirmStopped: true, reason: "--tests passed" });
+  assert.equal(done.lifecycle.state, "completed");
+  assert.deepEqual(done.jev_model.split("|"), ["runs", "complete", "--json", "--confirm-stopped", "--reason=--tests passed", "--", "--help", "success"]);
+  await assert.rejects(client().complete("id", "invalid", { confirmStopped: true }), TypeError);
+  await assert.rejects(client().complete("id", "success", { confirmStopped: true, reason: "private\0" }), TypeError);
 });
