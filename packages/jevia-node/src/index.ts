@@ -1,6 +1,6 @@
 import type { ExecFileException } from "node:child_process";
 import { constants } from "node:os";
-import { isRouteRecord } from "./protocol.js";
+import { isRouteRecord, isExecutionRecording } from "./protocol.js";
 import { runCommand } from "./command.js";
 
 export type Outcome = "success" | "failure" | "unknown";
@@ -69,11 +69,22 @@ export interface HarnessEvent {
 }
 
 export interface HarnessObservations {
-  source: "claude_hooks" | "codex_hooks" | "opencode_plugin" | null;
+  source: "claude_hooks" | "codex_hooks" | "opencode_plugin" | "application" | null;
   /** recorded means some events arrived, not complete coverage. */
   status: ObservationStatus;
   events: HarnessEvent[];
   totals?: ObservationTotals;
+}
+
+/** One finished app-owned execution; allowlisted facts only, no task-success claim. */
+export interface ExecutionRecording {
+  harness: string;
+  /** Requested model; event.model is the model actually reported for that event. */
+  model: string;
+  duration_ms: number;
+  exit_code?: number | null;
+  /** Up to 256 events. No raw prompts, tool arguments, or output. */
+  events?: HarnessEvent[];
 }
 
 /** Counts across the session, including events no longer in the recent sample. */
@@ -316,6 +327,20 @@ export class JeviaClient {
     return this.record(await this.execute(args, options.signal));
   }
 
+  /**
+   * Optionally save one finished app-owned execution for automatic routing history.
+   * Leaves outcome unknown (or preserves separate feedback). Does not run verification.
+   * Exact retries are idempotent; conflicting retries and supervised runs are rejected.
+   * Requires the unreleased CLI recording API, not CLI 0.1.5 or the current npm release.
+   */
+  async recordExecution(runId: string, execution: ExecutionRecording, options: CommandOptions = {}): Promise<RouteRecord> {
+    requireText(runId, "runId");
+    if (!isExecutionRecording(execution)) throw new TypeError("invalid execution recording (contents redacted)");
+    const input = JSON.stringify(execution);
+    if (Buffer.byteLength(input) > 256 * 1024) throw new TypeError("execution recording exceeds 256 KiB");
+    return this.record(await this.execute(["runs", "record-execution", "--json", "--", runId], options.signal, input));
+  }
+
   async runs(options: ListRunsOptions = {}): Promise<RouteRecord[]> {
     const limit = options.limit ?? 20;
     if (!Number.isSafeInteger(limit) || limit <= 0) {
@@ -403,11 +428,12 @@ export class JeviaClient {
     }
   }
 
-  private execute(args: readonly string[], signal?: AbortSignal): Promise<string> {
+  private execute(args: readonly string[], signal?: AbortSignal, input?: string): Promise<string> {
     const command = [this.binary, ...this.binaryArgs, ...args];
     return runCommand({
       binary: this.binary, args: [...this.binaryArgs, ...args], cwd: this.cwd,
       env: this.env, timeoutMs: this.timeoutMs, maxBufferBytes: this.maxBufferBytes,
+      input,
     }, signal, (cause, stdout, stderr) => new JeviaCommandError(command, cause, stdout, stderr));
   }
 }

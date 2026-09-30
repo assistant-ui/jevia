@@ -139,6 +139,18 @@ impl Storage {
         }
     }
 
+    pub async fn record_application(
+        &self,
+        id: &str,
+        input: jevia_core::ExecutionRecording,
+    ) -> Result<RouteRecord> {
+        let _guard = self.execution_guard(id).await?;
+        match self {
+            Self::Jsonl(paths) => store::record_application(&paths.runs, id, input),
+            Self::Database(db) => db.record_application(id, input).await,
+        }
+    }
+
     /// The caller holds the execution lease. A supervisor must still own its SQL run.
     pub async fn checkpoint_observations(
         &self,

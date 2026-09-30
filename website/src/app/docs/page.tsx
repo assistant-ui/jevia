@@ -288,7 +288,7 @@ const STORAGE_OPTIONS = [
 
 const STORED_RUN = [
   "{",
-  '  "schema_version": 5,',
+  '  "schema_version": 6,',
   '  "run_id": "7b65a69a-0a6f-4a89-bd73-88f090954dd9",',
   '  "tier": "balanced",',
   '  "suggested_tier": "balanced",',
@@ -556,6 +556,17 @@ export default function DocsPage() {
             </div>
             <CommandBlock command="npm install jevia" label="Install the Node.js SDK" />
             <CodeBlock code={SDK_EXAMPLE} label="Programmatic harness integration" />
+            <p className="docs-body-copy">
+              Unreleased: optionally call <code>recordExecution()</code> after
+              app-owned work finishes to save execution facts and bounded events.
+              These are application-reported observations, not verified success.
+              Later <code>route()</code> calls automatically reuse the history;
+              feedback and extra verification remain optional. Exact retries are
+              idempotent; existing supervised executions cannot be overwritten.
+              Do not call this after <code>jevia run</code>, which records automatically.
+              Requires matching unreleased CLI/SDK with schema 6. See the{" "}
+              <a href="https://github.com/assistant-ui/jevia/tree/main/packages/jevia-node#optional-passive-execution-recording-unreleased">SDK recording example</a>.
+            </p>
             <p className="docs-body-copy">
               For SDK integrations, map Jevia&apos;s tier to your harness model and let
               your application run the work. Feedback and verification are optional.

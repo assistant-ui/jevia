@@ -51,7 +51,7 @@ const matchesTotals = (value: Record<string, unknown>): boolean => {
     (totals.discarded_inputs === 0 || value.status === "partial") &&
     Object.entries(sample).every(([kind, n]) => n <= (totals.event_counts[kind] ?? 0));
 };
-const isObservations: Guard = (value) => isObject(value) && nullable(oneOf("claude_hooks", "codex_hooks", "opencode_plugin"))(value.source) &&
+const isObservations: Guard = (value) => isObject(value) && nullable(oneOf("claude_hooks", "codex_hooks", "opencode_plugin", "application"))(value.source) &&
   oneOf("unsupported", "disabled", "unavailable", "no_events", "recorded", "partial")(value.status) &&
   Array.isArray(value.events) && value.events.length <= 256 && value.events.every(isHarnessEvent) &&
   (value.events.length === 0 || (value.source !== null && (value.status === "recorded" || value.status === "partial"))) &&
@@ -77,7 +77,7 @@ const isFeedback: Guard = (value) => Array.isArray(value) && value.every(isFeedb
 export function isRouteRecord(value: unknown): value is RouteRecord {
   if (!isObject(value)) return false;
   return (
-    (value.schema_version === 1 || value.schema_version === 2 || value.schema_version === 3 || value.schema_version === 4 || value.schema_version === 5) &&
+    (value.schema_version === 1 || value.schema_version === 2 || value.schema_version === 3 || value.schema_version === 4 || value.schema_version === 5 || value.schema_version === 6) &&
     isText(value.run_id) && isText(value.tier) && isText(value.suggested_tier) &&
     isProbability(value.confidence) && isObject(value.probabilities) &&
     Object.values(value.probabilities).every(isProbability) &&
@@ -87,4 +87,14 @@ export function isRouteRecord(value: unknown): value is RouteRecord {
     optional(value.execution, isExecution) && optional(value.lifecycle, isLifecycle) &&
     optional(value.outcome_evidence, isEvidence) && optional(value.feedback, isFeedback)
   );
+}
+
+/** Reject extra payload fields rather than silently accepting prompt/tool contents. */
+export function isExecutionRecording(value: unknown): boolean {
+  return isObject(value) && Object.keys(value).every((key) => ["harness", "model", "duration_ms", "exit_code", "events"].includes(key)) &&
+    isIdentifier(value.harness) && isIdentifier(value.model) && isUnsigned(value.duration_ms) &&
+    optional(value.exit_code, isExitCode) && optional(value.events, (events) =>
+      Array.isArray(events) && events.length <= 256 && events.every((event: unknown) =>
+        isObject(event) && isHarnessEvent(event) && Object.keys(event).every((key) =>
+          ["kind", "recorded_at_ms", "session_id", "agent_id", "model", "previous_model", "tool_name"].includes(key))));
 }

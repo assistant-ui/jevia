@@ -55,6 +55,139 @@ fn postgres_config() -> Config {
     }
 }
 
+async fn application_recording_contract(config: Config) {
+    use jevia_core::{ExecutionRecording, HarnessEvent, HarnessEventKind, ObservationSource};
+    let directory = tempfile::tempdir().unwrap();
+    let paths = ProjectPaths::at(directory.path().into());
+    let storage = Storage::open(&config, &paths, true).await.unwrap();
+    let input = ExecutionRecording {
+        harness: "my-app".into(),
+        model: "requested".into(),
+        duration_ms: 12,
+        exit_code: Some(1),
+        events: vec![HarnessEvent {
+            kind: HarnessEventKind::ToolFailed,
+            recorded_at_ms: 7,
+            session_id: None,
+            agent_id: None,
+            model: Some("observed".into()),
+            previous_model: None,
+            tool_name: Some("test".into()),
+        }],
+    };
+    storage.append(&sample("sdk")).await.unwrap();
+    let saved = storage
+        .record_application("sdk", input.clone())
+        .await
+        .unwrap();
+    assert_eq!(saved.outcome, Outcome::Unknown);
+    assert!(saved.outcome_evidence.is_none());
+    assert_eq!(saved.lifecycle.as_ref().unwrap().state, RunState::Completed);
+    assert_eq!(
+        saved
+            .execution
+            .as_ref()
+            .unwrap()
+            .observations
+            .as_ref()
+            .unwrap()
+            .source,
+        Some(ObservationSource::Application)
+    );
+    assert_eq!(
+        storage
+            .record_application("sdk", input.clone())
+            .await
+            .unwrap(),
+        saved
+    );
+    let mut conflicting = input.clone();
+    conflicting.duration_ms += 1;
+    assert!(
+        storage
+            .record_application("sdk", conflicting)
+            .await
+            .is_err()
+    );
+    assert_eq!(storage.get("sdk").await.unwrap(), saved);
+    assert_eq!(storage.routing_history(10).await.unwrap(), vec![saved]);
+    let feedback = storage
+        .outcome("sdk", Outcome::Success, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        storage
+            .record_application("sdk", input.clone())
+            .await
+            .unwrap(),
+        feedback
+    );
+    // Feedback before recording is equally optional and never erased by the snapshot.
+    storage.append(&sample("feedback-first")).await.unwrap();
+    storage
+        .outcome("feedback-first", Outcome::Failure, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        storage
+            .record_application("feedback-first", input.clone())
+            .await
+            .unwrap()
+            .outcome,
+        Outcome::Failure
+    );
+    storage.append(&sample("owned")).await.unwrap();
+    let guard = storage.execution_guard("owned").await.unwrap();
+    assert!(
+        storage
+            .record_application("owned", input.clone())
+            .await
+            .is_err()
+    );
+    storage
+        .state("owned", RunState::Running, Outcome::Unknown, None)
+        .await
+        .unwrap();
+    drop(guard);
+    assert!(
+        storage
+            .record_application("owned", input.clone())
+            .await
+            .is_err()
+    );
+    storage.append(&sample("invalid")).await.unwrap();
+    let mut invalid = input.clone();
+    invalid.events[0].model = Some("PRIVATE prompt with spaces".into());
+    assert!(
+        storage
+            .record_application("invalid", invalid)
+            .await
+            .is_err()
+    );
+    assert!(storage.get("invalid").await.unwrap().execution.is_none());
+    storage.append(&sample("empty")).await.unwrap();
+    let mut empty = input;
+    empty.events.clear();
+    empty.exit_code = None;
+    let saved = storage.record_application("empty", empty).await.unwrap();
+    assert_eq!(
+        saved.execution.unwrap().observations.unwrap().event_count(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn jsonl_and_sqlite_application_recording() {
+    application_recording_contract(Config::default()).await;
+    application_recording_contract(sqlite_config()).await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL test database"]
+async fn postgres_application_recording() {
+    application_recording_contract(postgres_config()).await;
+}
+
 async fn terminal_snapshot_contract(config: Config) {
     use jevia_core::{HarnessEvent, HarnessEventKind, ObservationSource, ObservationStatus};
     let directory = tempfile::tempdir().unwrap();

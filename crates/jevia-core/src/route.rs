@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Current version of a persisted run record.
-pub const RECORD_SCHEMA_VERSION: u32 = 5;
+pub const RECORD_SCHEMA_VERSION: u32 = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -214,7 +214,7 @@ pub struct RouteRecord {
     /// Omitted when `privacy.store_task_text` is disabled.
     pub task: Option<String>,
     pub outcome: Outcome,
-    /// Present when Jevia launched and observed a configured harness.
+    /// Present for supervised harnesses or explicitly recorded app-owned executions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<ExecutionEvidence>,
     /// Absent in legacy schema-version-1 records; never infer execution from it.
