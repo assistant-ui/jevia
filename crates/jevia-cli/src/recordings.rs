@@ -336,7 +336,10 @@ pub async fn run(paths: &ProjectPaths, action: Action) -> Result<std::process::E
             report.eligible, report.moved, report.retained
         );
         if let Some(path) = &report.archive {
-            println!("Recoverable recording archive: {}", path.display());
+            println!(
+                "Recoverable recording archive: {}",
+                crate::terminal::path(path)
+            );
         }
         if report.operation == "cleanup" && !report.applied {
             println!(

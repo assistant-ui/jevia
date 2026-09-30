@@ -116,6 +116,79 @@ fn jsonl_and_sqlite_metadata_is_terminal_safe_without_changing_json() {
 }
 
 #[test]
+fn unknown_harness_errors_escape_requested_and_configured_names() {
+    let dir = tempfile::tempdir().unwrap();
+    cli(dir.path()).arg("init").assert().success();
+    let mut config = Config::default();
+    let existing = jevia_core::HarnessConfig {
+        command: "fixture-not-launched".into(),
+        args: vec!["{model}".into(), "{task}".into()],
+        models: config
+            .tiers
+            .keys()
+            .map(|tier| (tier.clone(), "fixture".into()))
+            .collect(),
+        auto_verify: false,
+        observations: Default::default(),
+        verification: None,
+    };
+    config
+        .harnesses
+        .insert("known\u{1b}[2J\nFORGED\u{202e}".into(), existing);
+    let config_path = dir.path().join(".jevia/config.toml");
+    let original = config.to_toml().unwrap();
+    fs::write(&config_path, &original).unwrap();
+    let result = cli(dir.path())
+        .args(["run", "missing\u{1b}[31m\r\nFORGED", "fixture"])
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+    assert_safe(&result.stderr);
+    let text = String::from_utf8(result.stderr).unwrap();
+    assert_eq!(text.lines().count(), 1);
+    assert!(text.contains("known\\u{1b}[2J\\nFORGED\\u{202e}"));
+    assert!(!text.contains('\u{202e}'));
+    assert_eq!(fs::read_to_string(config_path).unwrap(), original);
+    assert!(!dir.path().join(".jevia/runs.jsonl").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn project_paths_are_safe_on_success_and_error_without_changing_the_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("project\u{1b}[31m\nFORGED");
+    fs::create_dir(&root).unwrap();
+    let output = cli(&root)
+        .arg("init")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert_safe(&output);
+    assert_eq!(String::from_utf8(output).unwrap().lines().count(), 2);
+    assert!(root.join(".jevia/config.toml").exists());
+    let output = cli(&root)
+        .arg("init")
+        .assert()
+        .failure()
+        .get_output()
+        .stderr
+        .clone();
+    assert_safe(&output);
+    assert_eq!(String::from_utf8(output).unwrap().lines().count(), 1);
+    let output = cli(&root)
+        .args(["cache", "status"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    assert_safe(&output);
+}
+
+#[test]
 #[ignore = "requires an isolated PostgreSQL database in JEVIA_TEST_POSTGRES_URL"]
 fn postgres_metadata_is_terminal_safe_without_changing_json() {
     contract("postgres");
