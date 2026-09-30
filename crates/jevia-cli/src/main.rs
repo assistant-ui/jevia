@@ -2,12 +2,14 @@ mod cache;
 mod config_edit;
 mod diagnostics;
 mod explain;
+mod file_lock;
 mod harness;
 mod lease;
 mod local_ignore;
 mod observations;
 mod paths;
 mod processes;
+mod recordings;
 mod setup;
 mod stats;
 mod storage;
@@ -57,6 +59,11 @@ enum Command {
     Harness {
         #[command(subcommand)]
         action: harness::Action,
+    },
+    /// Inspect recording leftovers or preview recoverable auxiliary-file cleanup.
+    Recordings {
+        #[command(subcommand)]
+        action: recordings::Action,
     },
     /// Ask Jev which capability tier should handle a task.
     Route {
@@ -283,6 +290,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Harness { action } => harness::run(&ProjectPaths::discover()?, action).await,
+        Command::Recordings { action } => recordings::run(&ProjectPaths::discover()?, action).await,
         Command::Route {
             task,
             json,

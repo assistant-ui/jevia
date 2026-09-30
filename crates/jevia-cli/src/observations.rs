@@ -1,5 +1,8 @@
 //! Session-local native observations. Raw input is never written to disk or forwarded.
 mod adapters;
+mod cursor;
+#[cfg(test)]
+mod fairness;
 mod loss;
 use crate::{paths::ProjectPaths, storage::Storage};
 use anyhow::{Context, Result, bail};
@@ -266,9 +269,13 @@ fn replay_candidates(
         return Ok(candidates);
     }
     let entries = fs::read_dir(directory)?;
-    for entry in entries.take(4096).flatten() {
+    for (index, entry) in entries.take(4097).enumerate() {
+        if index == 4096 {
+            bail!("recording directory scan limit reached; replay deferred");
+        }
+        let entry = entry?;
         if std::time::Instant::now() >= deadline {
-            break;
+            bail!("replay scan budget exhausted");
         }
         let name = entry.file_name();
         let Some(name) = name.to_str() else {
@@ -301,16 +308,46 @@ async fn replay_until(
 ) {
     let directory = paths.directory.clone();
     let only = only.map(str::to_owned);
-    let Ok(Ok(candidates)) = tokio::task::spawn_blocking(move || {
-        replay_candidates(&directory, only.as_deref(), deadline)
+    let Ok(Ok((mut candidates, cursor))) = tokio::task::spawn_blocking(move || {
+        let candidates = replay_candidates(&directory, only.as_deref(), deadline)?;
+        let cursor = if only.is_none() && !candidates.is_empty() {
+            Some(std::sync::Arc::new(cursor::Cursor::open(&directory)?))
+        } else {
+            None
+        };
+        let mut candidates: Vec<_> = candidates.into_iter().collect();
+        if let Some(cursor) = &cursor
+            && let Some(after) = cursor.read()?
+        {
+            let next = candidates.partition_point(|(id, _)| id <= &after);
+            candidates.rotate_left(next);
+        }
+        Ok::<_, anyhow::Error>((candidates, cursor))
     })
     .await
     else {
+        eprintln!(
+            "jevia: observation replay deferred; incomplete scan or replay state unavailable (details redacted)"
+        );
         return;
     };
-    for (id, files) in candidates.into_iter().take(128) {
+    let mut warned = false;
+    for (id, files) in candidates.drain(..).take(128) {
         if std::time::Instant::now() >= deadline {
             break;
+        }
+        // Advance before attempting even a corrupt/busy/ambiguous run. If its
+        // work consumes the budget, the next invocation still starts after it.
+        if let Some(cursor) = &cursor {
+            let cursor = std::sync::Arc::clone(cursor);
+            let next = id.clone();
+            if !matches!(
+                tokio::task::spawn_blocking(move || cursor.advance(&next)).await,
+                Ok(Ok(()))
+            ) {
+                eprintln!("jevia: replay cursor unavailable; journals retained (details redacted)");
+                break;
+            }
         }
         // Ambiguous journals need inspection; never combine different attempts.
         if files.len() != 1 {
@@ -366,8 +403,9 @@ async fn replay_until(
             Ok::<_, anyhow::Error>(())
         }
         .await;
-        if result.is_err() {
+        if result.is_err() && !warned {
             eprintln!("jevia: observation replay deferred; journal retained (details redacted)");
+            warned = true;
         }
     }
 }
@@ -409,6 +447,21 @@ enum Entry {
     Snapshot(HarnessObservations),
 }
 
+pub(crate) fn checkpoint_matches(bytes: &[u8], saved: &HarnessObservations) -> bool {
+    if bytes.len() as u64 > JOURNAL_LIMIT {
+        return false;
+    }
+    // Compare complete JSON values, not a lossy typed parse that could ignore
+    // newer fields. Unknown data is retained for a compatible reader.
+    match (
+        serde_json::from_slice::<serde_json::Value>(bytes),
+        serde_json::to_value(Entry::Snapshot(saved.clone())),
+    ) {
+        (Ok(actual), Ok(expected)) => actual == expected,
+        _ => false,
+    }
+}
+
 /// Stable striped locks survive atomic journal replacement and are never
 /// unlinked. At most 256 sidecars per project, independent of session length.
 fn journal_guard(path: &Path) -> Result<crate::lease::FileLock> {
@@ -439,7 +492,10 @@ fn save_journal(path: &Path, observations: HarnessObservations) -> Result<()> {
     }
     let parent = path.parent().context("invalid journal directory")?;
     let mut temp = tempfile::Builder::new()
-        .prefix(".jevia-event-checkpoint-")
+        .prefix(&crate::recordings::asset_prefix(
+            ".jevia-event-checkpoint-",
+            path,
+        ))
         .tempfile_in(parent)?;
     temp.write_all(&bytes)?;
     temp.as_file().sync_all()?;

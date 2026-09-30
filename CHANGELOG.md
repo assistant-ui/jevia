@@ -2,13 +2,20 @@
 
 ## Unreleased
 
+- Bound cache/JSONL file-lock acquisition; route live on cache contention and
+  explicitly fail on unavailable history without dropping recorded evidence.
 - Ignore native recording journals, loss markers, event locks, temporary snapshots,
   and generated plugins in Git; safely repair older project ignore rules before
   capture without changing configuration or untracking existing files.
+- Add payload-free `recordings inspect` and preview-first `recordings cleanup`;
+  explicitly confirmed cleanup archives only provably redundant auxiliary files,
+  retaining active runs, journals, loss markers, and unpersisted snapshots.
 - Keep agent deadlines/cancellation responsive during observation checkpoints;
   skip busy JSONL checkpoint locks and reject stale terminal supervisor writes.
 - Bound recovery replay to one two-second budget, skip busy journals/history,
   and retain pending snapshots for later retry.
+- Rotate bounded observation replay across retained candidates, preventing a
+  corrupt/busy prefix from starving later journals; defer incomplete scans safely.
 - Expose detected hook-write loss as partial coverage and a conservative lost-input
   lower bound, with a private, payload-free marker and idempotent recovery.
 - Add opt-in `route --explain` and `run --explain` diagnostics on stderr for

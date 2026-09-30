@@ -567,12 +567,12 @@ fn acquire_lock(path: &Path, mode: LockMode) -> Result<crate::lease::FileLock> {
     let lock = private_lock_options()
         .open(&lock_path)
         .with_context(|| format!("could not open history lock at {}", lock_path.display()))?;
-    match mode {
-        LockMode::Shared => lock.lock_shared(),
-        LockMode::Exclusive => lock.lock(),
-    }
-    .with_context(|| format!("could not acquire history lock at {}", lock_path.display()))?;
-    Ok(crate::lease::FileLock::new(lock))
+    crate::file_lock::acquire(
+        lock,
+        matches!(mode, LockMode::Shared),
+        std::time::Duration::from_secs(2),
+        "run history",
+    )
 }
 
 fn private_append_options() -> OpenOptions {

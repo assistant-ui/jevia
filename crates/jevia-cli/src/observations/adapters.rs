@@ -155,7 +155,7 @@ pub(super) fn install(
             // overrides remain untouched, with process-only recording.
             let mut config = inline_config(existing.as_deref())?;
             let mut plugin = tempfile::Builder::new()
-                .prefix("jevia-observer-")
+                .prefix(&crate::recordings::asset_prefix("jevia-observer-", journal))
                 .suffix(".mjs")
                 .tempfile_in(directory)?;
             plugin.write_all(include_bytes!("opencode.mjs"))?;
