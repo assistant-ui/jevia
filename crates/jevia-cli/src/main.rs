@@ -856,11 +856,7 @@ async fn routed_record_in(
 ) -> Result<RouteRecord> {
     // Replay must not turn a slow/offline observation store into an unbounded
     // startup delay. Cancellation leaves the journal for the next invocation.
-    let _ = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        observations::replay(paths, storage, None),
-    )
-    .await;
+    observations::replay(paths, storage, None).await;
     let wait_started = Instant::now();
     let wait_budget =
         std::time::Duration::from_millis(config.jev.timeout_ms.saturating_add(1_000).min(30_000));
@@ -1764,7 +1760,7 @@ mod tests {
         }
     }
 
-    fn sample_record() -> RouteRecord {
+    pub(crate) fn sample_record() -> RouteRecord {
         RouteRecord {
             schema_version: 1,
             decision: RouteDecision {

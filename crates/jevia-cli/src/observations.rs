@@ -241,11 +241,37 @@ impl Capture {
 /// Bounded best-effort replay. Never infer that a child stopped because its
 /// supervisor/DB connection disappeared. Active records remain active.
 pub async fn replay(paths: &ProjectPaths, storage: &Storage, only: Option<&str>) {
-    let Ok(entries) = fs::read_dir(&paths.directory) else {
-        return;
-    };
+    replay_with_budget(paths, storage, only, Duration::from_secs(2)).await;
+}
+
+async fn replay_with_budget(
+    paths: &ProjectPaths,
+    storage: &Storage,
+    only: Option<&str>,
+    budget: Duration,
+) {
+    let deadline = std::time::Instant::now() + budget;
+    let _ = tokio::time::timeout_at(
+        deadline.into(),
+        replay_until(paths, storage, only, deadline),
+    )
+    .await;
+}
+
+fn replay_candidates(
+    directory: &Path,
+    only: Option<&str>,
+    deadline: std::time::Instant,
+) -> Result<std::collections::BTreeMap<String, Vec<PathBuf>>> {
     let mut candidates = std::collections::BTreeMap::<String, Vec<PathBuf>>::new();
+    if std::time::Instant::now() >= deadline {
+        return Ok(candidates);
+    }
+    let entries = fs::read_dir(directory)?;
     for entry in entries.take(4096).flatten() {
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
         let name = entry.file_name();
         let Some(name) = name.to_str() else {
             continue;
@@ -266,7 +292,28 @@ pub async fn replay(paths: &ProjectPaths, storage: &Storage, only: Option<&str>)
         }
         candidates.entry(id.into()).or_default().push(entry.path());
     }
+    Ok(candidates)
+}
+
+async fn replay_until(
+    paths: &ProjectPaths,
+    storage: &Storage,
+    only: Option<&str>,
+    deadline: std::time::Instant,
+) {
+    let directory = paths.directory.clone();
+    let only = only.map(str::to_owned);
+    let Ok(Ok(candidates)) = tokio::task::spawn_blocking(move || {
+        replay_candidates(&directory, only.as_deref(), deadline)
+    })
+    .await
+    else {
+        return;
+    };
     for (id, files) in candidates.into_iter().take(128) {
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
         // Ambiguous journals need inspection; never combine different attempts.
         if files.len() != 1 {
             continue;
@@ -274,12 +321,23 @@ pub async fn replay(paths: &ProjectPaths, storage: &Storage, only: Option<&str>)
         let Ok(_guard) = storage.execution_guard(&id).await else {
             continue;
         };
-        let path = &files[0];
+        let path = files[0].clone();
         let result = async {
-            let _journal_guard = journal_guard(path)?;
-            let mut file = open_journal(path)?;
-            let snapshot = read_journal(&mut file)?;
-            let record = storage.get(&id).await?;
+            let read_path = path.clone();
+            let (journal_guard, snapshot) = tokio::task::spawn_blocking(move || {
+                if std::time::Instant::now() >= deadline {
+                    bail!("replay budget exhausted");
+                }
+                let guard =
+                    try_journal_guard(&read_path)?.context("journal busy; replay deferred")?;
+                let snapshot = read_journal(&mut open_journal(&read_path)?)?;
+                Ok::<_, anyhow::Error>((guard, snapshot))
+            })
+            .await??;
+            let record = storage.get_for_replay(&id).await?;
+            if std::time::Instant::now() >= deadline {
+                bail!("replay budget exhausted");
+            }
             if record
                 .execution
                 .as_ref()
@@ -296,8 +354,16 @@ pub async fn replay(paths: &ProjectPaths, storage: &Storage, only: Option<&str>)
                 .as_ref()
                 .is_some_and(|l| !l.state.is_active())
             {
-                drop(file);
-                fs::remove_file(path)?;
+                // Keep the journal lock through cleanup. A cancelled/expired
+                // replay retains its retry source, even if persistence completed.
+                tokio::task::spawn_blocking(move || {
+                    let _guard = journal_guard;
+                    if std::time::Instant::now() < deadline {
+                        fs::remove_file(path)?;
+                    }
+                    Ok::<_, anyhow::Error>(())
+                })
+                .await??;
             }
             Ok::<_, anyhow::Error>(())
         }
@@ -348,12 +414,9 @@ enum Entry {
 /// Stable striped locks survive atomic journal replacement and are never
 /// unlinked. At most 256 sidecars per project, independent of session length.
 fn journal_guard(path: &Path) -> Result<crate::lease::FileLock> {
-    let parent = path.parent().context("invalid journal directory")?;
-    let name = path.file_name().context("invalid journal name")?;
-    let stripe = format!("{:02x}", Sha256::digest(name.as_encoded_bytes())[0]);
     let deadline = std::time::Instant::now() + Duration::from_secs(1);
     loop {
-        if let Some(guard) = crate::lease::try_acquire(&parent.join("event-leases"), &stripe)? {
+        if let Some(guard) = try_journal_guard(path)? {
             return Ok(guard);
         }
         if std::time::Instant::now() >= deadline {
@@ -361,6 +424,13 @@ fn journal_guard(path: &Path) -> Result<crate::lease::FileLock> {
         }
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+fn try_journal_guard(path: &Path) -> Result<Option<crate::lease::FileLock>> {
+    let parent = path.parent().context("invalid journal directory")?;
+    let name = path.file_name().context("invalid journal name")?;
+    let stripe = format!("{:02x}", Sha256::digest(name.as_encoded_bytes())[0]);
+    crate::lease::try_acquire(&parent.join("event-leases"), &stripe)
 }
 
 fn save_journal(path: &Path, observations: HarnessObservations) -> Result<()> {
@@ -555,6 +625,140 @@ mod tests {
         Config, DecisionSource, ExecutionEvidence, Outcome, RouteDecision, RouteRecord, RunState,
         StorageConfig,
     };
+
+    #[tokio::test]
+    async fn replay_skips_contended_journals_within_one_budget() {
+        let directory = tempfile::tempdir().unwrap();
+        let paths = ProjectPaths::at(directory.path().into());
+        fs::create_dir_all(&paths.directory).unwrap();
+        let storage = Storage::open(&Config::default(), &paths, false)
+            .await
+            .unwrap();
+        let initial = HarnessObservations {
+            source: Some(ObservationSource::ClaudeHooks),
+            status: Status::NoEvents,
+            events: vec![],
+            totals: None,
+        };
+        let mut guards = vec![];
+        let mut journals = vec![];
+        while guards.len() < 6 {
+            let journal = paths
+                .directory
+                .join(format!("jevia-events-{}-test.jsonl", uuid::Uuid::new_v4()));
+            if let Some(guard) = try_journal_guard(&journal).unwrap() {
+                save_journal(&journal, initial.clone()).unwrap();
+                guards.push(guard);
+                journals.push(journal);
+            }
+        }
+        let started = std::time::Instant::now();
+        replay(&paths, &storage, None).await;
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "per-journal waits exceeded the shared budget"
+        );
+        assert!(journals.iter().all(|path| path.exists()));
+        drop(guards);
+    }
+
+    #[tokio::test]
+    async fn busy_history_and_expired_replay_retain_journals_for_retry() {
+        let directory = tempfile::tempdir().unwrap();
+        let paths = ProjectPaths::at(directory.path().into());
+        let storage = Storage::open(&Config::default(), &paths, true)
+            .await
+            .unwrap();
+        let mut record = crate::tests::sample_record();
+        record.decision.run_id = uuid::Uuid::new_v4().to_string();
+        storage.append(&record).await.unwrap();
+        let id = &record.decision.run_id;
+        let capture = Capture::prepare(
+            ObservationMode::ClaudeHooks,
+            &HarnessInvocation {
+                program: "wrapper".into(),
+                args: vec![],
+                model: "requested".into(),
+                verification: None,
+            },
+            &paths.directory,
+            id,
+        )
+        .await;
+        storage
+            .state(
+                id,
+                jevia_core::RunState::Running,
+                jevia_core::Outcome::Unknown,
+                Some(jevia_core::ExecutionEvidence {
+                    observations: Some(capture.snapshot()),
+                    harness: "test".into(),
+                    model: "requested".into(),
+                    duration_ms: 0,
+                    exit_code: None,
+                    verification: None,
+                }),
+            )
+            .await
+            .unwrap();
+        storage
+            .state(
+                id,
+                jevia_core::RunState::Completed,
+                jevia_core::Outcome::Unknown,
+                None,
+            )
+            .await
+            .unwrap();
+        let journal = capture.journal.as_ref().unwrap();
+        receive(
+            journal,
+            br#"{"hook_event_name":"Stop","model":"observed"}"#.as_slice(),
+        );
+        replay_with_budget(&paths, &storage, None, Duration::ZERO).await;
+        assert!(journal.exists());
+        assert_eq!(
+            storage
+                .get(id)
+                .await
+                .unwrap()
+                .execution
+                .unwrap()
+                .observations
+                .unwrap()
+                .event_count(),
+            0
+        );
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(paths.runs.with_extension("lock"))
+            .unwrap();
+        file.lock().unwrap();
+        let (release, wait) = std::sync::mpsc::channel();
+        let holder = std::thread::spawn(move || {
+            let _guard = crate::lease::FileLock::new(file);
+            let _ = wait.recv_timeout(Duration::from_secs(4));
+        });
+        let started = std::time::Instant::now();
+        replay(&paths, &storage, None).await;
+        let elapsed = started.elapsed();
+        let _ = release.send(());
+        holder.join().unwrap();
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "replay waited on a history writer"
+        );
+        assert!(journal.exists());
+        replay(&paths, &storage, None).await;
+        assert!(!journal.exists());
+        let saved = storage.get(id).await.unwrap();
+        assert_eq!(saved.outcome, jevia_core::Outcome::Unknown);
+        assert_eq!(
+            saved.execution.unwrap().observations.unwrap().event_count(),
+            1
+        );
+    }
 
     async fn replay_contract(config: Config) {
         let directory = tempfile::tempdir().unwrap();
