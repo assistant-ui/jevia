@@ -240,6 +240,11 @@ exit, and lifecycle state). Each uses `router.history_limit`; pending and active
 runs do not crowd out either window. New observations also invalidate stale routing
 cache entries. Stored task text follows the existing privacy setting.
 
+In the unreleased CLI, both windows come from one consistent history snapshot.
+Concurrent feedback cannot move an attempt between categories midway through
+the read. JSONL validates once under a shared lock and retains only the two
+bounded windows; SQL uses a read snapshot without holding a project write lock.
+
 A process exiting zero or nonzero leaves task `outcome` as `unknown`; its exit code
 is still recorded and returned by the CLI. A known outcome requires optional manual
 feedback or an explicitly requested verifier. Historical process-derived labels

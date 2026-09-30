@@ -13,8 +13,10 @@ use jevia_core::{
 use tempfile::NamedTempFile;
 
 mod check;
+mod history;
 mod maintenance;
 pub use check::check_deep;
+pub use history::routing_history;
 pub(crate) use maintenance::archivable;
 pub use maintenance::{Maintenance, Report as MaintenanceReport, maintain};
 
@@ -53,12 +55,6 @@ fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
 pub fn recent(path: &Path, limit: usize, evidence_only: bool) -> Result<Vec<RouteRecord>> {
     recent_matching(path, limit, |record| {
         !evidence_only || record.is_learning_evidence()
-    })
-}
-
-pub fn recent_observations(path: &Path, limit: usize) -> Result<Vec<RouteRecord>> {
-    recent_matching(path, limit, |record| {
-        record.is_execution_observation() && !record.is_learning_evidence()
     })
 }
 

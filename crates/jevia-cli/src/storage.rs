@@ -88,13 +88,12 @@ impl Storage {
     /// Separate windows prevent passive activity from displacing known outcomes.
     /// Each window retains append order; the provider consumes them separately.
     pub async fn routing_history(&self, limit: usize) -> Result<Vec<RouteRecord>> {
-        let mut history = self.recent(limit, true).await?;
-        let observations = match self {
-            Self::Jsonl(paths) => store::recent_observations(&paths.runs, limit)?,
-            Self::Database(db) => db.recent_observations(limit).await?,
+        let (mut history, observations) = match self {
+            Self::Jsonl(paths) => store::routing_history(&paths.runs, limit)?,
+            Self::Database(db) => db.routing_history(limit).await?,
         };
-        // A concurrent feedback write can move a run between the two windows.
-        // Do not duplicate it or credit the same attempt twice.
+        // Both windows share one snapshot. Preserve de-duplication for legacy
+        // JSONL files containing repeated identities; deep check diagnoses those.
         for record in observations {
             if !history
                 .iter()
