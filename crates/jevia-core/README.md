@@ -20,6 +20,12 @@ assert!(config.tiers.contains_key(&config.router.fallback_tier));
 
 Requires Rust 1.92 or newer. The API is experimental.
 
+## Upgrading to 0.1.7
+
+The Rust core API, record schema 6, and configuration are unchanged from 0.1.6.
+This coordinated patch carries CLI storage, replay, and diagnostic improvements;
+recording/history reuse remain automatic and additional verification is optional.
+
 ## Upgrading to 0.1.6
 
 This experimental patch adds observation configuration, execution observation

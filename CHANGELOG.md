@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.1.7 — 2026-09-30
+
+- Stream JSONL point lookups, single-record updates, and basic health counts
+  instead of retaining the full history. Updates still validate the complete
+  input and publish atomically under the history lock; their I/O remains linear
+  in history size. A synthetic 100,000-record feedback probe reduced peak memory
+  from approximately 74 MiB to 12 MiB; runtime depends on workload and storage.
+- Stop expired JSONL replay scans and checkpoint rewrites cooperatively between
+  chunks/records and before publication; retain journals for safe retries.
+- Escape controls in human-readable metadata, application error chains, cache
+  warnings, and displayed paths without changing stored values or JSON responses.
+- Add versioned, payload-free `storage check --json` reports and release Node SDK
+  `jevia@0.1.3` with `checkStorageReport()`. Failed health reports remain typed;
+  process and protocol errors still reject. Existing `checkStorage()` is unchanged.
+- Report passive-history index readiness without creating or replacing indexes.
 - Read known outcomes and passive observations from one consistent snapshot;
   concurrent feedback cannot move an attempt out of both routing windows. JSONL
   collects both bounded windows in one validated pass under a shared lock.
@@ -30,6 +45,18 @@
   outcomes and passive execution observations,
   confidence fallback, and routing time. Keep task text out of explanations and
   preserve existing JSON output and persisted record formats.
+
+### Compatibility and upgrade
+
+Record schema 6, SQL schema 1, configuration, and the Rust core API are unchanged
+from 0.1.6. Recording and history reuse remain automatic; feedback and additional
+verification remain optional. The new SDK storage-report method requires CLI
+0.1.7 or newer; existing methods keep their documented minimum versions.
+
+Existing SQL stores continue to work without the new performance index. Back up
+history and explicitly run `jevia storage init` during a quiet maintenance window
+to add it; normal routing never builds indexes. PostgreSQL before 16 retains the
+compatible paginated fallback. Rust 1.92 and Node.js 20 remain the minimum versions.
 
 ## 0.1.6 — 2026-09-29
 

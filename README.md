@@ -8,7 +8,8 @@ Use it with Claude Code, Codex, OpenCode, Gemini CLI, Cursor Agent, or a custom
 harness. Recording does not require extra tests or manual feedback; it is not tied
 to one programming language, model provider, or agent runtime.
 
-> Passive recording is available in CLI 0.1.6 and Node SDK 0.1.2. CLI 0.1.4–0.1.5
+> CLI/core 0.1.7 and Node SDK 0.1.3 add storage and recovery improvements.
+> Passive recording remains available since CLI 0.1.6 and Node SDK 0.1.2. CLI 0.1.4–0.1.5
 > enabled extra test discovery by default; 0.1.6 makes it opt-in. Back up history
 > and upgrade all clients sharing a store together before writing schema-6 records.
 
@@ -148,13 +149,13 @@ recorded CLI observations and other eligible outcomes. No history argument or
 manual fetch is needed. The SDK does not instrument an externally launched agent
 merely because your application called `route()`.
 
-## Routing explanations (unreleased)
+## Routing explanations
 
 Use `jevia route "task" --explain` or `jevia run agent "task" --explain` to
 inspect cache behavior, the counts of known outcomes and passive observations,
 and confidence fallback. Diagnostics go to stderr; JSON output stays unchanged.
 These are observed routing facts, not the model's internal reasoning. See the
-[routing explanation reference](docs/reference.md#routing-explanations-unreleased).
+[routing explanation reference](docs/reference.md#routing-explanations).
 
 ## Documentation
 
