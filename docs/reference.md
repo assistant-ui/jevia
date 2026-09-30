@@ -250,6 +250,12 @@ This is the complete CLI and operations reference. Start with the
 [project README](../README.md) or the [product documentation](https://jevia.dev/docs)
 for the shorter installation and integration path.
 
+The unreleased CLI escapes control characters in human-readable routing/run
+metadata, feedback confirmations, and harness names. Imported values cannot add
+terminal commands or spoof extra output lines through these displays. Stored
+values, harness arguments, and JSON/SDK responses retain their original contents;
+output streamed directly from a child harness is not filtered.
+
 Jevia is an outcome-aware model router for coding agents. It asks Jev for a
 typed routing decision, applies a deterministic safety policy, and records the
 eventual result so later decisions can use evidence from earlier runs.

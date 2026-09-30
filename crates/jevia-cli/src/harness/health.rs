@@ -135,7 +135,11 @@ pub async fn run(paths: &ProjectPaths, name: &str, json: bool) -> Result<ExitCod
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
-        println!("Recording health: {} [{}]", report.harness, report.code);
+        println!(
+            "Recording health: {} [{}]",
+            crate::terminal::text(&report.harness),
+            report.code
+        );
         println!("Current configuration: {}", report.configuration);
         if let Some(latest) = &report.latest {
             println!(

@@ -14,6 +14,7 @@ mod setup;
 mod stats;
 mod storage;
 mod store;
+mod terminal;
 mod verification;
 
 use std::{env, fs, io::Write, process::ExitCode, str::FromStr, time::Instant};
@@ -614,13 +615,16 @@ async fn execute_observed_harness(
     let mut runner = processes::Runner::new(options.non_interactive)?;
     eprintln!(
         "jevia: run={} tier={} suggested={} confidence={:.2} fallback={}",
-        record.decision.run_id,
-        record.decision.tier,
-        record.decision.suggested_tier,
+        terminal::text(&record.decision.run_id),
+        terminal::text(&record.decision.tier),
+        terminal::text(&record.decision.suggested_tier),
         record.decision.confidence,
         record.decision.fallback_applied
     );
-    eprintln!("jevia: launching harness `{harness_name}`");
+    eprintln!(
+        "jevia: launching harness `{}`",
+        terminal::text(harness_name)
+    );
 
     let mut execution = ExecutionEvidence {
         observations: Some(capture.snapshot()),
@@ -691,8 +695,12 @@ async fn execute_observed_harness(
                     Some(execution),
                 )
                 .await?;
-            return Err(error)
-                .with_context(|| format!("could not launch harness `{harness_name}`"));
+            return Err(error).with_context(|| {
+                format!(
+                    "could not launch harness `{}`",
+                    terminal::text(harness_name)
+                )
+            });
         }
     };
     let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -728,7 +736,10 @@ async fn execute_observed_harness(
         return Ok(child_exit_code(&status));
     };
 
-    eprintln!("jevia: verifying harness `{harness_name}`");
+    eprintln!(
+        "jevia: verifying harness `{}`",
+        terminal::text(harness_name)
+    );
     storage
         .state(
             &record.decision.run_id,
@@ -790,7 +801,10 @@ async fn execute_observed_harness(
                 )
                 .await?;
             return Err(error).with_context(|| {
-                format!("could not launch verification for harness `{harness_name}`")
+                format!(
+                    "could not launch verification for harness `{}`",
+                    terminal::text(harness_name)
+                )
             });
         }
     };
@@ -1106,9 +1120,9 @@ async fn runs(limit: usize, print_json: bool) -> Result<()> {
             };
             println!(
                 "{}  tier={}  requested_model={}  source={}  confidence={:.2}  outcome={}  verification={}  duration={}ms",
-                record.decision.run_id,
-                record.decision.tier,
-                execution.model,
+                terminal::text(&record.decision.run_id),
+                terminal::text(&record.decision.tier),
+                terminal::text(&execution.model),
                 record.decision.source,
                 record.decision.confidence,
                 record.outcome,
@@ -1118,8 +1132,8 @@ async fn runs(limit: usize, print_json: bool) -> Result<()> {
         } else {
             println!(
                 "{}  tier={}  source={}  confidence={:.2}  outcome={}",
-                record.decision.run_id,
-                record.decision.tier,
+                terminal::text(&record.decision.run_id),
+                terminal::text(&record.decision.tier),
                 record.decision.source,
                 record.decision.confidence,
                 record.outcome
@@ -1162,7 +1176,7 @@ async fn feedback(
     if print_json {
         println!("{}", serde_json::to_string_pretty(&record)?);
     } else {
-        println!("Updated {run_id}: outcome={outcome}");
+        println!("Updated {}: outcome={outcome}", terminal::text(run_id));
     }
     Ok(())
 }
@@ -1188,7 +1202,9 @@ async fn check() -> Result<()> {
 
     println!(
         "jev api: ok (model={}, tier={}, confidence={:.2})",
-        decision.jev_model, decision.tier, decision.confidence
+        terminal::text(&decision.jev_model),
+        terminal::text(&decision.tier),
+        decision.confidence
     );
     println!("jevia: ready");
     Ok(())
@@ -1313,13 +1329,7 @@ fn load_config(paths: &ProjectPaths) -> Result<Config> {
 }
 
 fn print_record(record: &RouteRecord) {
-    println!("run:        {}", record.decision.run_id);
-    println!("tier:       {}", record.decision.tier);
-    println!("suggested:  {}", record.decision.suggested_tier);
-    println!("confidence: {:.2}", record.decision.confidence);
-    println!("fallback:   {}", record.decision.fallback_applied);
-    println!("jev model:  {}", record.decision.jev_model);
-    println!("source:     {}", record.decision.source);
+    print!("{}", terminal::route(record));
     let _ = std::io::stdout().flush();
 }
 
