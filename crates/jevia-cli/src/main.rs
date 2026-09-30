@@ -4,6 +4,7 @@ mod diagnostics;
 mod explain;
 mod harness;
 mod lease;
+mod local_ignore;
 mod observations;
 mod paths;
 mod processes;
@@ -1294,46 +1295,7 @@ fn cache_command(action: CacheAction) -> Result<()> {
 }
 
 fn ensure_local_ignore(path: &std::path::Path) -> Result<()> {
-    const RULES: [&str; 15] = [
-        "config.lock",
-        "config-backups/",
-        "*.db",
-        "*.db-wal",
-        "*.db-shm",
-        "*.run-locks/",
-        "run-leases/",
-        "cache-leases/",
-        "history-backups/",
-        "history-archives/",
-        "runs.jsonl",
-        "runs.lock",
-        "cache.jsonl",
-        "cache.lock",
-        "*.tmp",
-    ];
-
-    let mut contents = match fs::read_to_string(path) {
-        Ok(contents) => contents,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(error) => {
-            return Err(error).with_context(|| format!("could not read {}", path.display()));
-        }
-    };
-    let mut changed = false;
-    for rule in RULES {
-        if !contents.lines().any(|line| line == rule) {
-            if !contents.is_empty() && !contents.ends_with('\n') {
-                contents.push('\n');
-            }
-            contents.push_str(rule);
-            contents.push('\n');
-            changed = true;
-        }
-    }
-    if changed {
-        fs::write(path, contents).with_context(|| format!("could not write {}", path.display()))?;
-    }
-    Ok(())
+    local_ignore::ensure(path)
 }
 
 fn load_config(paths: &ProjectPaths) -> Result<Config> {

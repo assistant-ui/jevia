@@ -54,6 +54,25 @@ older snapshot. Unreadable, corrupt, or subsequently changed journals remain on
 disk for recovery; cleanup only removes a journal matching the saved snapshot.
 This does not infer task success or run additional verification.
 
+### Private recording files and Git (unreleased)
+
+Project-local `.jevia/.gitignore` rules cover history, caches, native journals,
+loss markers, journal-checkpoint temporary files, event locks, and generated
+adapter plugins. `config.toml` and the ignore file itself remain trackable so
+policy can be reviewed. Before native capture creates artifacts, Jevia repairs
+missing rules in older projects without requiring `init --force` or changing
+configuration. Existing comments/custom rules are retained; cooperating writers
+are serialized and updates are atomic.
+
+If ignore-rule repair fails, native capture stays unavailable and process-level
+recording continues; no native journal/plugin is created by that attempt.
+Git ignore rules prevent ordinary accidental additions, not access to local data.
+They do not untrack files already committed or staged, delete existing files, or
+override explicit force-adds; custom Git rules can also negate exclusions.
+Review any previously tracked `.jevia` runtime data
+separately. Retained journals can contain allowlisted model/session/tool metadata
+even though raw prompts and tool contents are not captured.
+
 ### Passive model reporting
 
 In CLI 0.1.6, `jevia stats` / `jevia stats --json` includes a separate
