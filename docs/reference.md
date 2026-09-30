@@ -223,6 +223,15 @@ ambiguous. Oversized directories require inspection/maintenance; the cursor is
 not an unbounded background repair service or a guarantee against slow storage.
 Routing receives bounded event counts and model summaries, not session IDs/raw events.
 
+In CLI 0.1.7, replay's JSONL workers also check the remaining budget between read
+chunks and records, after decoding, and before publishing a checkpoint rewrite.
+Expiry releases the history lock and discards unpublished temporary output; the
+journal remains available for retry. This is cooperative cancellation, not a hard
+real-time guarantee: a blocking filesystem call, decoding one large record, or
+an atomic publication already in progress cannot be preempted. Required routing
+history still validates completely; a replay timeout never substitutes partial
+history or invents an outcome. Ordinary readers reuse their line buffer as well.
+
 #### File-lock contention
 
 Cache lock acquisition waits at most 500 ms per operation; a busy routing cache
