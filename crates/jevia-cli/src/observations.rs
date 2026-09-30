@@ -369,7 +369,7 @@ async fn replay_until(
                 Ok::<_, anyhow::Error>((guard, snapshot))
             })
             .await??;
-            let record = storage.get_for_replay(&id).await?;
+            let record = storage.get_for_replay_until(&id, deadline).await?;
             if std::time::Instant::now() >= deadline {
                 bail!("replay budget exhausted");
             }
@@ -380,7 +380,7 @@ async fn replay_until(
                 != Some(&snapshot)
             {
                 storage
-                    .checkpoint_observations(&id, snapshot.clone(), false)
+                    .checkpoint_for_replay(&id, snapshot.clone(), deadline)
                     .await?;
             }
             // Keep the journal for active runs: surviving children can still emit.
