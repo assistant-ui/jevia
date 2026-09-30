@@ -24,7 +24,7 @@ pub enum Storage {
 // Keep the lock alive through both harness execution and its verifier. Database
 // guards own a detached connection so a session lock is never returned to a pool.
 pub enum ExecutionGuard {
-    File { _file: File },
+    File { _file: lease::FileLock },
     Postgres { _connection: sqlx::AnyConnection },
 }
 

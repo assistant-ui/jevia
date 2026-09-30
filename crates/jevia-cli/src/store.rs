@@ -532,7 +532,7 @@ enum LockMode {
     Exclusive,
 }
 
-fn acquire_lock(path: &Path, mode: LockMode) -> Result<File> {
+fn acquire_lock(path: &Path, mode: LockMode) -> Result<crate::lease::FileLock> {
     let lock_path = path.with_extension("lock");
     let lock = private_lock_options()
         .open(&lock_path)
@@ -542,7 +542,7 @@ fn acquire_lock(path: &Path, mode: LockMode) -> Result<File> {
         LockMode::Exclusive => lock.lock(),
     }
     .with_context(|| format!("could not acquire history lock at {}", lock_path.display()))?;
-    Ok(lock)
+    Ok(crate::lease::FileLock::new(lock))
 }
 
 fn private_append_options() -> OpenOptions {
