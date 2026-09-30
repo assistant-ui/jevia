@@ -277,7 +277,7 @@ fn main() -> ExitCode {
     match result {
         Ok(exit_code) => exit_code,
         Err(error) => {
-            eprintln!("error: {error:#}");
+            eprintln!("error: {}", terminal::diagnostic(format_args!("{error:#}")));
             ExitCode::FAILURE
         }
     }
@@ -442,8 +442,8 @@ fn init(force: bool) -> Result<()> {
 
     ensure_local_ignore(&paths.directory.join(".gitignore"))?;
 
-    println!("Initialized Jevia in {}", paths.root.display());
-    println!("Config: {}", paths.config.display());
+    println!("Initialized Jevia in {}", terminal::path(&paths.root));
+    println!("Config: {}", terminal::path(&paths.config));
     Ok(())
 }
 
@@ -922,7 +922,10 @@ async fn routed_record_in(
         let key = match route_cache_key(task, harness_name, config, &history) {
             Ok(key) => key,
             Err(error) => {
-                eprintln!("jevia: routing cache key unavailable: {error:#}");
+                eprintln!(
+                    "jevia: routing cache key unavailable: {}",
+                    terminal::diagnostic(format_args!("{error:#}"))
+                );
                 trace.cache = CacheStatus::KeyUnavailable;
                 break (history, None, None);
             }
@@ -942,7 +945,10 @@ async fn routed_record_in(
             }
             Ok(cache::Lookup::Miss(reason)) => trace.cache = CacheStatus::Miss(reason),
             Err(error) => {
-                eprintln!("jevia: routing cache unavailable: {error:#}");
+                eprintln!(
+                    "jevia: routing cache unavailable: {}",
+                    terminal::diagnostic(format_args!("{error:#}"))
+                );
                 trace.cache = CacheStatus::Unavailable;
                 break (history, None, None);
             }
@@ -984,7 +990,10 @@ async fn routed_record_in(
                         break (latest, Some(key), Some(guard));
                     }
                     Err(error) => {
-                        eprintln!("jevia: routing cache unavailable: {error:#}");
+                        eprintln!(
+                            "jevia: routing cache unavailable: {}",
+                            terminal::diagnostic(format_args!("{error:#}"))
+                        );
                         trace.cache = CacheStatus::Unavailable;
                         break (latest, None, None);
                     }
@@ -995,7 +1004,10 @@ async fn routed_record_in(
                 tokio::time::sleep(std::time::Duration::from_millis(25)).await;
             }
             Err(error) => {
-                eprintln!("jevia: cache coordination unavailable: {error:#}");
+                eprintln!(
+                    "jevia: cache coordination unavailable: {}",
+                    terminal::diagnostic(format_args!("{error:#}"))
+                );
                 trace.coordination = Coordination::Unavailable;
                 break (history, Some(key), None);
             }
@@ -1017,7 +1029,10 @@ async fn routed_record_in(
             Ok(()) => trace.write = CacheWrite::Stored,
             Err(error) => {
                 trace.write = CacheWrite::Failed;
-                eprintln!("jevia: could not update routing cache: {error:#}");
+                eprintln!(
+                    "jevia: could not update routing cache: {}",
+                    terminal::diagnostic(format_args!("{error:#}"))
+                );
             }
         }
     }
@@ -1073,10 +1088,10 @@ async fn maintain_history(
             println!("Inspect this preview, then repeat with --apply to save a backup and apply.");
         }
         if let Some(path) = report.backup {
-            println!("Original backup: {}", path.display());
+            println!("Original backup: {}", terminal::path(&path));
         }
         if let Some(path) = report.archive {
-            println!("Archive: {}", path.display());
+            println!("Archive: {}", terminal::path(&path));
         }
     }
     Ok(())
@@ -1218,7 +1233,7 @@ async fn local_diagnostics() -> Result<Config> {
     let index_status = storage.observation_index_status().await?;
     let cache_stats = cache::stats(&paths.cache)
         .context("routing cache is invalid; run `jevia cache clear` to reset it")?;
-    println!("config: ok ({})", paths.config.display());
+    println!("config: ok ({})", terminal::path(&paths.config));
     println!("tiers: ok ({})", config.tiers.len());
     println!("harnesses: ok ({})", config.harnesses.len());
     println!("store: ok ({count} records, backend={})", storage.name());
@@ -1228,7 +1243,7 @@ async fn local_diagnostics() -> Result<Config> {
         cache_stats.total,
         cache_stats.active,
         cache_stats.expired,
-        paths.cache.display()
+        terminal::path(&paths.cache)
     );
 
     Ok(config)
@@ -1311,11 +1326,11 @@ fn cache_command(action: CacheAction) -> Result<()> {
             println!("total:       {}", stats.total);
             println!("active:      {}", stats.active);
             println!("expired:     {}", stats.expired);
-            println!("path:        {}", paths.cache.display());
+            println!("path:        {}", terminal::path(&paths.cache));
         }
         CacheAction::Clear => {
             if cache::clear(&paths.cache)? {
-                println!("Cleared routing cache at {}", paths.cache.display());
+                println!("Cleared routing cache at {}", terminal::path(&paths.cache));
             } else {
                 println!("Routing cache is already empty.");
             }

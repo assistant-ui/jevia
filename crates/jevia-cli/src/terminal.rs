@@ -5,6 +5,24 @@ pub fn text(value: &str) -> std::str::EscapeDebug<'_> {
     value.escape_debug()
 }
 
+/// One-line application diagnostics, including nested error chains. Preserve
+/// quotes/backslashes so ordinary paths and already-escaped metadata stay readable.
+pub fn diagnostic(value: impl std::fmt::Display) -> String {
+    let mut output = String::new();
+    for c in value.to_string().chars() {
+        if matches!(c, '\\' | '\'' | '"') {
+            output.push(c);
+        } else {
+            output.extend(c.escape_debug());
+        }
+    }
+    output
+}
+
+pub fn path(value: &std::path::Path) -> String {
+    diagnostic(value.display())
+}
+
 pub fn route(record: &RouteRecord) -> String {
     let decision = &record.decision;
     format!(
@@ -23,6 +41,17 @@ pub fn route(record: &RouteRecord) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn error_chains_are_one_line_without_double_escaping_safe_text() {
+        let error = anyhow::anyhow!("inner\u{1b}[31m\r\nspoofed\u{202e}").context("outer\tcontext");
+        let result = diagnostic(format_args!("{error:#}"));
+        assert!(!result.chars().any(char::is_control));
+        assert!(!result.contains('\u{202e}'));
+        assert!(result.contains("outer\\tcontext: inner\\u{1b}[31m\\r\\nspoofed"));
+        let safe = r#"C:\work\模型 🦀\file 'quoted' \u{1b}"#;
+        assert_eq!(diagnostic(safe), safe);
+    }
 
     #[test]
     fn metadata_cannot_emit_controls_or_spoof_additional_lines() {
