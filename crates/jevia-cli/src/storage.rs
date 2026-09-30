@@ -11,7 +11,9 @@ pub use import::validate_import;
 use crate::{lease, paths::ProjectPaths, store};
 use anyhow::{Context, Result, bail};
 use database::Database;
-use jevia_core::{Config, ExecutionEvidence, Outcome, RouteRecord, RunState, StorageConfig};
+use jevia_core::{
+    Config, ExecutionEvidence, HarnessObservations, Outcome, RouteRecord, RunState, StorageConfig,
+};
 use std::{fs::File, path::PathBuf};
 
 pub enum Storage {
@@ -134,6 +136,22 @@ impl Storage {
         match self {
             Self::Jsonl(paths) => store::record_state(&paths.runs, id, state, outcome, execution),
             Self::Database(db) => db.state(id, state, outcome, execution, false).await,
+        }
+    }
+
+    /// The caller holds the execution lease. A supervisor must still own its SQL run.
+    pub async fn checkpoint_observations(
+        &self,
+        id: &str,
+        observations: HarnessObservations,
+        supervisor: bool,
+    ) -> Result<RouteRecord> {
+        match self {
+            Self::Jsonl(paths) => store::checkpoint_observations(&paths.runs, id, observations),
+            Self::Database(db) => {
+                db.checkpoint_observations(id, observations, supervisor)
+                    .await
+            }
         }
     }
 

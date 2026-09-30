@@ -38,13 +38,21 @@ Hooks never return agent instructions or deny permission. Lock contention, hook
 timeouts, and asynchronous events after session exit can lose events: capture is
 best-effort, not an audit log.
 
-A private journal under `.jevia/jevia-events-<run-id>-*.jsonl` is merged into the
-selected JSONL/SQLite/PostgreSQL run record when the supervised process stops.
-Successful terminal persistence removes that journal. A supervisor crash or failed
-write can leave it for inspection; it is **not automatically recovered or replayed**
-by `runs recover`, and active events are not streamed into SQL. Orphan journals
-need manual review/removal after confirming their run is stopped. Routing receives
-bounded event counts and reported model summaries, not session IDs or raw events.
+A private journal under `.jevia/jevia-events-<run-id>-*.jsonl` is checkpointed into
+the selected JSONL/SQLite/PostgreSQL run record while the harness runs (at most once
+every two seconds when observations change), and saved again when it stops.
+Checkpoint failures do not fail the harness; the synced journal remains available.
+Before the next route/run, Jevia makes a bounded, best-effort replay attempt for
+retained journals, skipping runs whose execution lease is still held. Replaying a
+cumulative snapshot does not duplicate events, alter feedback, or mark a run
+complete: loss of the supervisor is not proof its child stopped. Active journals
+remain available for later events. Read-only `stats`/`runs show` do not replay.
+`runs recover` also replays after its existing lifecycle safety checks (including
+PostgreSQL's `--confirm-stopped`). Journals are removed only after terminal
+persistence; corrupt, ambiguous, or unavailable journals are retained for inspection.
+Replay scans at most 4,096 directory entries/128 candidate runs per invocation,
+with a two-second total budget before routing; it is not an unbounded repair job.
+Routing receives bounded event counts and model summaries, not session IDs/raw events.
 
 New records use schema 4 (older schemas stay readable). Older CLI versions reject
 schema 4 rather than silently erasing observations. Upgrade all clients sharing a

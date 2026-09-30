@@ -280,11 +280,27 @@ for (const backend of ["jsonl", "sqlite", "postgres"]) {
         const result = spawnSync(hook.command, hook.args, { input: JSON.stringify({ ...event, session_id: 'private-session-id', transcript_path: '/PRIVATE_PATH' }), encoding: 'utf8' });
         assert.equal(result.status, 0); assert.equal(result.stdout, ''); assert.equal(result.stderr, '');
       }
+      if (process.env.WAIT_FOR_CHECKPOINT === '1') {
+        const hook = hooks.SessionStart[0].hooks[0];
+        const id = /jevia-events-([0-9a-f-]{36})-/.exec(hook.args[2])[1];
+        const deadline = Date.now() + 15000;
+        let saved;
+        do {
+          const result = spawnSync(hook.command, ['runs', 'show', id], { encoding: 'utf8' });
+          assert.equal(result.status, 0);
+          saved = JSON.parse(result.stdout);
+          if (saved.execution.observations.events.length === events.length) break;
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+        } while (Date.now() < deadline);
+        assert.equal(saved.execution.observations.events.length, events.length, 'checkpoint visible while harness is alive');
+        assert.equal(saved.lifecycle.state, 'running');
+        assert.equal(saved.outcome, 'unknown');
+      }
       process.stdout.write('unchanged harness output');
       process.exit(Number(process.env.FAKE_HARNESS_EXIT || 0));
     `);
     await client.route("later task");
-    const run = (code) => execute(binary, ["run", "agent", "fix task"], { cwd, env: { ...client.env, FAKE_HARNESS_EXIT: String(code) }, timeout: 30000 });
+    const run = (code) => execute(binary, ["run", "agent", "fix task"], { cwd, env: { ...client.env, FAKE_HARNESS_EXIT: String(code), WAIT_FOR_CHECKPOINT: code === 0 ? "1" : "0" }, timeout: 30000 });
     const { stdout } = await run(0);
     assert.equal(stdout, "unchanged harness output");
     const [record] = await client.runs({ limit: 1 });

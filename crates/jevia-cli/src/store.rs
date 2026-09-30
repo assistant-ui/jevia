@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use jevia_core::{
-    ExecutionEvidence, FeedbackEvent, Outcome, OutcomeEvidence, OutcomeSource,
+    ExecutionEvidence, FeedbackEvent, HarnessObservations, Outcome, OutcomeEvidence, OutcomeSource,
     RECORD_SCHEMA_VERSION, RouteRecord, RunLifecycle, RunState,
 };
 use tempfile::NamedTempFile;
@@ -319,6 +319,40 @@ pub fn record_state(
     update(path, run_id, |record| {
         apply_state(record, state, outcome, execution)
     })
+}
+
+pub fn checkpoint_observations(
+    path: &Path,
+    run_id: &str,
+    observations: HarnessObservations,
+) -> Result<RouteRecord> {
+    update(path, run_id, |record| {
+        apply_observations(record, observations)
+    })
+}
+
+/// Replace a cumulative snapshot, never append it as a new attempt or outcome.
+pub(super) fn apply_observations(
+    record: &mut RouteRecord,
+    observations: HarnessObservations,
+) -> Result<()> {
+    let execution = record
+        .execution
+        .as_mut()
+        .context("run has no execution to checkpoint")?;
+    // Also validate callers constructing structs directly, not only wire input.
+    let observations: HarnessObservations =
+        serde_json::from_value(serde_json::to_value(observations)?)?;
+    if let Some(previous) = &execution.observations {
+        if previous.source != observations.source {
+            bail!("observation source does not match the run");
+        }
+        if observations.events.len() < previous.events.len() {
+            bail!("refusing an older observation snapshot");
+        }
+    }
+    execution.observations = Some(observations);
+    Ok(())
 }
 
 pub(super) fn apply_state(

@@ -2,7 +2,8 @@ use std::{fs, future::Future, path::PathBuf, str::FromStr, time::Duration};
 
 use anyhow::{Context, Result, anyhow, bail};
 use jevia_core::{
-    ExecutionEvidence, Outcome, RECORD_SCHEMA_VERSION, RouteRecord, RunState, StorageConfig,
+    ExecutionEvidence, HarnessObservations, Outcome, RECORD_SCHEMA_VERSION, RouteRecord, RunState,
+    StorageConfig,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{
@@ -332,7 +333,7 @@ impl Database {
         outcome: Outcome,
         reason: Option<&str>,
     ) -> Result<RouteRecord> {
-        self.mutate(id, None, false, false, |record| {
+        self.mutate(id, None, false, false, false, |record| {
             store::apply_outcome(record, outcome, reason)
         })
         .await
@@ -344,7 +345,7 @@ impl Database {
         outcome: Outcome,
         reason: Option<&str>,
     ) -> Result<RouteRecord> {
-        self.mutate(id, None, false, true, |record| {
+        self.mutate(id, None, false, true, false, |record| {
             store::apply_external_completion(record, outcome, reason)
         })
         .await
@@ -358,8 +359,20 @@ impl Database {
         execution: Option<ExecutionEvidence>,
         recover: bool,
     ) -> Result<RouteRecord> {
-        self.mutate(id, Some(state), recover, false, |record| {
+        self.mutate(id, Some(state), recover, false, false, |record| {
             store::apply_state(record, state, outcome, execution)
+        })
+        .await
+    }
+
+    pub async fn checkpoint_observations(
+        &self,
+        id: &str,
+        observations: HarnessObservations,
+        supervisor: bool,
+    ) -> Result<RouteRecord> {
+        self.mutate(id, None, false, false, supervisor, |record| {
+            store::apply_observations(record, observations)
         })
         .await
     }
@@ -370,6 +383,7 @@ impl Database {
         state: Option<RunState>,
         recover: bool,
         require_unowned: bool,
+        require_owner: bool,
         mutation: impl FnOnce(&mut RouteRecord) -> Result<()>,
     ) -> Result<RouteRecord> {
         let mut tx = self.write().await?;
@@ -390,6 +404,9 @@ impl Database {
             .map_err(|_| anyhow!("invalid stored owner"))?;
         if require_unowned && !owner.is_empty() {
             bail!("run belongs to a supervisor; external completion refused");
+        }
+        if require_owner && owner != self.owner {
+            bail!("run ownership was revoked; refusing a stale observation checkpoint");
         }
         if let Some(next) = state {
             if next == RunState::Running {
