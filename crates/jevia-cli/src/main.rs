@@ -2,6 +2,7 @@ mod cache;
 mod config_edit;
 mod diagnostics;
 mod explain;
+mod file_lock;
 mod harness;
 mod lease;
 mod local_ignore;

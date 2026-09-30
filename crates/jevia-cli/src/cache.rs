@@ -40,7 +40,13 @@ pub enum Lookup {
 }
 
 pub fn lookup(path: &Path, key: &str) -> Result<Lookup> {
-    lookup_status_at(path, key, now_ms())
+    lookup_with_clock(path, key, now_ms)
+}
+
+fn lookup_with_clock(path: &Path, key: &str, now: impl FnOnce() -> u64) -> Result<Lookup> {
+    let entries = load(path)?;
+    // A wait/read can cross expiry. Judge freshness after loading, not before.
+    Ok(select_entry(entries, key, now()))
 }
 
 pub fn insert(
@@ -109,16 +115,20 @@ fn lookup_at(path: &Path, key: &str, now: u64) -> Result<Option<RouteDecision>> 
     })
 }
 
+#[cfg(test)]
 fn lookup_status_at(path: &Path, key: &str, now: u64) -> Result<Lookup> {
-    let entries = load(path)?;
+    Ok(select_entry(load(path)?, key, now))
+}
+
+fn select_entry(entries: Vec<CacheEntry>, key: &str, now: u64) -> Lookup {
     let mut miss = MissReason::NotFound;
     for entry in entries.into_iter().rev().filter(|entry| entry.key == key) {
         if entry.expires_at_ms > now {
-            return Ok(Lookup::Hit(entry.decision));
+            return Lookup::Hit(entry.decision);
         }
         miss = MissReason::Expired;
     }
-    Ok(Lookup::Miss(miss))
+    Lookup::Miss(miss)
 }
 
 fn insert_at(path: &Path, entry: CacheEntry, max_entries: usize) -> Result<()> {
@@ -233,12 +243,12 @@ fn acquire_lock(path: &Path, mode: LockMode) -> Result<crate::lease::FileLock> {
     let lock = private_lock_options()
         .open(&lock_path)
         .with_context(|| format!("could not open cache lock at {}", lock_path.display()))?;
-    match mode {
-        LockMode::Shared => lock.lock_shared(),
-        LockMode::Exclusive => lock.lock(),
-    }
-    .with_context(|| format!("could not acquire cache lock at {}", lock_path.display()))?;
-    Ok(crate::lease::FileLock::new(lock))
+    crate::file_lock::acquire(
+        lock,
+        matches!(mode, LockMode::Shared),
+        std::time::Duration::from_millis(500),
+        "routing cache",
+    )
 }
 
 fn private_lock_options() -> OpenOptions {
@@ -290,6 +300,36 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn expiry_clock_is_sampled_after_a_contended_load() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("cache.jsonl");
+        insert_at(&path, entry("key", 100, 200), 10).unwrap();
+        let owner = private_lock_options()
+            .open(path.with_extension("lock"))
+            .unwrap();
+        owner.lock().unwrap();
+        let released = AtomicBool::new(false);
+        thread::scope(|scope| {
+            let released = &released;
+            scope.spawn(move || {
+                thread::sleep(std::time::Duration::from_millis(50));
+                released.store(true, Ordering::SeqCst);
+                owner.unlock().unwrap();
+            });
+            let result = lookup_with_clock(&path, "key", || {
+                if released.load(Ordering::SeqCst) {
+                    200
+                } else {
+                    199
+                }
+            })
+            .unwrap();
+            assert!(matches!(result, Lookup::Miss(MissReason::Expired)));
+        });
+    }
 
     #[test]
     fn cache_hits_respect_expiration() {
@@ -366,12 +406,23 @@ mod tests {
                 let barrier = Arc::clone(&barrier);
                 thread::spawn(move || {
                     barrier.wait();
-                    insert_at(
-                        &path,
-                        entry(&format!("key-{index}"), index as u64 + 1, 10_000),
-                        WRITERS,
-                    )
-                    .expect("concurrent insert succeeds");
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+                    loop {
+                        match insert_at(
+                            &path,
+                            entry(&format!("key-{index}"), index as u64 + 1, 10_000),
+                            WRITERS,
+                        ) {
+                            Ok(()) => break,
+                            Err(error)
+                                if error.to_string().starts_with("routing cache busy")
+                                    && std::time::Instant::now() < deadline =>
+                            {
+                                continue;
+                            }
+                            Err(error) => panic!("concurrent insert failed: {error}"),
+                        }
+                    }
                 })
             })
             .collect();
