@@ -1,5 +1,6 @@
 //! Session-local native observations. Raw input is never written to disk or forwarded.
 mod adapters;
+mod loss;
 use crate::{paths::ProjectPaths, storage::Storage};
 use anyhow::{Context, Result, bail};
 use jevia_core::{
@@ -190,8 +191,7 @@ impl Capture {
             return Ok(self.initial.clone());
         };
         let _guard = journal_guard(path)?;
-        let mut file = open_journal(path)?;
-        read_journal(&mut file)
+        read_snapshot_file(path)
     }
 
     pub async fn checkpoint(
@@ -220,12 +220,7 @@ impl Capture {
         if let Some(path) = &self.journal {
             let cleanup = (|| -> Result<()> {
                 let _guard = journal_guard(path)?;
-                let snapshot = read_journal(&mut open_journal(path)?)?;
-                if &snapshot != saved {
-                    bail!("journal differs from persisted observations");
-                }
-                fs::remove_file(path)?;
-                Ok(())
+                remove_saved_journal(path, saved)
             })();
             if cleanup.is_err() {
                 eprintln!("jevia: observation journal retained; terminal run record was saved");
@@ -330,7 +325,7 @@ async fn replay_until(
                 }
                 let guard =
                     try_journal_guard(&read_path)?.context("journal busy; replay deferred")?;
-                let snapshot = read_journal(&mut open_journal(&read_path)?)?;
+                let snapshot = read_snapshot_file(&read_path)?;
                 Ok::<_, anyhow::Error>((guard, snapshot))
             })
             .await??;
@@ -345,7 +340,7 @@ async fn replay_until(
                 != Some(&snapshot)
             {
                 storage
-                    .checkpoint_observations(&id, snapshot, false)
+                    .checkpoint_observations(&id, snapshot.clone(), false)
                     .await?;
             }
             // Keep the journal for active runs: surviving children can still emit.
@@ -359,7 +354,7 @@ async fn replay_until(
                 tokio::task::spawn_blocking(move || {
                     let _guard = journal_guard;
                     if std::time::Instant::now() < deadline {
-                        fs::remove_file(path)?;
+                        remove_saved_journal(&path, &snapshot)?;
                     }
                     Ok::<_, anyhow::Error>(())
                 })
@@ -476,6 +471,20 @@ fn open_journal(path: &Path) -> Result<File> {
     Ok(file)
 }
 
+// Loss is projected at read time only. Never write the projected count back to
+// the native journal, or repeat checkpoints would count one marker repeatedly.
+fn read_snapshot_file(path: &Path) -> Result<HarnessObservations> {
+    loss::annotate(path, read_journal(&mut open_journal(path)?)?)
+}
+
+fn remove_saved_journal(path: &Path, saved: &HarnessObservations) -> Result<()> {
+    if &read_snapshot_file(path)? != saved {
+        bail!("journal differs from persisted observations");
+    }
+    fs::remove_file(path)?;
+    loss::remove(path)
+}
+
 fn read_journal(file: &mut File) -> Result<HarnessObservations> {
     file.seek(SeekFrom::Start(0))?;
     let mut bytes = Vec::new();
@@ -511,7 +520,7 @@ fn read_journal(file: &mut File) -> Result<HarnessObservations> {
     Ok(observations)
 }
 
-/// The hook is deliberately silent and always exits zero: it cannot block a tool,
+/// The hook always exits zero: it cannot block a tool,
 /// reject a model switch, inject context, or turn observation errors into agent errors.
 #[cfg(test)]
 fn receive(path: &Path, input: impl Read) {
@@ -525,7 +534,11 @@ pub fn receive_from(path: &Path, source: &str, input: impl Read) {
         "opencode_plugin" => ObservationSource::OpencodePlugin,
         _ => return,
     };
-    let _ = receive_for_source(path, source, input);
+    if receive_for_source(path, source, input).is_err() && loss::record(path, source).is_err() {
+        // A full/unwritable filesystem may prevent even the empty marker. Never
+        // print raw payloads, paths or driver errors, and never fail the harness.
+        eprintln!("jevia: native observation recording could not be confirmed (details redacted)");
+    }
 }
 
 #[cfg(test)]
@@ -758,6 +771,144 @@ mod tests {
             saved.execution.unwrap().observations.unwrap().event_count(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn contended_hook_loss_is_visible_idempotent_and_replayed() {
+        for config in [
+            Config::default(),
+            Config {
+                storage: StorageConfig::Sqlite {
+                    url: "sqlite://.jevia/runs.db".into(),
+                },
+                ..Config::default()
+            },
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let paths = ProjectPaths::at(directory.path().into());
+            let storage = Storage::open(&config, &paths, true).await.unwrap();
+            let mut record = crate::tests::sample_record();
+            record.decision.run_id = uuid::Uuid::new_v4().to_string();
+            storage.append(&record).await.unwrap();
+            let id = &record.decision.run_id;
+            let capture = Capture::prepare(
+                ObservationMode::ClaudeHooks,
+                &HarnessInvocation {
+                    program: "wrapper".into(),
+                    args: vec![],
+                    model: "requested".into(),
+                    verification: None,
+                },
+                &paths.directory,
+                id,
+            )
+            .await;
+            let journal = capture.journal.as_ref().unwrap();
+            let initial = capture.snapshot();
+            storage
+                .state(
+                    id,
+                    RunState::Running,
+                    Outcome::Unknown,
+                    Some(ExecutionEvidence {
+                        observations: Some(initial.clone()),
+                        harness: "test".into(),
+                        model: "requested".into(),
+                        duration_ms: 0,
+                        exit_code: None,
+                        verification: None,
+                    }),
+                )
+                .await
+                .unwrap();
+            receive_from(
+                journal,
+                "claude_hooks",
+                br#"{"hook_event_name":"Stop"}"#.as_slice(),
+            );
+            let before = capture.snapshot();
+            let guard = journal_guard(journal).unwrap();
+            receive_from(
+                journal,
+                "claude_hooks",
+                br#"{"hook_event_name":"PostToolUseFailure","prompt":"PRIVATE"}"#.as_slice(),
+            );
+            drop(guard);
+            let lost = capture.snapshot();
+            assert_eq!(lost.event_count(), 1);
+            assert_eq!(lost.status, Status::Partial);
+            assert_eq!(lost.counts().discarded_inputs, 1);
+            assert_eq!(
+                fs::metadata(journal.with_extension("loss")).unwrap().len(),
+                0
+            );
+            // Many failures share one marker, and reads never multiply its count.
+            for _ in 0..8 {
+                loss::record(journal, ObservationSource::ClaudeHooks).unwrap();
+                assert_eq!(capture.snapshot(), lost);
+            }
+            let mut previous = initial;
+            capture
+                .checkpoint(&storage, id, &mut previous)
+                .await
+                .unwrap();
+            capture
+                .checkpoint(&storage, id, &mut previous)
+                .await
+                .unwrap();
+            assert_eq!(previous, lost);
+            receive_from(
+                journal,
+                "claude_hooks",
+                br#"{"hook_event_name":"Stop"}"#.as_slice(),
+            );
+            assert_eq!(capture.snapshot().event_count(), 2);
+            assert_eq!(capture.snapshot().counts().discarded_inputs, 1);
+            assert!(!fs::read_to_string(journal).unwrap().contains("PRIVATE"));
+            storage
+                .state(id, RunState::Completed, Outcome::Unknown, None)
+                .await
+                .unwrap();
+            capture.persisted(&before);
+            assert!(
+                journal.exists(),
+                "cleanup must retain a marker newer than the saved snapshot"
+            );
+            replay(&paths, &storage, None).await;
+            let saved = storage.get(id).await.unwrap();
+            assert_eq!(saved.outcome, Outcome::Unknown);
+            assert!(!saved.is_learning_evidence());
+            assert!(saved.is_execution_observation());
+            let observations = saved.execution.unwrap().observations.unwrap();
+            assert_eq!(observations.event_count(), 2);
+            assert_eq!(observations.status, Status::Partial);
+            assert_eq!(observations.counts().discarded_inputs, 1);
+            assert!(!journal.exists());
+            assert!(!journal.with_extension("loss").exists());
+        }
+    }
+
+    #[test]
+    fn loss_markers_reject_missing_foreign_and_invalid_journals() {
+        let directory = tempfile::tempdir().unwrap();
+        let journal = directory.path().join("jevia-events-test.jsonl");
+        assert!(loss::record(&journal, ObservationSource::ClaudeHooks).is_err());
+        assert!(!journal.with_extension("loss").exists());
+        save_journal(
+            &journal,
+            HarnessObservations {
+                source: Some(ObservationSource::OpencodePlugin),
+                status: Status::NoEvents,
+                events: vec![],
+                totals: None,
+            },
+        )
+        .unwrap();
+        assert!(loss::record(&journal, ObservationSource::ClaudeHooks).is_err());
+        assert!(!journal.with_extension("loss").exists());
+        fs::write(&journal, "PRIVATE invalid snapshot").unwrap();
+        assert!(loss::record(&journal, ObservationSource::OpencodePlugin).is_err());
+        assert!(!journal.with_extension("loss").exists());
     }
 
     async fn replay_contract(config: Config) {
@@ -1028,7 +1179,7 @@ mod tests {
     }
 
     #[test]
-    fn concurrent_tool_hooks_are_serialized_without_lost_events() {
+    fn concurrent_tool_hooks_preserve_successful_writes_and_report_loss() {
         let dir = tempfile::tempdir().unwrap();
         let journal = tempfile::Builder::new()
             .prefix("jevia-events-")
@@ -1041,13 +1192,19 @@ mod tests {
                 let path = &journal;
                 scope.spawn(move || {
                     let raw = json!({"hook_event_name": "PostToolUse", "session_id": format!("session-{i}"), "tool_name": "Read"}).to_string();
-                    receive_inner(path, raw.as_bytes()).unwrap();
+                    receive_from(path, "claude_hooks", raw.as_bytes());
                 });
             }
         });
-        let captured = read_journal(&mut open_journal(&journal).unwrap()).unwrap();
-        assert_eq!(captured.events.len(), 8);
-        assert_eq!(captured.status, Status::Recorded);
+        let captured = read_snapshot_file(&journal).unwrap();
+        assert!(captured.event_count() <= 8);
+        if captured.event_count() == 8 {
+            assert_eq!(captured.status, Status::Recorded);
+            assert_eq!(captured.counts().discarded_inputs, 0);
+        } else {
+            assert_eq!(captured.status, Status::Partial);
+            assert!(captured.counts().discarded_inputs > 0);
+        }
     }
 
     #[test]

@@ -150,6 +150,17 @@ under stable striped locks, so a torn replacement leaves the previous checkpoint
 Hooks never return agent instructions or deny permission. Lock contention, hook
 timeouts, and asynchronous events after session exit can lose events: capture is
 best-effort, not an audit log.
+When a hook detects a failed write (including lock contention), it attempts to
+create one private, empty `.loss` sidecar beside its journal. The next checkpoint
+or replay reports `partial` coverage and adds one unconfirmed input to
+`discarded_inputs`, regardless of repeated failures. This means at least one
+capture attempt failed; a write may have reached disk before reporting an error,
+so it is not an exact count or proof that an event is absent. Re-reading does not
+increase that count; recorded events and task outcomes remain unchanged. No
+raw input is queued. The marker and journal are removed only after the matching
+snapshot is saved. If storage also prevents the marker, the hook emits a fixed,
+redacted diagnostic and still exits zero. A killed hook or an event arriving after
+cleanup can remain unobservable; this is not a guarantee of complete capture.
 
 A private journal under `.jevia/jevia-events-<run-id>-*.jsonl` is checkpointed into
 the selected JSONL/SQLite/PostgreSQL run record while the harness runs (at most once
