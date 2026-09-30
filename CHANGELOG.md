@@ -4,6 +4,8 @@
 
 ## 0.1.7 — 2026-09-30
 
+- Refresh the locked `yoke-derive` patch dependency to 0.8.4, replacing the
+  yanked 0.8.3 without changing the remaining dependency graph or Rust baseline.
 - Stream JSONL point lookups, single-record updates, and basic health counts
   instead of retaining the full history. Updates still validate the complete
   input and publish atomically under the history lock; their I/O remains linear
