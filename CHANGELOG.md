@@ -25,6 +25,9 @@
 - Bound and validate recording input, keep it off command arguments, support
   idempotent retries, and prevent replacement of active or supervised executions
   consistently across JSONL, SQLite, and PostgreSQL.
+- Explicitly release execution, journal, history, and cache locks when their
+  operation ends, even while a duplicated/inherited Unix descriptor remains open.
+  Prevent false-active recovery failures and delayed lock release.
 
 ### Compatibility and upgrade
 
