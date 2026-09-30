@@ -76,6 +76,7 @@ async fn wait_until_group_empty(mut probe: impl FnMut() -> nix::Result<()>) -> s
 pub struct Runner {
     supervised: bool,
     ci: bool,
+    environment: Vec<(String, String)>,
     #[cfg(unix)]
     signals: Option<(tokio::signal::unix::Signal, tokio::signal::unix::Signal)>,
     #[cfg(windows)]
@@ -102,6 +103,7 @@ impl Runner {
         Ok(Self {
             supervised,
             ci: false,
+            environment: vec![],
             signals,
         })
     }
@@ -123,6 +125,7 @@ impl Runner {
             return Ok(ProcessResult::Exited(
                 tokio::process::Command::new(program)
                     .args(args)
+                    .envs(self.environment.iter().cloned())
                     .current_dir(root)
                     .status()
                     .await?,
@@ -144,7 +147,21 @@ impl Runner {
                 Ok(())
             }
         };
-        supervise_with_ci(program, args, root, timeout, cancel, self.ci).await
+        supervise_with_ci(
+            program,
+            args,
+            root,
+            timeout,
+            cancel,
+            self.ci,
+            &self.environment,
+        )
+        .await
+    }
+
+    /// Per-child overrides only. Never mutate the supervisor's environment.
+    pub fn set_environment(&mut self, environment: &[(String, String)]) {
+        self.environment = environment.to_vec();
     }
 }
 
@@ -156,7 +173,7 @@ async fn supervise(
     timeout: Option<Duration>,
     cancel: impl Future<Output = std::io::Result<()>>,
 ) -> Result<ProcessResult> {
-    supervise_with_ci(program, args, root, timeout, cancel, false).await
+    supervise_with_ci(program, args, root, timeout, cancel, false, &[]).await
 }
 
 async fn supervise_with_ci(
@@ -166,6 +183,7 @@ async fn supervise_with_ci(
     timeout: Option<Duration>,
     cancel: impl Future<Output = std::io::Result<()>>,
     ci: bool,
+    environment: &[(String, String)],
 ) -> Result<ProcessResult> {
     tokio::pin!(cancel);
     tokio::select! {
@@ -178,6 +196,7 @@ async fn supervise_with_ci(
     }
     let mut command = CommandWrap::with_new(program, |command| {
         command.args(args).current_dir(root).stdin(Stdio::null());
+        command.envs(environment.iter().cloned());
         if ci {
             command.env("CI", "true");
         }

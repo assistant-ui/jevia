@@ -30,8 +30,9 @@ after `jevia run`.** Extra verification is opt-in; existing explicit checks are
 preserved. Without a verifier or feedback, task outcome stays `unknown`, even on
 exit zero. Passive observations still inform future routing.
 
-Native event capture currently covers direct Claude Code 2.1.251+ launches;
-other harnesses record process facts only. Hook events report activity, not proof
+Unreleased native capture covers Claude Code 2.1.251+, tested Codex 0.158.x on
+macOS/Linux (with normal hook trust), and OpenCode v1 >= 1.18.33. Unsupported
+versions/remote sessions keep process facts. Hook events report activity, not proof
 that a task was solved. Optional verification runs after the launched session ends.
 See the [CLI pipeline documentation](https://github.com/assistant-ui/jevia/blob/main/docs/reference.md#automatic-cli-pipeline).
 

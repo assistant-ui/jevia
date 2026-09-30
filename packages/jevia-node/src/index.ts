@@ -54,7 +54,8 @@ export interface ExecutionEvidence {
 
 export type ObservationStatus = "unsupported" | "disabled" | "unavailable" | "no_events" | "recorded" | "partial";
 export type HarnessEventKind = "session_started" | "session_ended" | "turn_started" | "turn_completed" | "turn_failed"
-  | "tool_succeeded" | "tool_failed" | "task_reported_complete" | "model_changed" | "subagent_started" | "subagent_stopped";
+  | "tool_succeeded" | "tool_failed" | "tool_completed" | "turn_interrupted" | "model_observed"
+  | "task_reported_complete" | "model_changed" | "subagent_started" | "subagent_stopped";
 
 /** Passive, harness-reported facts; none establishes task correctness. */
 export interface HarnessEvent {
@@ -68,7 +69,7 @@ export interface HarnessEvent {
 }
 
 export interface HarnessObservations {
-  source: "claude_hooks" | null;
+  source: "claude_hooks" | "codex_hooks" | "opencode_plugin" | null;
   /** recorded means some events arrived, not complete coverage. */
   status: ObservationStatus;
   events: HarnessEvent[];

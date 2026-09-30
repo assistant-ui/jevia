@@ -96,7 +96,10 @@ function assertAutomaticPipelineDocs(content) {
   assert.match(text, /CLI 0\.1\.4–0\.1\.5 enabled test discovery by default/);
   assert.match(text, /Recorded history informs later routing automatically, even when task success is unknown/);
   assert.match(text, /Claude Code 2\.1\.251/);
-  assert.match(text, /other harnesses currently provide process-level observations/);
+  assert.match(text, /Unsupported versions and remote sessions keep process-level observations/);
+  assert.match(text, /Codex 0\.158\.x/);
+  assert.match(text, /OpenCode v1/);
+  assert.match(text, /normal hook trust/);
   assert.match(text, /execution\.observations/);
   assert.match(text, /schema 5/);
   assert.match(text, /each history window/);

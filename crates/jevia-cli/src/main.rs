@@ -40,7 +40,9 @@ enum Command {
     #[command(hide = true)]
     CaptureEvent {
         #[arg(long)]
-        journal: std::path::PathBuf,
+        journal: Option<std::path::PathBuf>,
+        #[arg(long, default_value = "claude_hooks", value_parser = ["claude_hooks", "codex_hooks", "opencode_plugin"])]
+        source: String,
     },
     /// Create project-local Jevia configuration.
     Init {
@@ -239,8 +241,13 @@ impl From<OutcomeArgument> for Outcome {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     // Frequent passive hooks need neither an async runtime nor project discovery.
-    if let Command::CaptureEvent { journal } = &cli.command {
-        observations::receive(journal, std::io::stdin().lock());
+    if let Command::CaptureEvent { journal, source } = &cli.command {
+        let journal = journal
+            .clone()
+            .or_else(|| std::env::var_os(observations::JOURNAL_ENV).map(Into::into));
+        if let Some(journal) = journal {
+            observations::receive_from(&journal, source, std::io::stdin().lock());
+        }
         return ExitCode::SUCCESS;
     }
     let result = tokio::runtime::Builder::new_multi_thread()
@@ -581,6 +588,7 @@ async fn execute_observed_harness(
         )
         .await?;
     let started = Instant::now();
+    runner.set_environment(&capture.environment);
     let status = {
         let run = runner.run(
             &invocation.program,
@@ -606,6 +614,8 @@ async fn execute_observed_harness(
         }
     };
     execution.observations = Some(capture.snapshot());
+    // Optional verifiers must not inherit a harness adapter's private config.
+    runner.set_environment(&[]);
     let status = match status {
         Ok(processes::ProcessResult::Exited(status)) => status,
         Ok(processes::ProcessResult::Stopped { state, .. }) => {

@@ -523,8 +523,9 @@ export default function DocsPage() {
               Passing tests is evidence, not proof of every requirement.
             </p>
             <p className="docs-body-copy">
-              Native event capture currently supports direct Claude Code 2.1.251+
-              launches. Codex, OpenCode, Gemini, and other harnesses currently provide
+              Unreleased native capture supports Claude Code 2.1.251+, tested
+              Codex 0.158.x on macOS/Linux (with normal hook trust), and OpenCode
+              v1 ≥ 1.18.33. Unsupported versions and remote sessions keep
               process-level observations. Capture is best-effort: reported models,
               switches, and tool activity do not prove which model solved a task.
               Raw prompts, tool contents, and transcripts are not retained. Inspect

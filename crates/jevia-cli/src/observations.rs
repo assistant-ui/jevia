@@ -1,4 +1,5 @@
-//! Session-local Claude hooks. Raw input is never written to disk or forwarded.
+//! Session-local native observations. Raw input is never written to disk or forwarded.
+mod adapters;
 use crate::{paths::ProjectPaths, storage::Storage};
 use anyhow::{Context, Result, bail};
 use jevia_core::{
@@ -19,6 +20,7 @@ use std::{
 
 const INPUT_LIMIT: u64 = 64 * 1024;
 const JOURNAL_LIMIT: u64 = 512 * 1024;
+pub const JOURNAL_ENV: &str = "JEVIA_OBSERVATION_JOURNAL";
 const HOOKS: &[&str] = &[
     "SessionStart",
     "SessionEnd",
@@ -37,6 +39,8 @@ const HOOKS: &[&str] = &[
 pub struct Capture {
     journal: Option<PathBuf>,
     pub args: Vec<String>,
+    pub environment: Vec<(String, String)>,
+    auxiliary: Vec<PathBuf>,
     initial: HarnessObservations,
 }
 
@@ -50,6 +54,8 @@ impl Capture {
         let mut capture = Self {
             journal: None,
             args: invocation.args.clone(),
+            environment: vec![],
+            auxiliary: vec![],
             initial: HarnessObservations {
                 source: None,
                 status: Status::Unsupported,
@@ -63,30 +69,40 @@ impl Capture {
         }
         let native = Path::new(&invocation.program)
             .file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|name| matches!(name, "claude" | "claude.exe"));
-        if mode == ObservationMode::Auto && !native {
-            return capture;
-        }
-        capture.initial.source = Some(ObservationSource::ClaudeHooks);
+            .and_then(|n| n.to_str());
+        let source = match (mode, native) {
+            (ObservationMode::ClaudeHooks, _)
+            | (ObservationMode::Auto, Some("claude" | "claude.exe")) => {
+                ObservationSource::ClaudeHooks
+            }
+            (ObservationMode::CodexHooks, _)
+            | (ObservationMode::Auto, Some("codex" | "codex.exe")) => ObservationSource::CodexHooks,
+            (ObservationMode::OpencodePlugin, _)
+            | (ObservationMode::Auto, Some("opencode" | "opencode.exe")) => {
+                ObservationSource::OpencodePlugin
+            }
+            _ => return capture,
+        };
+        capture.initial.source = Some(source);
         capture.initial.status = Status::Unavailable;
-        if invocation.args.iter().any(|a| {
-            matches!(a.as_str(), "--settings" | "--bare" | "--safe-mode")
-                || a.starts_with("--settings=")
-        }) {
+        if adapters::conflicts(source, &invocation.args) {
             eprintln!(
-                "jevia: native observations unavailable: preserving custom settings or disabled hooks; process recording remains active"
+                "jevia: native observations unavailable: preserving custom settings, remote session, or disabled hooks; process recording remains active"
             );
             return capture;
         }
         // Auto-detection must not add unknown hook settings to an older harness.
         // Explicit claude_hooks is the contract for compatible wrapper executables.
         if mode == ObservationMode::Auto
-            && !supported_version(&invocation.program, directory.parent().unwrap_or(directory))
-                .await
+            && !supported_version(
+                &invocation.program,
+                directory.parent().unwrap_or(directory),
+                source,
+            )
+            .await
         {
             eprintln!(
-                "jevia: native observations unavailable: Claude Code 2.1.251+ required; process recording remains active"
+                "jevia: native observations unavailable: harness version outside tested adapter contract; process recording remains active"
             );
             return capture;
         }
@@ -101,15 +117,32 @@ impl Capture {
     fn install(&mut self, directory: &Path, run_id: &str) -> Result<()> {
         let executable = std::env::current_exe()?;
         let run_id = uuid::Uuid::parse_str(run_id)?;
-        let file = tempfile::Builder::new()
+        let mut file = tempfile::Builder::new()
             .prefix(&format!("jevia-events-{run_id}-"))
             .suffix(".jsonl")
             .tempfile_in(directory)?;
-        let mut hooks = serde_json::Map::new();
-        for name in HOOKS {
-            hooks.insert((*name).into(), json!([{"hooks": [{"type": "command", "command": executable, "args": ["capture-event", "--journal", file.path()], "timeout": 2}]}]));
+        let source = self.initial.source.context("missing adapter source")?;
+        let mut extra = adapters::install(source, &executable, file.path(), directory)?;
+        // `exec`/`review` already execute locally and do not accept the TUI's
+        // --no-daemon flag. The built-in Codex preset uses `exec`.
+        let local_subcommand = source == ObservationSource::CodexHooks
+            && self
+                .args
+                .first()
+                .is_some_and(|arg| matches!(arg.as_str(), "exec" | "e" | "review"));
+        if local_subcommand || self.args.iter().any(|arg| arg == "--no-daemon") {
+            extra.args.retain(|arg| arg != "--no-daemon");
         }
-        let settings = serde_json::to_string(&json!({"hooks": hooks}))?;
+        let initial = HarnessObservations {
+            status: Status::NoEvents,
+            ..self.initial.clone()
+        };
+        file.write_all(&serde_json::to_vec(&Entry::Snapshot(initial.clone()))?)?;
+        file.write_all(b"\n")?;
+        file.as_file().sync_all()?;
+        if let Some(plugin) = extra.plugin.take() {
+            self.auxiliary.push(plugin.keep()?);
+        }
         let (_, path) = file.keep()?;
         // Options before a literal -- separator still belong to the harness.
         let index = self
@@ -117,10 +150,10 @@ impl Capture {
             .iter()
             .position(|arg| arg == "--")
             .unwrap_or(self.args.len());
-        self.args
-            .splice(index..index, ["--settings".into(), settings]);
+        self.args.splice(index..index, extra.args);
+        self.environment = extra.environment;
         self.journal = Some(path);
-        self.initial.status = Status::NoEvents;
+        self.initial = initial;
         Ok(())
     }
 
@@ -166,6 +199,9 @@ impl Capture {
             && fs::remove_file(path).is_err()
         {
             eprintln!("jevia: observation journal retained; terminal run record was saved");
+        }
+        for path in &self.auxiliary {
+            let _ = fs::remove_file(path);
         }
     }
 }
@@ -240,7 +276,7 @@ pub async fn replay(paths: &ProjectPaths, storage: &Storage, only: Option<&str>)
     }
 }
 
-async fn supported_version(program: &str, root: &Path) -> bool {
+async fn supported_version(program: &str, root: &Path, source: ObservationSource) -> bool {
     use tokio::io::AsyncReadExt;
     let probe = async {
         let mut child = tokio::process::Command::new(program)
@@ -259,13 +295,7 @@ async fn supported_version(program: &str, root: &Path) -> bool {
             return None;
         }
         let text = String::from_utf8(bytes).ok()?;
-        let version = text.split_whitespace().next()?;
-        let parts = version
-            .split('.')
-            .map(str::parse::<u32>)
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .ok()?;
-        Some(parts.len() == 3 && parts.as_slice() >= [2, 1, 251].as_slice())
+        Some(adapters::version_supported(source, &text))
     };
     tokio::time::timeout(Duration::from_secs(2), probe)
         .await
@@ -380,19 +410,38 @@ fn read_journal(file: &mut File) -> Result<HarnessObservations> {
 
 /// The hook is deliberately silent and always exits zero: it cannot block a tool,
 /// reject a model switch, inject context, or turn observation errors into agent errors.
-pub fn receive(path: &Path, input: impl Read) {
+#[cfg(test)]
+fn receive(path: &Path, input: impl Read) {
     let _ = receive_inner(path, input);
 }
 
+pub fn receive_from(path: &Path, source: &str, input: impl Read) {
+    let source = match source {
+        "claude_hooks" => ObservationSource::ClaudeHooks,
+        "codex_hooks" => ObservationSource::CodexHooks,
+        "opencode_plugin" => ObservationSource::OpencodePlugin,
+        _ => return,
+    };
+    let _ = receive_for_source(path, source, input);
+}
+
+#[cfg(test)]
 fn receive_inner(path: &Path, input: impl Read) -> Result<()> {
+    receive_for_source(path, ObservationSource::ClaudeHooks, input)
+}
+
+fn receive_for_source(path: &Path, source: ObservationSource, input: impl Read) -> Result<()> {
     let mut bytes = Vec::new();
     input.take(INPUT_LIMIT + 1).read_to_end(&mut bytes)?;
     let event = (bytes.len() as u64 <= INPUT_LIMIT)
         .then(|| serde_json::from_slice::<Value>(&bytes).ok())
         .flatten()
-        .and_then(|input| normalize(&input));
+        .and_then(|input| normalize(source, &input));
     let _guard = journal_guard(path)?;
     let mut current = read_journal(&mut open_journal(path)?)?;
+    if current.source != Some(source) {
+        bail!("observation source mismatch");
+    }
     if let Some(event) = event {
         current.observe(event);
     } else {
@@ -404,19 +453,26 @@ fn receive_inner(path: &Path, input: impl Read) -> Result<()> {
     save_journal(path, current)
 }
 
-fn normalize(input: &Value) -> Option<HarnessEvent> {
-    let kind = match input.get("hook_event_name")?.as_str()? {
+fn normalize(source: ObservationSource, input: &Value) -> Option<HarnessEvent> {
+    let name = input.get("hook_event_name")?.as_str()?;
+    if !adapters::events(source).contains(&name) {
+        return None;
+    }
+    let kind = match name {
         "SessionStart" => Kind::SessionStarted,
         "SessionEnd" => Kind::SessionEnded,
         "UserPromptSubmit" => Kind::TurnStarted,
         "Stop" => Kind::TurnCompleted,
         "StopFailure" => Kind::TurnFailed,
-        "PostToolUse" => Kind::ToolSucceeded,
+        "PostToolUse" if source == ObservationSource::ClaudeHooks => Kind::ToolSucceeded,
+        "PostToolUse" => Kind::ToolCompleted,
         "PostToolUseFailure" => Kind::ToolFailed,
         "TaskCompleted" => Kind::TaskReportedComplete,
         "PostModelSwitch" => Kind::ModelChanged,
         "SubagentStart" => Kind::SubagentStarted,
         "SubagentStop" => Kind::SubagentStopped,
+        "Interrupt" => Kind::TurnInterrupted,
+        "ModelObserved" => Kind::ModelObserved,
         _ => return None,
     };
     let identifier = |key| {
@@ -447,7 +503,10 @@ fn normalize(input: &Value) -> Option<HarnessEvent> {
         } else {
             None
         },
-        tool_name: if matches!(kind, Kind::ToolSucceeded | Kind::ToolFailed) {
+        tool_name: if matches!(
+            kind,
+            Kind::ToolSucceeded | Kind::ToolFailed | Kind::ToolCompleted
+        ) {
             identifier("tool_name")
         } else {
             None
@@ -623,7 +682,7 @@ mod tests {
         let id = uuid::Uuid::new_v4().to_string();
         fs::write(&program, "#!/bin/sh\nprintf '2.1.251 (Claude Code)\\n'\n").unwrap();
         fs::set_permissions(&program, fs::Permissions::from_mode(0o700)).unwrap();
-        assert!(supported_version("./claude", dir.path()).await);
+        assert!(supported_version("./claude", dir.path(), ObservationSource::ClaudeHooks).await);
         let invocation = HarnessInvocation {
             program: program.to_str().unwrap().into(),
             args: vec!["--print".into(), "task".into()],

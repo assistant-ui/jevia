@@ -38,6 +38,9 @@ test("documents passive history separately from optional verification in both fo
     const contents = await readFile(url, "utf8");
     assert.match(contents, /Unreleased: additional verification is opt-in/);
     assert.match(contents, /Claude Code 2\.1\.251/);
+    assert.match(contents, /Codex 0\.158\.x/);
+    assert.match(contents, /OpenCode\s+v1/);
+    assert.match(contents, /normal hook trust/);
     assert.match(contents, /process-level/);
     assert.match(contents, /execution\.observations/);
     assert.match(contents, /each history window/);

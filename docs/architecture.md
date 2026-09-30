@@ -54,9 +54,13 @@ routing without a known task outcome or manual feedback/completion call.
 A passing optional check is evidence, not proof of every requirement.
 
 Process completion and optional verification use the launched session boundary.
-Supported hooks also capture internal activity: direct Claude Code 2.1.251+
-commands get session-local, silent exec-form hooks. Other harnesses currently
-retain process-level facts only. Native events are bounded and allowlisted; raw
+Supported adapters also capture internal activity: Claude Code uses silent
+exec-form hooks, Codex uses trusted inline hooks in an isolated local session,
+and OpenCode uses a private plugin via a per-child runtime config override.
+Version/config gates fall back to process facts without breaking the harness.
+Neutral tool completion and request-model observations are not success labels.
+See the [native adapter contract](reference.md#native-harness-observations).
+Native events are bounded and allowlisted; raw
 prompts, tool contents, and transcript files are never retained. Model IDs are
 stored only when reported, not inferred from configured aliases or successful tools.
 Coverage is best-effort, not complete attribution or an acceptance signal.
