@@ -383,7 +383,27 @@ pub(super) fn apply_state(
         life.finished_at_ms = Some(now);
     }
     record.outcome = outcome;
-    if let Some(execution) = execution {
+    if let Some(mut execution) = execution {
+        if let Some(previous) = record
+            .execution
+            .as_ref()
+            .and_then(|e| e.observations.as_ref())
+        {
+            let incoming = execution.observations.as_ref();
+            if incoming.is_none_or(|next| {
+                next.source != previous.source
+                    || next.event_count() < previous.event_count()
+                    || next.counts().discarded_inputs < previous.counts().discarded_inputs
+            }) {
+                let mut retained = previous.clone();
+                if incoming
+                    .is_some_and(|next| next.status == jevia_core::ObservationStatus::Partial)
+                {
+                    retained.status = jevia_core::ObservationStatus::Partial;
+                }
+                execution.observations = Some(retained);
+            }
+        }
         record.execution = Some(execution);
     }
     record.outcome_evidence = if state == RunState::Completed {

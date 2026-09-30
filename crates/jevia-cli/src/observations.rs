@@ -158,18 +158,31 @@ impl Capture {
     }
 
     pub fn snapshot(&self) -> HarnessObservations {
+        self.snapshot_after(&self.initial)
+    }
+
+    /// A failed read is missing information, never evidence that earlier events vanished.
+    pub fn snapshot_after(&self, previous: &HarnessObservations) -> HarnessObservations {
+        self.read_snapshot()
+            .ok()
+            .filter(|next| {
+                next.source == previous.source
+                    && next.event_count() >= previous.event_count()
+                    && next.counts().discarded_inputs >= previous.counts().discarded_inputs
+            })
+            .unwrap_or_else(|| HarnessObservations {
+                status: Status::Partial,
+                ..previous.clone()
+            })
+    }
+
+    fn read_snapshot(&self) -> Result<HarnessObservations> {
         let Some(path) = &self.journal else {
-            return self.initial.clone();
+            return Ok(self.initial.clone());
         };
-        let result = (|| -> Result<HarnessObservations> {
-            let _guard = journal_guard(path)?;
-            let mut file = open_journal(path)?;
-            read_journal(&mut file)
-        })();
-        result.unwrap_or_else(|_| HarnessObservations {
-            status: Status::Partial,
-            ..self.initial.clone()
-        })
+        let _guard = journal_guard(path)?;
+        let mut file = open_journal(path)?;
+        read_journal(&mut file)
     }
 
     pub async fn checkpoint(
@@ -182,7 +195,7 @@ impl Capture {
             return Ok(());
         }
         let capture = self.clone();
-        let snapshot = tokio::task::spawn_blocking(move || capture.snapshot()).await?;
+        let snapshot = tokio::task::spawn_blocking(move || capture.read_snapshot()).await??;
         if snapshot != *previous {
             storage
                 .checkpoint_observations(run_id, snapshot.clone(), true)
@@ -194,11 +207,21 @@ impl Capture {
 
     /// Called only after the supervisor has successfully persisted terminal state.
     /// On persistence failure/crash the bounded journal remains for inspection.
-    pub fn persisted(&self) {
-        if let Some(path) = &self.journal
-            && fs::remove_file(path).is_err()
-        {
-            eprintln!("jevia: observation journal retained; terminal run record was saved");
+    pub fn persisted(&self, saved: &HarnessObservations) {
+        if let Some(path) = &self.journal {
+            let cleanup = (|| -> Result<()> {
+                let _guard = journal_guard(path)?;
+                let snapshot = read_journal(&mut open_journal(path)?)?;
+                if &snapshot != saved {
+                    bail!("journal differs from persisted observations");
+                }
+                fs::remove_file(path)?;
+                Ok(())
+            })();
+            if cleanup.is_err() {
+                eprintln!("jevia: observation journal retained; terminal run record was saved");
+                return;
+            }
         }
         for path in &self.auxiliary {
             let _ = fs::remove_file(path);
@@ -399,7 +422,8 @@ fn read_journal(file: &mut File) -> Result<HarnessObservations> {
             {
                 observations.events.push(event)
             }
-            _ => observations.status = Status::Partial,
+            Ok(Entry::Discarded | Entry::Truncated) => observations.status = Status::Partial,
+            _ => bail!("invalid observation journal"),
         }
     }
     if observations.status != Status::Partial && !observations.events.is_empty() {
@@ -607,15 +631,49 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(previous.events.len(), 1);
+        // A torn/unreadable final snapshot must not erase the last checkpoint.
+        fs::write(journal, b"{torn snapshot\n").unwrap();
+        assert!(
+            capture
+                .checkpoint(&storage, &id, &mut previous)
+                .await
+                .is_err()
+        );
+        let fallback = capture.snapshot_after(&previous);
+        assert_eq!(fallback.event_count(), 1);
+        assert_eq!(fallback.status, Status::Partial);
+        capture.persisted(&fallback);
+        assert!(journal.exists(), "unreadable journals remain recoverable");
+        replay(&paths, &storage, None).await;
+        assert!(journal.exists());
+        save_journal(journal, previous.clone()).unwrap();
+        // A state write with an older in-memory copy cannot overwrite durable events.
+        let mut execution = storage.get(&id).await.unwrap().execution.unwrap();
+        execution.observations = Some(HarnessObservations {
+            status: Status::Partial,
+            ..capture.initial.clone()
+        });
+        let saved = storage
+            .state(&id, RunState::Verifying, Outcome::Unknown, Some(execution))
+            .await
+            .unwrap();
+        let saved = saved.execution.unwrap().observations.unwrap();
+        assert_eq!(saved.event_count(), 1);
+        assert_eq!(saved.status, Status::Partial);
         // Simulate loss of the supervisor, not proof that its child stopped.
         drop(guard);
         receive(
             journal,
             br#"{"hook_event_name":"PostToolUseFailure","model":"observed"}"#.as_slice(),
         );
+        capture.persisted(&previous);
+        assert!(
+            journal.exists(),
+            "events arriving after a snapshot must not be deleted"
+        );
         replay(&paths, &storage, None).await;
         let record = storage.get(&id).await.unwrap();
-        assert_eq!(record.lifecycle.unwrap().state, RunState::Running);
+        assert_eq!(record.lifecycle.unwrap().state, RunState::Verifying);
         assert_eq!(record.outcome, Outcome::Unknown);
         assert!(record.outcome_evidence.is_none());
         assert_eq!(
@@ -696,7 +754,7 @@ mod tests {
         assert!(Path::new(hook["command"].as_str().unwrap()).is_absolute());
         assert_eq!(hook["args"][0], "capture-event");
         assert!(hook["args"][2].as_str().unwrap().contains(&id));
-        capture.persisted();
+        capture.persisted(&capture.snapshot());
         assert!(
             !fs::read_dir(dir.path())
                 .unwrap()

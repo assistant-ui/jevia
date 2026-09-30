@@ -231,7 +231,7 @@ mod tests {
             assert_eq!(captured.snapshot().status, Status::NoEvents);
             assert_eq!(captured.args.last().unwrap(), "task");
             assert_eq!(captured.args[captured.args.len() - 2], "--");
-            captured.persisted();
+            captured.persisted(&captured.snapshot());
             if source == ObservationSource::CodexHooks {
                 let exec = HarnessInvocation {
                     args: vec![
@@ -247,7 +247,7 @@ mod tests {
                 assert_eq!(capture.snapshot().status, Status::NoEvents);
                 assert!(!capture.args.iter().any(|arg| arg == "--no-daemon"));
                 assert_eq!(capture.args.first().unwrap(), "exec");
-                capture.persisted();
+                capture.persisted(&capture.snapshot());
             }
             fs::write(&program, "#!/bin/sh\nprintf '0.0.0\\n'\n").unwrap();
             let unavailable =
@@ -338,8 +338,8 @@ mod tests {
             second.snapshot().source,
             Some(ObservationSource::OpencodePlugin)
         );
-        first.persisted();
-        second.persisted();
+        first.persisted(&first.snapshot());
+        second.persisted(&second.snapshot());
         assert!(first.auxiliary.iter().all(|path| !path.exists()));
     }
 

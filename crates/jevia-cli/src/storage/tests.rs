@@ -55,6 +55,82 @@ fn postgres_config() -> Config {
     }
 }
 
+async fn terminal_snapshot_contract(config: Config) {
+    use jevia_core::{HarnessEvent, HarnessEventKind, ObservationSource, ObservationStatus};
+    let directory = tempfile::tempdir().unwrap();
+    let paths = ProjectPaths::at(directory.path().into());
+    let storage = Storage::open(&config, &paths, true).await.unwrap();
+    for terminal in [
+        RunState::Completed,
+        RunState::Cancelled,
+        RunState::TimedOut,
+        RunState::LaunchFailed,
+    ] {
+        let id = format!("{terminal:?}");
+        storage.append(&sample(&id)).await.unwrap();
+        let mut observed = HarnessObservations {
+            source: Some(ObservationSource::ClaudeHooks),
+            status: ObservationStatus::NoEvents,
+            events: vec![],
+            totals: None,
+        };
+        let mut execution = ExecutionEvidence {
+            harness: "agent".into(),
+            model: "requested".into(),
+            duration_ms: 0,
+            exit_code: None,
+            verification: None,
+            observations: Some(observed.clone()),
+        };
+        let _guard = storage.execution_guard(&id).await.unwrap();
+        storage
+            .state(
+                &id,
+                RunState::Running,
+                Outcome::Unknown,
+                Some(execution.clone()),
+            )
+            .await
+            .unwrap();
+        observed.observe(HarnessEvent {
+            kind: HarnessEventKind::TurnCompleted,
+            recorded_at_ms: 1,
+            session_id: None,
+            agent_id: None,
+            model: Some("observed".into()),
+            previous_model: None,
+            tool_name: None,
+        });
+        storage
+            .checkpoint_observations(&id, observed, true)
+            .await
+            .unwrap();
+        execution.observations.as_mut().unwrap().status = ObservationStatus::Partial;
+        let saved = storage
+            .state(&id, terminal, Outcome::Unknown, Some(execution))
+            .await
+            .unwrap();
+        assert_eq!(saved.lifecycle.unwrap().state, terminal);
+        assert_eq!(saved.outcome, Outcome::Unknown);
+        let observations = saved.execution.unwrap().observations.unwrap();
+        assert_eq!(observations.event_count(), 1);
+        assert_eq!(observations.status, ObservationStatus::Partial);
+        assert_eq!(observations.events[0].model.as_deref(), Some("observed"));
+    }
+}
+
+#[tokio::test]
+async fn jsonl_and_sqlite_terminal_writes_preserve_checkpoints() {
+    terminal_snapshot_contract(Config::default()).await;
+    terminal_snapshot_contract(sqlite_config()).await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL test database"]
+async fn postgres_terminal_writes_preserve_checkpoints() {
+    terminal_snapshot_contract(postgres_config()).await;
+}
+
 async fn observation_history_contract(config: Config) {
     let directory = tempfile::tempdir().unwrap();
     let paths = ProjectPaths::at(directory.path().into());
