@@ -1014,6 +1014,34 @@ namespace is **not authorization or tenant isolation**: anyone with access to th
 database tables can access other projects. Separate database roles/databases or a
 future authenticated managed API are needed for mutually untrusted users.
 
+### Passive history lookup (unreleased)
+
+SQLite and PostgreSQL 16+ use a database-maintained partial index for finished
+executions without a known assessed outcome. The latest observation window is
+selected in SQL, then returned in append order. Pending/active runs and known
+outcomes do not crowd out these observations or require a full scan before a
+routing cache lookup. Feedback, lifecycle updates, imports, and archival update
+the index transactionally, including writes from older clients that can read the
+stored record schema. Automatic history use and optional verification/SDK feedback
+are unchanged; the index is not a new success signal.
+
+New database setup creates the index. For an existing database, back up and run
+`jevia storage init` during a quiet maintenance window with schema permissions.
+This explicitly builds the index over existing rows without rewriting records,
+ordering, ownership, or sequence counters. SQL schema **1** and record schema
+**6** are unchanged. Normal routing/diagnostics do not create indexes, and stores
+without this index remain usable but may scan more rows. Building the index can
+block writers and is subject to the existing five-second database timeout; a
+failed initialization rolls back rather than switching storage or dropping data.
+Resolve contention before retrying; a build that exceeds the timeout even while
+idle needs a separately planned maintenance operation, not repeated routing calls.
+PostgreSQL before 16 retains the compatible paginated lookup without this index.
+
+Routing validates the selected SQL history windows, not every unrelated record.
+Malformed JSON remains an index candidate and fails closed if selected. Use
+`jevia storage check --deep` for full-store integrity validation; the optimization
+does not replace that diagnostic or repair corrupt history.
+
 ### Setup safety and recovery
 
 `storage setup` is preview-first. Applying requires both `--apply` and

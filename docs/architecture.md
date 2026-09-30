@@ -171,6 +171,19 @@ not transaction-mode pooling. Selecting SQL does not import old JSONL history or
 fall back to it on an error; migration is an explicit, preview-first operation.
 See the [storage reference](reference.md#storage).
 
+The unreleased SQL passive-history lookup uses an additive partial index on
+`(project, ordinal)` in SQLite and PostgreSQL 16+. Its predicate mirrors
+`is_execution_observation() && !is_learning_evidence()`, with parity tests across
+supported record schemas. The database maintains membership as records change;
+no application-maintained observation flag can become stale under older writers.
+The query selects a bounded, newest-first window in one statement/snapshot and
+reverses it to append order before routing. It does not fetch all intervening
+pending/active runs. Selected records are still decoded/validated; deep checking
+remains the full-history integrity diagnostic. Explicit `storage init` adds the
+index to an existing store without a schema bump or record rewrite; normal opens
+do not migrate. Older PostgreSQL versions retain the paginated snapshot fallback.
+See [upgrade details](reference.md#passive-history-lookup-unreleased).
+
 `.jevia/cache.jsonl` is bounded, ignored local data protected by the stable
 `.jevia/cache.lock` sidecar. Inserts remove expired entries, replace an existing
 fingerprint, evict the oldest entries above the configured limit, then use the
