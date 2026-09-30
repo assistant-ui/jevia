@@ -170,6 +170,10 @@ PostgreSQL's `--confirm-stopped`). Journals are removed only after terminal
 persistence; corrupt, ambiguous, or unavailable journals are retained for inspection.
 Replay scans at most 4,096 directory entries/128 candidate runs per invocation,
 with a two-second total budget before routing; it is not an unbounded repair job.
+The same budget applies to recovery replay. Busy journal/history locks are skipped
+immediately, not waited on once per journal; an expired attempt retains its files
+for a later invocation. File scanning and journal/history reads run off the async
+task so the replay timer remains responsive.
 Routing receives bounded event counts and model summaries, not session IDs/raw events.
 
 New records use schema 6 (schemas 1–5 stay readable). Older CLI versions reject

@@ -30,6 +30,15 @@ pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
     load_unlocked(path)
 }
 
+/// Background recovery must never wait behind a live history writer.
+pub fn try_load(path: &Path) -> Result<Vec<RouteRecord>> {
+    let lock = private_lock_options().open(path.with_extension("lock"))?;
+    lock.try_lock_shared()
+        .context("history busy; replay deferred")?;
+    let _guard = crate::lease::FileLock::new(lock);
+    load_unlocked(path)
+}
+
 fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
     let mut records = Vec::new();
     read_records(path, |record| {

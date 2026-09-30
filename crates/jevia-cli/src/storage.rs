@@ -67,6 +67,24 @@ impl Storage {
         }
     }
 
+    /// Best-effort recovery reads skip locked JSONL history rather than waiting.
+    pub async fn get_for_replay(&self, id: &str) -> Result<RouteRecord> {
+        match self {
+            Self::Jsonl(paths) => {
+                let path = paths.runs.clone();
+                let id = id.to_owned();
+                tokio::task::spawn_blocking(move || {
+                    store::try_load(&path)?
+                        .into_iter()
+                        .find(|r| r.decision.run_id == id)
+                        .context("run id was not found in history")
+                })
+                .await?
+            }
+            Self::Database(db) => db.get(id).await,
+        }
+    }
+
     /// Separate windows prevent passive activity from displacing known outcomes.
     /// Each window retains append order; the provider consumes them separately.
     pub async fn routing_history(&self, limit: usize) -> Result<Vec<RouteRecord>> {
