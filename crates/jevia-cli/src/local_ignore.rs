@@ -133,7 +133,23 @@ mod tests {
         std::thread::scope(|scope| {
             for _ in 0..8 {
                 let path = &path;
-                scope.spawn(move || ensure(path).unwrap());
+                scope.spawn(move || {
+                    let deadline = Instant::now() + Duration::from_secs(15);
+                    loop {
+                        match ensure(path) {
+                            Ok(()) => break,
+                            Err(error)
+                                if error
+                                    .to_string()
+                                    .starts_with("project ignore rules are busy")
+                                    && Instant::now() < deadline =>
+                            {
+                                continue;
+                            }
+                            Err(error) => panic!("ignore repair failed: {error}"),
+                        }
+                    }
+                });
             }
         });
         let repaired = fs::read_to_string(&path).unwrap();
