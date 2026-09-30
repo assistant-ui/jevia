@@ -20,6 +20,8 @@ mod export;
 #[cfg(test)]
 mod import_tests;
 mod observations;
+mod readiness;
+pub use readiness::ObservationIndexStatus;
 
 const SCHEMA_VERSION: i64 = 1;
 const DB_TIMEOUT: Duration = Duration::from_secs(5);

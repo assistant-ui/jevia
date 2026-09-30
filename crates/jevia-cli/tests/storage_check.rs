@@ -115,10 +115,25 @@ async fn flow(name: &str) {
         .get_output()
         .stdout
         .clone();
+    let valid = String::from_utf8(valid).unwrap();
+    let lines: Vec<_> = valid.lines().collect();
+    assert_eq!(lines.len(), 2);
     assert_eq!(
-        String::from_utf8(valid).unwrap(),
-        format!("storage: ok (backend={name}, records=2, check=deep)\n")
+        lines[0],
+        format!("storage: ok (backend={name}, records=2, check=deep)")
     );
+    let present = "passive history index: present (catalog shape/state checked; query-plan use is not guaranteed)";
+    if name == "jsonl" {
+        assert_eq!(lines[1], "passive history index: not applicable (JSONL)");
+    } else if name == "postgres" {
+        assert!(
+            lines[1] == present
+                || lines[1]
+                    == "passive history index: unsupported on PostgreSQL <16; compatible paginated lookup is active"
+        );
+    } else {
+        assert_eq!(lines[1], present);
+    }
     let basic = cli(root)
         .args(["storage", "check"])
         .assert()
@@ -128,7 +143,7 @@ async fn flow(name: &str) {
         .clone();
     assert_eq!(
         String::from_utf8(basic).unwrap(),
-        format!("storage: ok (backend={name}, records=2)\n")
+        format!("storage: ok (backend={name}, records=2)\n{}\n", lines[1])
     );
     assert_eq!(
         fs::read_to_string(state.join("runs.jsonl")).unwrap(),

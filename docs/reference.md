@@ -1054,6 +1054,16 @@ Resolve contention before retrying; a build that exceeds the timeout even while
 idle needs a separately planned maintenance operation, not repeated routing calls.
 PostgreSQL before 16 retains the compatible paginated lookup without this index.
 
+In the unreleased CLI, `storage check`, `storage check --deep`, `doctor`, and
+`check` also report the passive index as present, missing, unavailable,
+unsupported (PostgreSQL before 16), or not applicable (JSONL). Missing-index
+guidance points to the explicit initialization above; diagnostics never build or
+replace an index. These are read-only catalog shape/state checks, not a proof of
+query-plan selection or a semantic audit of a manually changed predicate. The
+original storage health result remains separate: a missing performance index is
+not data corruption. SDK `checkStorage()` returns the additional human-readable
+line without changing its API.
+
 Routing validates the selected SQL history windows, not every unrelated record.
 Malformed JSON remains an index candidate and fails closed if selected. Use
 `jevia storage check --deep` for full-store integrity validation; the optimization

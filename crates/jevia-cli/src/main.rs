@@ -1215,12 +1215,14 @@ async fn local_diagnostics() -> Result<Config> {
     let config = load_config(&paths)?;
     let storage = Storage::open(&config, &paths, false).await?;
     let count = storage.check().await?;
+    let index_status = storage.observation_index_status().await?;
     let cache_stats = cache::stats(&paths.cache)
         .context("routing cache is invalid; run `jevia cache clear` to reset it")?;
     println!("config: ok ({})", paths.config.display());
     println!("tiers: ok ({})", config.tiers.len());
     println!("harnesses: ok ({})", config.harnesses.len());
     println!("store: ok ({count} records, backend={})", storage.name());
+    println!("passive history index: {index_status}");
     println!(
         "routing cache: ok ({} total, {} active, {} expired at {})",
         cache_stats.total,
@@ -1259,6 +1261,10 @@ async fn storage_command(action: StorageAction) -> Result<()> {
                 storage.name(),
                 count,
                 if deep { ", check=deep" } else { "" }
+            );
+            println!(
+                "passive history index: {}",
+                storage.observation_index_status().await?
             );
         }
         StorageAction::ImportJsonl { from, apply } => {
