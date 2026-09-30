@@ -2,6 +2,24 @@
 
 ## Unreleased: passive routing context
 
+### Recording health
+
+Run `jevia harness health codex` (or `claude` / `opencode`, using your configured
+adapter name). Add `--json` for the versioned, redacted report. It shows the current
+capture mode/configuration separately from the most recent matching execution in
+the last 100 stored runs: source, capture status, cumulative events, discarded
+inputs, sampled-event timestamp, and actionable advice. `ok` means inspection
+succeeded, not that capture is complete or the task succeeded.
+
+This command reads your selected JSONL, SQLite, or PostgreSQL storage but never
+launches a harness/version probe, contacts a model, replays journals, or runs
+verification. `jevia harness check` remains the offline static preflight. An empty
+window, legacy record, or `no_events` status is not proof of a broken adapter.
+In particular, Codex hooks may need normal `/hooks` trust review; diagnostics do
+not bypass it or claim to know that trust is the cause. Current config may differ
+from the saved run. Raw prompts, events, model/session identifiers, commands,
+credentials, and underlying storage error details are omitted.
+
 ### Shutdown durability
 
 Final journal read failures preserve the most recent checkpoint and mark capture

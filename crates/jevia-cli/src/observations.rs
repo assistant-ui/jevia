@@ -35,6 +35,28 @@ const HOOKS: &[&str] = &[
     "SubagentStop",
 ];
 
+pub fn configured_source(mode: ObservationMode, program: &str) -> Option<ObservationSource> {
+    let native = Path::new(program).file_name().and_then(|n| n.to_str());
+    match (mode, native) {
+        (ObservationMode::ClaudeHooks, _)
+        | (ObservationMode::Auto, Some("claude" | "claude.exe")) => {
+            Some(ObservationSource::ClaudeHooks)
+        }
+        (ObservationMode::CodexHooks, _) | (ObservationMode::Auto, Some("codex" | "codex.exe")) => {
+            Some(ObservationSource::CodexHooks)
+        }
+        (ObservationMode::OpencodePlugin, _)
+        | (ObservationMode::Auto, Some("opencode" | "opencode.exe")) => {
+            Some(ObservationSource::OpencodePlugin)
+        }
+        _ => None,
+    }
+}
+
+pub fn capture_conflicts(source: ObservationSource, args: &[String]) -> bool {
+    adapters::conflicts(source, args)
+}
+
 #[derive(Clone)]
 pub struct Capture {
     journal: Option<PathBuf>,
@@ -67,21 +89,8 @@ impl Capture {
             capture.initial.status = Status::Disabled;
             return capture;
         }
-        let native = Path::new(&invocation.program)
-            .file_name()
-            .and_then(|n| n.to_str());
-        let source = match (mode, native) {
-            (ObservationMode::ClaudeHooks, _)
-            | (ObservationMode::Auto, Some("claude" | "claude.exe")) => {
-                ObservationSource::ClaudeHooks
-            }
-            (ObservationMode::CodexHooks, _)
-            | (ObservationMode::Auto, Some("codex" | "codex.exe")) => ObservationSource::CodexHooks,
-            (ObservationMode::OpencodePlugin, _)
-            | (ObservationMode::Auto, Some("opencode" | "opencode.exe")) => {
-                ObservationSource::OpencodePlugin
-            }
-            _ => return capture,
+        let Some(source) = configured_source(mode, &invocation.program) else {
+            return capture;
         };
         capture.initial.source = Some(source);
         capture.initial.status = Status::Unavailable;
