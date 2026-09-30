@@ -77,6 +77,25 @@ impl Storage {
         }
     }
 
+    /// Replay workers must stop scanning even if their async waiter was dropped.
+    pub async fn get_for_replay_until(
+        &self,
+        id: &str,
+        deadline: std::time::Instant,
+    ) -> Result<RouteRecord> {
+        match self {
+            Self::Jsonl(paths) => {
+                let path = paths.runs.clone();
+                let id = id.to_owned();
+                tokio::task::spawn_blocking(move || {
+                    store::try_get_until(&path, &id, Some(deadline))
+                })
+                .await?
+            }
+            Self::Database(db) => db.get(id).await,
+        }
+    }
+
     /// Separate windows prevent passive activity from displacing known outcomes.
     /// Each window retains append order; the provider consumes them separately.
     pub async fn routing_history(&self, limit: usize) -> Result<Vec<RouteRecord>> {
@@ -183,6 +202,31 @@ impl Storage {
                 db.checkpoint_observations(id, observations, supervisor)
                     .await
             }
+        }
+    }
+
+    pub async fn checkpoint_for_replay(
+        &self,
+        id: &str,
+        observations: HarnessObservations,
+        deadline: std::time::Instant,
+    ) -> Result<RouteRecord> {
+        match self {
+            Self::Jsonl(paths) => {
+                let path = paths.runs.clone();
+                let id = id.to_owned();
+                tokio::task::spawn_blocking(move || {
+                    store::checkpoint_observations_until(
+                        &path,
+                        &id,
+                        observations,
+                        false,
+                        Some(deadline),
+                    )
+                })
+                .await?
+            }
+            Self::Database(db) => db.checkpoint_observations(id, observations, false).await,
         }
     }
 
