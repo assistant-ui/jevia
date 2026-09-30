@@ -750,6 +750,12 @@ processes. After a supervisor crash, inspect any surviving child processes and
 workspace changes before starting new work. Legacy unknown outcomes are not
 assumed to represent interrupted executions. Feedback on active runs is refused.
 
+The unreleased JSONL lookup retains only the requested record while validating
+the full history under its shared lock. `runs show` and journal replay no longer
+load all records into memory. Reads remain linear in file size and still report
+corrupt/unsupported records anywhere in the file; busy background replay defers
+without waiting on a writer. This does not change stored history or SQL lookups.
+
 New and updated records use schema version 6; versions 1–5 remain readable.
 Older CLI versions refuse newer schemas rather than silently discard new metadata.
 The ignored `run-leases/` sidecars are retained so concurrent processes always
