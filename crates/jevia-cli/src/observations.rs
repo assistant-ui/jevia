@@ -537,7 +537,7 @@ pub fn receive_from(path: &Path, source: &str, input: impl Read) {
     if receive_for_source(path, source, input).is_err() && loss::record(path, source).is_err() {
         // A full/unwritable filesystem may prevent even the empty marker. Never
         // print raw payloads, paths or driver errors, and never fail the harness.
-        eprintln!("jevia: native observation could not be recorded (details redacted)");
+        eprintln!("jevia: native observation recording could not be confirmed (details redacted)");
     }
 }
 
