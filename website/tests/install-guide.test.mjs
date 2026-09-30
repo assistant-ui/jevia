@@ -85,7 +85,8 @@ test("distinguishes automatic CLI recording from explicit SDK feedback and versi
   assert.match(guide, /Codex 0\.158\.x/);
   assert.match(guide, /OpenCode v1 >= 1\.18\.33/);
   assert.match(guide, /normal \/hooks trust review/);
-  assert.match(guide, /Do not promise these features from the current published installer/);
+  assert.match(guide, /Do not promise these features if the installed CLI is older than 0\.1\.6/);
+  assert.match(guide, /upgrade to CLI 0\.1\.6 and SDK 0\.1\.2 together for schema 6/);
   assert.match(guide, /when the launched process\/session finishes/);
   assert.match(guide, /not proof of task success/);
   assert.match(guide, /do not fill this gap by submitting guessed feedback/);
