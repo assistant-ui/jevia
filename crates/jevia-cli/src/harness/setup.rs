@@ -286,7 +286,7 @@ pub fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
     crate::ensure_local_ignore(&paths.directory.join(".gitignore"))?;
     edit.ensure_unchanged()?;
     let backup = edit.backup(paths)?;
-    println!("Config backup: {}", backup.display());
+    println!("Config backup: {}", crate::terminal::path(&backup));
     edit.commit().context(
         "could not finish harness setup; inspect config and retain its backup before retrying",
     )?;

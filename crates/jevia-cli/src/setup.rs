@@ -141,7 +141,7 @@ pub async fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
         None
     };
     if let Some(path) = &backup {
-        println!("Config backup: {}", path.display());
+        println!("Config backup: {}", crate::terminal::path(path));
     }
     // Initialize/check first, import second, switch config last. A failed import
     // rolls itself back; initialized schemas/projects can remain on failure.

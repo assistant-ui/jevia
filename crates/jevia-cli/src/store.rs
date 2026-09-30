@@ -15,14 +15,20 @@ use tempfile::NamedTempFile;
 mod check;
 mod history;
 mod maintenance;
-pub use check::check_deep;
+pub use check::{check_deep, count};
 pub use history::routing_history;
 pub(crate) use maintenance::archivable;
 pub use maintenance::{Maintenance, Report as MaintenanceReport, maintain};
 
 mod lookup;
-pub use lookup::{get, try_get};
+pub use lookup::{get, try_get, try_get_until};
 
+mod rewrite;
+use rewrite::update_unlocked;
+mod deadline;
+use deadline::{check_deadline, read_line_until};
+
+#[cfg(test)]
 pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
     let parent = path
         .parent()
@@ -32,10 +38,6 @@ pub fn load(path: &Path) -> Result<Vec<RouteRecord>> {
     }
 
     let _lock = acquire_lock(path, LockMode::Shared)?;
-    load_unlocked(path)
-}
-
-fn load_unlocked(path: &Path) -> Result<Vec<RouteRecord>> {
     let mut records = Vec::new();
     read_records(path, |record| {
         records.push(record);
@@ -114,6 +116,15 @@ pub(crate) fn with_import_reader<T>(
 }
 
 fn read_records(path: &Path, visit: impl FnMut(RouteRecord) -> Result<()>) -> Result<()> {
+    read_records_until(path, None, visit)
+}
+
+fn read_records_until(
+    path: &Path,
+    deadline: Option<std::time::Instant>,
+    visit: impl FnMut(RouteRecord) -> Result<()>,
+) -> Result<()> {
+    check_deadline(deadline)?;
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -123,7 +134,7 @@ fn read_records(path: &Path, visit: impl FnMut(RouteRecord) -> Result<()>) -> Re
         }
     };
 
-    read_records_from(BufReader::new(file), path, visit)
+    read_records_from_until(BufReader::new(file), path, deadline, visit)
 }
 
 /// Parse already-captured bytes without opening a file or creating a sidecar lock.
@@ -139,22 +150,34 @@ pub fn parse_snapshot(path: &Path, bytes: &[u8]) -> Result<Vec<RouteRecord>> {
 fn read_records_from(
     reader: impl BufRead,
     path: &Path,
+    visit: impl FnMut(RouteRecord) -> Result<()>,
+) -> Result<()> {
+    read_records_from_until(reader, path, None, visit)
+}
+
+fn read_records_from_until(
+    mut reader: impl BufRead,
+    path: &Path,
+    deadline: Option<std::time::Instant>,
     mut visit: impl FnMut(RouteRecord) -> Result<()>,
 ) -> Result<()> {
-    for (index, line) in reader.lines().enumerate() {
-        let line = line.with_context(|| {
-            format!("could not read line {} from {}", index + 1, path.display())
-        })?;
+    let mut bytes = Vec::new();
+    let mut index = 0;
+    while read_line_until(&mut reader, &mut bytes, deadline)? {
+        index += 1;
+        let line = std::str::from_utf8(&bytes)
+            .with_context(|| format!("could not read history line {index} (contents redacted)"))?;
         if line.trim().is_empty() {
             continue;
         }
-        let record: RouteRecord = serde_json::from_str(&line)
-            .map_err(|error| crate::diagnostics::json_line("run record", index + 1, &error))?;
+        let record: RouteRecord = serde_json::from_str(line)
+            .map_err(|error| crate::diagnostics::json_line("run record", index, &error))?;
+        check_deadline(deadline)?;
         if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
             bail!(
                 "unsupported run record schema {} on line {} of {}",
                 record.schema_version,
-                index + 1,
+                index,
                 path.display()
             );
         }
@@ -165,10 +188,11 @@ fn read_records_from(
             .with_context(|| {
                 format!(
                     "invalid routing decision on line {} (contents redacted)",
-                    index + 1
+                    index
                 )
             })?;
         visit(record)?;
+        check_deadline(deadline)?;
     }
     Ok(())
 }
@@ -326,11 +350,22 @@ pub fn checkpoint_observations(
     observations: HarnessObservations,
     supervisor: bool,
 ) -> Result<RouteRecord> {
+    checkpoint_observations_until(path, run_id, observations, supervisor, None)
+}
+
+pub fn checkpoint_observations_until(
+    path: &Path,
+    run_id: &str,
+    observations: HarnessObservations,
+    supervisor: bool,
+    deadline: Option<std::time::Instant>,
+) -> Result<RouteRecord> {
+    check_deadline(deadline)?;
     let lock = private_lock_options().open(path.with_extension("lock"))?;
     lock.try_lock()
         .context("history busy; observation journal retained for retry")?;
     let _guard = crate::lease::FileLock::new(lock);
-    update_unlocked(path, run_id, |record| {
+    rewrite::update_until(path, run_id, deadline, |record| {
         if supervisor
             && !record
                 .lifecycle
@@ -500,50 +535,6 @@ fn update(
 ) -> Result<RouteRecord> {
     let _lock = acquire_lock(path, LockMode::Exclusive)?;
     update_unlocked(path, run_id, update_record)
-}
-
-fn update_unlocked(
-    path: &Path,
-    run_id: &str,
-    update_record: impl FnOnce(&mut RouteRecord) -> Result<()>,
-) -> Result<RouteRecord> {
-    let mut records = load_unlocked(path)?;
-    let updated = records
-        .iter_mut()
-        .find(|record| record.decision.run_id == run_id)
-        .context("run id was not found in local history")?;
-    update_record(updated)?;
-    updated.schema_version = RECORD_SCHEMA_VERSION;
-    let result = updated.clone();
-
-    let parent = path
-        .parent()
-        .context("run history path does not have a parent directory")?;
-    let mut temporary = NamedTempFile::new_in(parent)
-        .with_context(|| format!("could not create a temporary file in {}", parent.display()))?;
-    {
-        let mut writer = BufWriter::new(temporary.as_file_mut());
-        for record in &records {
-            serde_json::to_writer(&mut writer, record).context("could not encode run record")?;
-            writer
-                .write_all(b"\n")
-                .context("could not terminate run record")?;
-        }
-        writer
-            .flush()
-            .context("could not flush updated run history")?;
-    }
-    temporary
-        .as_file()
-        .sync_all()
-        .context("could not sync updated run history")?;
-    temporary
-        .persist(path)
-        .map_err(|error| error.error)
-        .with_context(|| format!("could not atomically replace {}", path.display()))?;
-    sync_parent(path)?;
-
-    Ok(result)
 }
 
 #[derive(Debug, Clone, Copy)]

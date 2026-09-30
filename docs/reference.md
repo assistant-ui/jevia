@@ -214,6 +214,15 @@ ambiguous. Oversized directories require inspection/maintenance; the cursor is
 not an unbounded background repair service or a guarantee against slow storage.
 Routing receives bounded event counts and model summaries, not session IDs/raw events.
 
+Replay's unreleased JSONL workers also check the remaining budget between read
+chunks and records, after decoding, and before publishing a checkpoint rewrite.
+Expiry releases the history lock and discards unpublished temporary output; the
+journal remains available for retry. This is cooperative cancellation, not a hard
+real-time guarantee: a blocking filesystem call, decoding one large record, or
+an atomic publication already in progress cannot be preempted. Required routing
+history still validates completely; a replay timeout never substitutes partial
+history or invents an outcome. Ordinary readers reuse their line buffer as well.
+
 #### File-lock contention (unreleased)
 
 Cache lock acquisition waits at most 500 ms per operation; a busy routing cache
@@ -259,7 +268,11 @@ The unreleased CLI escapes control characters in human-readable routing/run
 metadata, feedback confirmations, and harness names. Imported values cannot add
 terminal commands or spoof extra output lines through these displays. Stored
 values, harness arguments, and JSON/SDK responses retain their original contents;
-output streamed directly from a child harness is not filtered.
+output streamed directly from a child harness is not filtered. Application error
+chains and cache warnings are escaped at their final rendering boundary, including
+unknown-harness names and filesystem errors. Human-readable project/backup/archive
+paths are escaped without changing the paths used for filesystem operations.
+Ordinary quotes, backslashes and Unicode stay readable in these diagnostics.
 
 Jevia is an outcome-aware model router for coding agents. It asks Jev for a
 typed routing decision, applies a deterministic safety policy, and records the
@@ -1237,6 +1250,13 @@ same locking and atomic-replacement guarantees through `.jevia/cache.lock`.
 By default Jevia stores task text in the selected backend so it can supply useful examples to
 future decisions. Set `store_task_text = false` under `[privacy]` to retain only
 routing metadata.
+
+In the unreleased CLI, JSONL updates and basic health checks stream the complete
+history instead of retaining every record in memory. Updates still take an
+exclusive lock and atomically replace the file only after all records validate;
+a missing run, rejected change, malformed suffix, or write failure leaves the
+original file intact. This reduces memory use, not the linear scan/rewrite cost.
+Deep checks still retain run identities to detect duplicates.
 
 In JSONL mode, `jevia doctor` validates the complete history and reports malformed records
 without deleting or rewriting them.
