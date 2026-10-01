@@ -31,7 +31,7 @@ const POSTGRES_PREDICATE: &str = r"CASE WHEN NOT (record IS JSON) THEN TRUE ELSE
     END";
 
 impl Database {
-    fn observation_predicate(&self) -> &'static str {
+    pub(super) fn observation_predicate(&self) -> &'static str {
         if self.is_postgres() {
             POSTGRES_PREDICATE
         } else {

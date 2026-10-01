@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Validate passive-history index predicates in read-only SQLite/PostgreSQL
+  diagnostics; unexpected definitions report unavailable without being replaced.
 - Reuse one validated run snapshot across recording-cleanup artifacts with the
   same owner, retaining per-file safety checks and execution leases on apply.
 - Limit Jev routing responses to 1 MiB, including chunked and unknown-length
