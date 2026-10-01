@@ -8,7 +8,7 @@ pub mod report;
 mod tests;
 
 pub use database::ObservationIndexStatus;
-pub use import::validate_import;
+pub(crate) use import::{Snapshot, source_fingerprint};
 
 use crate::{lease, paths::ProjectPaths, store};
 use anyhow::{Context, Result, bail};
@@ -348,15 +348,10 @@ impl Storage {
         db.import(snapshot.records(), apply).await
     }
 
-    pub async fn import_records(
-        &self,
-        records: &[RouteRecord],
-        apply: bool,
-    ) -> Result<(usize, usize)> {
+    pub async fn import_snapshot(&self, snapshot: Snapshot, apply: bool) -> Result<(usize, usize)> {
         let Self::Database(db) = self else {
             bail!("import-jsonl requires a configured SQLite or PostgreSQL destination");
         };
-        validate_import(records)?;
-        db.import(records.iter().cloned().map(Ok), apply).await
+        db.import(snapshot.records(), apply).await
     }
 }

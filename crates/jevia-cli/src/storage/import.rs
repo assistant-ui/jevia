@@ -3,21 +3,34 @@
 use std::{
     collections::HashSet,
     fs::File,
-    io::{BufRead, BufReader, BufWriter, Seek, Write},
+    io::{BufRead, BufReader, BufWriter, Read, Seek, Write},
     path::Path,
 };
 
 use anyhow::{Context, Result, anyhow, bail};
 use jevia_core::{RECORD_SCHEMA_VERSION, RouteRecord};
+use sha2::{Digest, Sha256};
 
 use crate::store;
 
-pub(super) struct Snapshot {
+pub(crate) struct Snapshot {
     file: File,
+    pub count: usize,
+    pub fingerprint: [u8; 32],
 }
 
 impl Snapshot {
     pub fn capture(source: &Path) -> Result<Self> {
+        store::with_import_reader(source, Self::capture_reader)
+    }
+
+    /// Setup preview must not create a history lock or any other project file.
+    /// Apply requires stopped writers and checks the raw source again around SQL.
+    pub fn capture_optional(source: &Path) -> Result<Option<Self>> {
+        open_optional(source)?.map(Self::capture_reader).transpose()
+    }
+
+    fn capture_reader(reader: impl Read) -> Result<Self> {
         // Unnamed files are removed on close, including abnormal process exit.
         // On Unix they are unlinked/private (0600); on Windows use protected temp ACLs.
         let mut file = tempfile::tempfile().context("could not create private import snapshot")?;
@@ -29,27 +42,77 @@ impl Snapshot {
             file.set_permissions(std::fs::Permissions::from_mode(0o600))
                 .context("could not restrict import snapshot permissions")?;
         }
-        store::with_import_reader(source, |reader| {
+        let mut reader = HashingReader {
+            reader,
+            hash: Sha256::new(),
+        };
+        let mut count = 0;
+        {
             let mut validator = Validator::default();
             let mut writer = BufWriter::new(&mut file);
-            for record in read_records(reader) {
+            for record in read_records(BufReader::new(&mut reader)) {
                 let record = record?;
                 validator.check(&record)?;
                 serde_json::to_writer(&mut writer, &record)
                     .context("could not write import snapshot")?;
                 writer.write_all(b"\n")?;
+                count += 1;
             }
-            writer.flush().context("could not flush import snapshot")
-        })?;
+            writer.flush().context("could not flush import snapshot")?;
+        }
         // No durable backup is published. This file is only read in this process;
         // the unchanged original remains the user's backup.
         file.rewind().context("could not rewind import snapshot")?;
-        Ok(Self { file })
+        Ok(Self {
+            file,
+            count,
+            fingerprint: reader.hash.finalize().into(),
+        })
     }
 
     pub fn records(self) -> impl Iterator<Item = Result<RouteRecord>> {
         read_records(BufReader::new(self.file))
     }
+}
+
+struct HashingReader<R> {
+    reader: R,
+    hash: Sha256,
+}
+
+impl<R: Read> Read for HashingReader<R> {
+    fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+        let count = self.reader.read(bytes)?;
+        self.hash.update(&bytes[..count]);
+        Ok(count)
+    }
+}
+
+fn open_optional(path: &Path) -> Result<Option<File>> {
+    match File::open(path) {
+        Ok(file) => {
+            if !file.metadata()?.is_file() {
+                bail!("source JSONL history must be a regular file");
+            }
+            Ok(Some(file))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).context("could not read source JSONL history"),
+    }
+}
+
+pub(crate) fn source_fingerprint(path: &Path) -> Result<Option<[u8; 32]>> {
+    open_optional(path)?
+        .map(|file| {
+            let mut reader = HashingReader {
+                reader: file,
+                hash: Sha256::new(),
+            };
+            std::io::copy(&mut reader, &mut std::io::sink())
+                .context("could not read source JSONL history")?;
+            Ok(reader.hash.finalize().into())
+        })
+        .transpose()
 }
 
 fn read_records(reader: impl BufRead) -> impl Iterator<Item = Result<RouteRecord>> {
@@ -83,6 +146,10 @@ struct Validator {
 
 impl Validator {
     fn check(&mut self, record: &RouteRecord) -> Result<()> {
+        record
+            .decision
+            .validate()
+            .map_err(|_| anyhow!("invalid import routing decision (contents redacted)"))?;
         if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
             bail!("unsupported import record schema; no records imported");
         }
@@ -104,7 +171,8 @@ impl Validator {
 }
 
 /// Guided setup already owns a captured history; share the same validation rules.
-pub fn validate_import(records: &[RouteRecord]) -> Result<()> {
+#[cfg(test)]
+fn validate_import(records: &[RouteRecord]) -> Result<()> {
     let mut validator = Validator::default();
     for record in records {
         validator.check(record)?;

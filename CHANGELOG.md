@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stream guided database setup through private validated snapshots and raw-source
+  fingerprints, preserving read-only previews and configuration-last switching.
 - Validate passive-history index predicates in read-only SQLite/PostgreSQL
   diagnostics; unexpected definitions report unavailable without being replaced.
 - Reuse one validated run snapshot across recording-cleanup artifacts with the
