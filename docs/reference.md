@@ -1401,9 +1401,12 @@ history. Active/routed runs, unknown owners, missing/unreadable history, pending
 journals/markers, unsafe files, and unmatched contents are retained with aggregate
 reason counts. A temporary checkpoint must exactly match the saved observation
 snapshot of a terminal run; a generated OpenCode plugin must match the current
-bundled plugin and a terminal OpenCode recording. Cleanup reuses one validated
-history snapshot per run (under its execution lease on apply), while still
-rechecking journals and each artifact's contents before moving it. New auxiliary filenames retain
+bundled plugin and a terminal OpenCode recording. JSONL cleanup reads one fully
+validated history snapshot per batch of up to 32 run owners, holding their
+execution leases throughout apply. SQL retains indexed single-owner lookups
+and at most one execution-lease connection. Busy owners are retained, and a
+failed history scan cannot authorize any move in that batch. Cleanup still
+rechecks journals and each artifact's contents before moving it. New auxiliary filenames retain
 the owning run UUID; older unowned files are intentionally left for manual review.
 Symlinks are rejected; Unix hard-linked files are also retained. This is
 cooperating-process maintenance, not a sandbox against arbitrary filesystem

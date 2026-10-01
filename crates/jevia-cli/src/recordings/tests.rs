@@ -307,7 +307,7 @@ fn auxiliary_prefix_retains_only_valid_journal_ownership() {
 }
 
 #[tokio::test]
-async fn cleanup_reads_history_once_per_owner_but_checks_every_artifact() {
+async fn cleanup_batches_jsonl_owners_but_checks_every_artifact() {
     for backend in local_backends() {
         let mut f = Fixture::new(backend).await;
         for _ in 0..2 {
@@ -329,11 +329,16 @@ async fn cleanup_reads_history_once_per_owner_but_checks_every_artifact() {
             f.file("jevia-observer-", "-unknown.mjs", b"PRIVATE unknown plugin");
         }
         let preview = cleanup(&f.paths, &f.storage, false).await.unwrap();
-        assert_eq!(preview.history_reads, 2);
+        let reads = if matches!(f.storage, Storage::Jsonl(_)) {
+            1
+        } else {
+            2
+        };
+        assert_eq!(preview.history_reads, reads);
         assert_eq!(preview.eligible, 40);
         assert_eq!(preview.retained["contents_not_known_saved"], 2);
         let applied = cleanup(&f.paths, &f.storage, true).await.unwrap();
-        assert_eq!(applied.history_reads, 2);
+        assert_eq!(applied.history_reads, reads);
         assert_eq!(applied.moved, 40);
         assert_eq!(applied.retained["contents_not_known_saved"], 2);
         assert_eq!(f.storage.check_deep().await.unwrap(), 2);
@@ -359,4 +364,36 @@ async fn cached_lookup_failure_never_permits_cleanup() {
         assert_eq!(report.retained["history_unavailable_or_missing"], 2);
         assert!(plugin.exists() && checkpoint.exists());
     }
+}
+
+#[tokio::test]
+async fn cleanup_bounds_batches_and_holds_each_selected_owner_lease() {
+    let mut f = Fixture::new(StorageConfig::Jsonl).await;
+    let mut ids = Vec::new();
+    for index in 0..65 {
+        f.record.decision.run_id = format!("00000000-0000-0000-0000-{index:012x}");
+        ids.push(f.record.decision.run_id.clone());
+        f.storage.append(&f.record).await.unwrap();
+        f.plugin();
+    }
+    let preview = cleanup(&f.paths, &f.storage, false).await.unwrap();
+    assert_eq!(preview.history_reads, 3);
+    assert_eq!(preview.eligible, 65);
+    let held = f.storage.execution_guard(&ids[10]).await.unwrap();
+    let batch_ids = ids[..32].iter().cloned().collect();
+    let batch = HistoryBatch::load(&f.storage, batch_ids, true).await;
+    assert!(matches!(batch.saved[&ids[10]], Err("execution_busy")));
+    assert!(f.storage.execution_guard(&ids[0]).await.is_err());
+    assert_eq!(batch.saved.len(), 32);
+    drop(batch);
+    assert!(f.storage.execution_guard(&ids[0]).await.is_ok());
+    let applied = cleanup(&f.paths, &f.storage, true).await.unwrap();
+    assert_eq!(applied.history_reads, 3);
+    assert_eq!(applied.moved, 64);
+    assert_eq!(applied.retained["execution_busy"], 1);
+    drop(held);
+    let last = cleanup(&f.paths, &f.storage, true).await.unwrap();
+    assert_eq!(last.moved, 1);
+    assert_eq!(last.history_reads, 1);
+    assert_eq!(f.storage.check_deep().await.unwrap(), 65);
 }

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Batch JSONL recording-cleanup history lookups across up to 32 owners, keeping
+  execution leases, complete-stream validation, and per-artifact safety checks.
 - Validate passive-history index predicates in read-only SQLite/PostgreSQL
   diagnostics; unexpected definitions report unavailable without being replaced.
 - Reuse one validated run snapshot across recording-cleanup artifacts with the
