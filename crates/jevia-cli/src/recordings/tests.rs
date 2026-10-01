@@ -305,3 +305,58 @@ fn auxiliary_prefix_retains_only_valid_journal_ownership() {
         "jevia-observer-"
     );
 }
+
+#[tokio::test]
+async fn cleanup_reads_history_once_per_owner_but_checks_every_artifact() {
+    for backend in local_backends() {
+        let mut f = Fixture::new(backend).await;
+        for _ in 0..2 {
+            f.record.decision.run_id = uuid::Uuid::new_v4().to_string();
+            f.storage.append(&f.record).await.unwrap();
+            for index in 0..20 {
+                if index % 2 == 0 {
+                    f.file(
+                        "jevia-observer-",
+                        &format!("-{index}.mjs"),
+                        include_bytes!("../observations/opencode.mjs"),
+                    );
+                } else {
+                    let bytes = serde_json::to_vec(&serde_json::json!({"type":"snapshot", "event":f.record.execution.as_ref().unwrap().observations})).unwrap();
+                    f.file(".jevia-event-checkpoint-", &format!("-{index}"), &bytes);
+                }
+            }
+            // A matching earlier artifact must not bless a different later file.
+            f.file("jevia-observer-", "-unknown.mjs", b"PRIVATE unknown plugin");
+        }
+        let preview = cleanup(&f.paths, &f.storage, false).await.unwrap();
+        assert_eq!(preview.history_reads, 2);
+        assert_eq!(preview.eligible, 40);
+        assert_eq!(preview.retained["contents_not_known_saved"], 2);
+        let applied = cleanup(&f.paths, &f.storage, true).await.unwrap();
+        assert_eq!(applied.history_reads, 2);
+        assert_eq!(applied.moved, 40);
+        assert_eq!(applied.retained["contents_not_known_saved"], 2);
+        assert_eq!(f.storage.check_deep().await.unwrap(), 2);
+        let encoded = serde_json::to_string(&applied).unwrap();
+        assert!(!encoded.contains("history_reads"));
+        assert!(!encoded.contains("PRIVATE"));
+    }
+}
+
+#[tokio::test]
+async fn cached_lookup_failure_never_permits_cleanup() {
+    let f = Fixture::new(StorageConfig::Jsonl).await;
+    f.storage.append(&f.record).await.unwrap();
+    let plugin = f.plugin();
+    let checkpoint = f.checkpoint();
+    use std::io::Write;
+    let mut history = OpenOptions::new().append(true).open(&f.paths.runs).unwrap();
+    history.write_all(b"PRIVATE corrupt tail\n").unwrap();
+    for apply in [false, true] {
+        let report = cleanup(&f.paths, &f.storage, apply).await.unwrap();
+        assert_eq!(report.history_reads, 1);
+        assert_eq!(report.moved, 0);
+        assert_eq!(report.retained["history_unavailable_or_missing"], 2);
+        assert!(plugin.exists() && checkpoint.exists());
+    }
+}

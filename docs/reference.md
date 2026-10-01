@@ -305,6 +305,10 @@ Jevia closes that loop:
 
 The application owns the policy. Jev supplies a structured decision signal.
 
+Jev routing responses are limited to 1 MiB, including chunked responses and
+responses without a content-length header. An oversized response fails safely
+without caching a decision or recording a routed run. Request timeouts still apply.
+
 ## Quick start
 
 Use the copyable installer on the [Jevia landing page](https://jevia.dev). It
@@ -1397,7 +1401,9 @@ history. Active/routed runs, unknown owners, missing/unreadable history, pending
 journals/markers, unsafe files, and unmatched contents are retained with aggregate
 reason counts. A temporary checkpoint must exactly match the saved observation
 snapshot of a terminal run; a generated OpenCode plugin must match the current
-bundled plugin and a terminal OpenCode recording. New auxiliary filenames retain
+bundled plugin and a terminal OpenCode recording. Cleanup reuses one validated
+history snapshot per run (under its execution lease on apply), while still
+rechecking journals and each artifact's contents before moving it. New auxiliary filenames retain
 the owning run UUID; older unowned files are intentionally left for manual review.
 Symlinks are rejected; Unix hard-linked files are also retained. This is
 cooperating-process maintenance, not a sandbox against arbitrary filesystem

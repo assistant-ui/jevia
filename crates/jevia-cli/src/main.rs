@@ -913,7 +913,8 @@ async fn routed_record_in(
     let wait_budget =
         std::time::Duration::from_millis(config.jev.timeout_ms.saturating_add(1_000).min(30_000));
     // The lease remains held through the HTTP request and cache insertion, never
-    // while holding a global history/cache lock. Reload evidence after each wait.
+    // while holding a global history/cache lock. Reload evidence after the wait,
+    // not on every coordination poll; feedback remains fresh before use.
     let (history, cache_key, _request_lease) = loop {
         let history = storage.routing_history(config.router.history_limit).await?;
         if !config.cache.enabled || no_cache {
@@ -960,9 +961,17 @@ async fn routed_record_in(
         }
         // The first byte of the SHA-256 key selects one of 256 fixed stripes.
         // Sidecars stay stable without growing once per distinct task forever.
-        match lease::try_acquire(&paths.directory.join("cache-leases"), &key[..2]) {
-            Ok(Some(guard)) => {
-                if !matches!(trace.coordination, Coordination::Waited) {
+        match lease::acquire_until(
+            &paths.directory.join("cache-leases"),
+            &key[..2],
+            wait_started + wait_budget,
+        )
+        .await
+        {
+            Ok((Some(guard), waited)) => {
+                if waited {
+                    trace.coordination = Coordination::Waited;
+                } else if !matches!(trace.coordination, Coordination::Waited) {
                     trace.coordination = Coordination::Acquired;
                 }
                 let latest = storage.routing_history(config.router.history_limit).await?;
@@ -999,9 +1008,10 @@ async fn routed_record_in(
                     }
                 }
             }
-            Ok(None) => {
+            Ok((None, _)) => {
+                // Reload history/cache once more before the existing expiry
+                // fallback. Never route with the snapshot from before waiting.
                 trace.coordination = Coordination::Waited;
-                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
             }
             Err(error) => {
                 eprintln!(
@@ -1009,7 +1019,9 @@ async fn routed_record_in(
                     terminal::diagnostic(format_args!("{error:#}"))
                 );
                 trace.coordination = Coordination::Unavailable;
-                break (history, Some(key), None);
+                let latest = storage.routing_history(config.router.history_limit).await?;
+                let latest_key = route_cache_key(task, harness_name, config, &latest)?;
+                break (latest, Some(latest_key), None);
             }
         }
     };
