@@ -8,6 +8,9 @@ use std::{
     time::Duration,
 };
 
+mod probe;
+pub use probe::version_output;
+
 #[derive(Debug)]
 pub enum ProcessResult {
     Exited(ExitStatus),

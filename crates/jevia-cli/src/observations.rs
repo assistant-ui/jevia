@@ -18,7 +18,6 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    process::Stdio,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -430,31 +429,9 @@ async fn replay_until(
 }
 
 async fn supported_version(program: &str, root: &Path, source: ObservationSource) -> bool {
-    use tokio::io::AsyncReadExt;
-    let probe = async {
-        let mut child = tokio::process::Command::new(program)
-            .current_dir(root)
-            .arg("--version")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .spawn()
-            .ok()?;
-        let stdout = child.stdout.take()?;
-        let mut bytes = Vec::new();
-        stdout.take(256).read_to_end(&mut bytes).await.ok()?;
-        if !child.wait().await.ok()?.success() {
-            return None;
-        }
-        let text = String::from_utf8(bytes).ok()?;
-        Some(adapters::version_supported(source, &text))
-    };
-    tokio::time::timeout(Duration::from_secs(2), probe)
+    crate::processes::version_output(program, root)
         .await
-        .ok()
-        .flatten()
-        .unwrap_or(false)
+        .is_some_and(|text| adapters::version_supported(source, &text))
 }
 
 #[derive(Serialize, Deserialize)]
