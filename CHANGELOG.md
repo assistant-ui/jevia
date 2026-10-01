@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Limit Jev routing responses to 1 MiB, including chunked and unknown-length
+  bodies; reject oversized responses without storing a decision or exposing data.
+
 ## 0.1.7 — 2026-09-30
 
 - Refresh the locked `yoke-derive` patch dependency to 0.8.4, replacing the
