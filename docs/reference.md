@@ -1080,8 +1080,12 @@ In CLI 0.1.7, `storage check`, `storage check --deep`, `doctor`, and
 `check` also report the passive index as present, missing, unavailable,
 unsupported (PostgreSQL before 16), or not applicable (JSONL). Missing-index
 guidance points to the explicit initialization above; diagnostics never build or
-replace an index. These are read-only catalog shape/state checks, not a proof of
-query-plan selection or a semantic audit of a manually changed predicate. The
+replace an index. Catalog checks also recognize the expected filtering predicate,
+not just the index name/columns. Unexpected or unrecognized predicates report
+unavailable; diagnostics never execute catalog SQL or silently rebuild indexes.
+Recognition is conservative: a manually rewritten equivalent expression or a
+new PostgreSQL catalog rendering may require inspection rather than report present.
+This is not a proof of query-plan selection or a general SQL equivalence check. The
 original storage health result remains separate: a missing performance index is
 not data corruption. SDK `checkStorage()` returns the additional human-readable
 line without changing its API.

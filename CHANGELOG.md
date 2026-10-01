@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Validate passive-history index predicates in read-only SQLite/PostgreSQL
+  diagnostics; unexpected definitions report unavailable without being replaced.
+
 ## 0.1.7 — 2026-09-30
 
 - Refresh the locked `yoke-derive` patch dependency to 0.8.4, replacing the

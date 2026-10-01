@@ -122,7 +122,7 @@ async fn flow(name: &str) {
         lines[0],
         format!("storage: ok (backend={name}, records=2, check=deep)")
     );
-    let present = "passive history index: present (catalog shape/state checked; query-plan use is not guaranteed)";
+    let present = "passive history index: present (catalog shape/state/predicate checked; query-plan use is not guaranteed)";
     if name == "jsonl" {
         assert_eq!(lines[1], "passive history index: not applicable (JSONL)");
     } else if name == "postgres" {
