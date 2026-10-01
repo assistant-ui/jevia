@@ -16,8 +16,7 @@ use toml_edit::{DocumentMut, Item, Table, value};
 use crate::{
     config_edit::{ConfigEdit, config_lock},
     paths::ProjectPaths,
-    storage::{Storage, validate_import},
-    store,
+    storage::{Snapshot, Storage, source_fingerprint},
 };
 
 #[derive(Debug, Args)]
@@ -96,14 +95,14 @@ pub async fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
         );
     }
     protect_sqlite_target(paths, &edit.next.storage)?;
-    let source = if edit.previous.storage.is_jsonl() {
-        read_optional(&paths.runs)?
+    let mut source = if edit.previous.storage.is_jsonl() {
+        Snapshot::capture_optional(&paths.runs)
+            .map_err(|_| anyhow!("JSONL history is invalid, unavailable, active, or unsupported; inspect/repair it before setup (record contents redacted)"))?
     } else {
         None
     };
-    let records = store::parse_snapshot(&paths.runs, source.as_deref().unwrap_or_default())
-        .map_err(|_| anyhow!("JSONL history is invalid or unsupported; inspect/repair it before setup (record contents redacted)"))?;
-    validate_import(&records)?;
+    let count = source.as_ref().map_or(0, |snapshot| snapshot.count);
+    let fingerprint = source.as_ref().map(|snapshot| snapshot.fingerprint);
     let changed = edit.previous.storage != edit.next.storage;
     println!(
         "{} database setup:",
@@ -114,24 +113,23 @@ pub async fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
     print!("{snippet}");
     println!(
         "JSONL records: {}. Import requested: {}.",
-        records.len(),
-        options.import_jsonl
+        count, options.import_jsonl
     );
     if !options.apply {
-        if !records.is_empty() && !options.import_jsonl {
+        if count > 0 && !options.import_jsonl {
             println!(
                 "Add --import-jsonl to preserve these records in the destination before switching."
             );
         }
         println!(
-            "No files changed or database connection attempted. Destination conflicts/permissions are checked on apply."
+            "No project files changed or database connection attempted. Destination conflicts/permissions are checked on apply."
         );
         println!(
             "Stop all source writers and supervisors, then repeat with --apply --confirm-stopped."
         );
         return Ok(());
     }
-    if !records.is_empty() && !options.import_jsonl {
+    if count > 0 && !options.import_jsonl {
         bail!("JSONL contains records; repeat with --import-jsonl. Configuration was not changed");
     }
     crate::ensure_local_ignore(&paths.directory.join(".gitignore"))?;
@@ -149,9 +147,11 @@ pub async fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
         let storage = Storage::open(&edit.next, paths, true).await?;
         storage.check().await?;
         edit.ensure_unchanged()?;
-        ensure_source_unchanged(paths, &source, edit.previous.storage.is_jsonl())?;
-        let (imported, skipped) = if options.import_jsonl {
-            storage.import_records(&records, true).await?
+        ensure_source_unchanged(paths, &fingerprint, edit.previous.storage.is_jsonl())?;
+        let (imported, skipped) = if options.import_jsonl
+            && let Some(snapshot) = source.take()
+        {
+            storage.import_snapshot(snapshot, true).await?
         } else {
             (0, 0)
         };
@@ -161,7 +161,7 @@ pub async fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
     let (storage, imported, skipped) = destination_result.context(
         "setup did not switch configuration; destination schema/project may remain. Source JSONL is unchanged by setup",
     )?;
-    ensure_source_unchanged(paths, &source, edit.previous.storage.is_jsonl())
+    ensure_source_unchanged(paths, &fingerprint, edit.previous.storage.is_jsonl())
         .context("configuration not switched; imported destination records may remain, so reconcile before retrying")?;
     if changed {
         edit.commit().context("could not finish configuration switch; keep the config backup and source JSONL, inspect config before retrying; destination data may remain")?;
@@ -176,20 +176,12 @@ pub async fn run(paths: &ProjectPaths, options: Options) -> Result<()> {
     Ok(())
 }
 
-fn read_optional(path: &Path) -> Result<Option<Vec<u8>>> {
-    match fs::read(path) {
-        Ok(bytes) => Ok(Some(bytes)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error).context("could not read source JSONL history"),
-    }
-}
-
 fn ensure_source_unchanged(
     paths: &ProjectPaths,
-    original: &Option<Vec<u8>>,
+    original: &Option<[u8; 32]>,
     check: bool,
 ) -> Result<()> {
-    if check && &read_optional(&paths.runs)? != original {
+    if check && &source_fingerprint(&paths.runs)? != original {
         bail!("source JSONL changed during setup; stop all writers before retrying");
     }
     Ok(())
@@ -316,7 +308,10 @@ mod tests {
         assert!(ensure_source_unchanged(&paths, &None, true).is_ok());
         fs::write(&paths.runs, b"changed").unwrap();
         assert!(ensure_source_unchanged(&paths, &None, true).is_err());
-        assert!(ensure_source_unchanged(&paths, &Some(b"original".to_vec()), true).is_err());
+        let original = source_fingerprint(&paths.runs).unwrap();
+        assert!(ensure_source_unchanged(&paths, &original, true).is_ok());
+        fs::write(&paths.runs, b"Changed").unwrap();
+        assert!(ensure_source_unchanged(&paths, &original, true).is_err());
     }
 
     #[test]

@@ -115,7 +115,10 @@ async fn contract(postgres: bool) {
         .execute(&mut *writer)
         .await
         .unwrap();
-    let checked = tokio::time::timeout(std::time::Duration::from_secs(2), f.storage.check_deep())
+    // This asserts lock independence, not throughput. The writer remains held
+    // until the read succeeds, so allowing a loaded CI runner more time cannot
+    // hide a diagnostic that waits for that writer to release its lock.
+    let checked = tokio::time::timeout(std::time::Duration::from_secs(30), f.storage.check_deep())
         .await
         .unwrap()
         .unwrap();

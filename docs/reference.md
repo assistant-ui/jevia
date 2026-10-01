@@ -981,7 +981,13 @@ jevia storage check
 jevia stats
 ```
 
-The first command previews without creating files or contacting a database.
+The first command previews without changing project files or contacting a database.
+Guided SQLite and PostgreSQL setup stream history into a private temporary
+snapshot that is removed on close. Memory scales with the largest record and
+the set of run IDs needed to detect duplicates, rather than the entire history.
+Apply imports only that validated snapshot and rechecks a streaming SHA-256
+fingerprint of the original bytes before import and before switching config.
+This detects source changes; it does not replace the requirement to stop writers.
 Without `--path`, SQLite uses `.jevia/jevia.db`. `--path` accepts another
 project-relative or absolute local file; relative paths are resolved from the
 discovered project root even when invoked from a subdirectory. Protect and ignore

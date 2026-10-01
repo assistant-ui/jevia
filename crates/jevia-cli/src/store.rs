@@ -138,6 +138,7 @@ fn read_records_until(
 }
 
 /// Parse already-captured bytes without opening a file or creating a sidecar lock.
+#[cfg(test)]
 pub fn parse_snapshot(path: &Path, bytes: &[u8]) -> Result<Vec<RouteRecord>> {
     let mut records = Vec::new();
     read_records_from(bytes, path, |record| {

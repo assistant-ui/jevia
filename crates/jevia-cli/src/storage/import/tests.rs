@@ -38,6 +38,11 @@ fn snapshot_streams_large_records_and_does_not_reopen_the_source() {
     })
     .unwrap();
     let snapshot = Snapshot::capture(&source).unwrap();
+    assert_eq!(snapshot.count, 405);
+    assert_eq!(
+        Some(snapshot.fingerprint),
+        source_fingerprint(&source).unwrap()
+    );
     #[cfg(unix)]
     {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -58,6 +63,38 @@ fn snapshot_streams_large_records_and_does_not_reopen_the_source() {
         assert_eq!(records.next().unwrap().unwrap(), record(index));
     }
     assert!(records.next().is_none());
+}
+
+#[test]
+fn setup_snapshot_is_read_only_and_fingerprints_raw_source_bytes() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("runs.jsonl");
+    assert!(Snapshot::capture_optional(&source).unwrap().is_none());
+    assert_eq!(source_fingerprint(&source).unwrap(), None);
+    fs::write(&source, b"").unwrap();
+    let empty = Snapshot::capture_optional(&source).unwrap().unwrap();
+    assert_eq!(empty.count, 0);
+    assert_eq!(empty.fingerprint, <[u8; 32]>::from(Sha256::digest(b"")));
+    let raw = format!(" \r\n{}\r\n", serde_json::to_string(&record(0)).unwrap());
+    fs::write(&source, &raw).unwrap();
+    let snapshot = Snapshot::capture_optional(&source).unwrap().unwrap();
+    assert_eq!(snapshot.count, 1);
+    assert_eq!(
+        snapshot.fingerprint,
+        <[u8; 32]>::from(Sha256::digest(raw.as_bytes()))
+    );
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    fs::write(&source, raw.replace(" \r\n", "\t\r\n")).unwrap();
+    assert_ne!(
+        Some(snapshot.fingerprint),
+        source_fingerprint(&source).unwrap()
+    );
+    assert_eq!(snapshot.records().next().unwrap().unwrap(), record(0));
+    fs::write(&source, "private-invalid").unwrap();
+    let error = Snapshot::capture_optional(&source).err().unwrap();
+    assert!(!format!("{error:#}").contains("private-invalid"));
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    assert!(Snapshot::capture_optional(dir.path()).is_err());
 }
 
 #[test]
