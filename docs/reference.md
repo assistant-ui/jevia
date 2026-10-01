@@ -104,7 +104,10 @@ remain supported). No feedback or extra verification is needed for these metrics
 
 CLI 0.1.6 `jevia run` enables native capture automatically for supported direct
 executables (including `.exe` names). It probes `--version` with a two-second
-deadline before adding a session-local adapter. No user/project harness config is
+deadline before adding a session-local adapter. Probes own a process group/job,
+accept at most 256 bytes of successful UTF-8 output, and stop descendants on
+failure, timeout, or cancellation. Failed probes allow up to one additional
+second for cleanup and never expose captured output. No user/project config is
 rewritten. Set `observations = "off"` to disable native capture; process recording
 stays on. Other harnesses, including Gemini, retain process facts only.
 
