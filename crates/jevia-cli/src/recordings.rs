@@ -2,7 +2,7 @@
 use crate::{paths::ProjectPaths, storage::Storage};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
-use jevia_core::{ObservationSource, RunState};
+use jevia_core::{HarnessObservations, ObservationSource, RunState};
 use serde::Serialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -45,6 +45,9 @@ struct Report {
     moved: usize,
     retained: BTreeMap<&'static str, usize>,
     archive: Option<PathBuf>,
+    #[cfg(test)]
+    #[serde(skip)]
+    history_reads: usize,
 }
 
 struct Artifact {
@@ -90,6 +93,8 @@ fn scan(directory: &Path) -> Result<Scan> {
             moved: 0,
             retained: BTreeMap::new(),
             archive: None,
+            #[cfg(test)]
+            history_reads: 0,
         },
         files: vec![],
         journals: BTreeSet::new(),
@@ -163,18 +168,10 @@ fn read_regular(path: &Path) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-async fn eligible(
-    file: &Artifact,
+async fn saved_observations(
+    id: &str,
     storage: &Storage,
-    journals: &BTreeSet<String>,
-) -> std::result::Result<Vec<u8>, &'static str> {
-    if matches!(file.kind, "journal" | "loss_marker") {
-        return Err("replay_source");
-    }
-    let id = file.owner.as_ref().ok_or("unknown_ownership")?;
-    if journals.contains(id) {
-        return Err("pending_journal_or_marker");
-    }
+) -> std::result::Result<HarnessObservations, &'static str> {
     let record = storage
         .get_for_replay(id)
         .await
@@ -183,16 +180,22 @@ async fn eligible(
     if state.is_active() || state == RunState::Routed {
         return Err("active_or_pending_run");
     }
-    let observations = record
+    record
         .execution
         .and_then(|e| e.observations)
-        .ok_or("missing_saved_observations")?;
+        .ok_or("missing_saved_observations")
+}
+
+fn eligible(
+    file: &Artifact,
+    observations: &HarnessObservations,
+) -> std::result::Result<Vec<u8>, &'static str> {
     let bytes = read_regular(&file.path).map_err(|_| "unsafe_or_unreadable_file")?;
     let matches = if file.kind == "plugin" {
         observations.source == Some(ObservationSource::OpencodePlugin)
             && bytes == include_bytes!("observations/opencode.mjs")
     } else {
-        crate::observations::checkpoint_matches(&bytes, &observations)
+        crate::observations::checkpoint_matches(&bytes, observations)
     };
     if !matches {
         return Err("contents_not_known_saved");
@@ -236,6 +239,13 @@ async fn cleanup(paths: &ProjectPaths, storage: &Storage, apply: bool) -> Result
     // Keep one lease across all artifacts of a run, including SQL session locks
     // whose connection shutdown may complete asynchronously after drop.
     let mut run_guard: Option<(String, crate::storage::ExecutionGuard)> = None;
+    // Sorted owners let us retain just one run's validated snapshot, rather than
+    // rereading the complete JSONL history for every artifact. On apply this
+    // snapshot is loaded under the run lease, held until its last artifact.
+    let mut saved: Option<(
+        String,
+        std::result::Result<HarnessObservations, &'static str>,
+    )> = None;
     for file in &plan.files {
         // Never acquire leases or query storage for artifacts we cannot move.
         let retain = if matches!(file.kind, "journal" | "loss_marker") {
@@ -272,7 +282,27 @@ async fn cleanup(paths: &ProjectPaths, storage: &Storage, apply: bool) -> Result
         } else {
             &plan.journals
         };
-        match eligible(file, storage, journals).await {
+        let id = file.owner.as_ref().expect("owned auxiliary artifact");
+        if journals.contains(id) {
+            *plan
+                .report
+                .retained
+                .entry("pending_journal_or_marker")
+                .or_default() += 1;
+            continue;
+        }
+        if saved.as_ref().is_none_or(|(owner, _)| owner != id) {
+            saved = Some((id.clone(), saved_observations(id, storage).await));
+            #[cfg(test)]
+            {
+                plan.report.history_reads += 1;
+            }
+        }
+        let result = match &saved.as_ref().expect("loaded run snapshot").1 {
+            Ok(observations) => eligible(file, observations),
+            Err(reason) => Err(*reason),
+        };
+        match result {
             Err(reason) => *plan.report.retained.entry(reason).or_default() += 1,
             Ok(bytes) => {
                 plan.report.eligible += 1;
