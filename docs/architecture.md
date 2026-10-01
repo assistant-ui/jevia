@@ -260,8 +260,11 @@ or contended inputs remain for retry or inspection. Read-only `runs show` and
 `stats` do not trigger replay.
 
 Each replay attempt has one two-second budget covering scanning, locking,
-reading, and persistence, with caps of 4,096 scanned directory entries and 128
-candidate runs. Work can be deferred; this is not an unbounded repair job or a
+reading, and persistence. A complete directory enumeration selects only the next
+128 owners in cursor order, retaining at most two paths per owner to detect
+duplicates. There is no fixed entry-count cutoff; an incomplete/expired scan
+still defers all work. Explicit recording maintenance inventories all names.
+Work can be deferred; this is not an unbounded repair job or a
 guarantee that the entire route command completes in two seconds. The budget
 bounds awaiting replay, not cancellation of an already-running filesystem
 operation. Required history reads, cache coordination, provider requests, and

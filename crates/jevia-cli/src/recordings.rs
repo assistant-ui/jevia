@@ -11,7 +11,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const SCAN_LIMIT: usize = 4096;
 const FILE_LIMIT: u64 = 512 * 1024;
 
 #[derive(Debug, Subcommand)]
@@ -99,11 +98,9 @@ fn scan(directory: &Path) -> Result<Scan> {
         files: vec![],
         journals: BTreeSet::new(),
     };
-    for (index, entry) in fs::read_dir(directory)?.take(SCAN_LIMIT + 1).enumerate() {
-        if index == SCAN_LIMIT {
-            result.report.scan_complete = false;
-            break;
-        }
+    // Explicit maintenance inventories the complete directory. Payload reads
+    // remain bounded; unrelated entries no longer disable recovery/cleanup.
+    for entry in fs::read_dir(directory)? {
         let entry = entry?;
         result.report.scanned_entries += 1;
         let name = entry.file_name();

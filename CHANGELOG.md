@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Recover recording directories beyond 4,096 entries using complete scans and
+  bounded rotating replay windows; retain ambiguous inputs and stabilize the
+  replay fairness test independently of filesystem timing.
 - Own native version-probe process trees, reject oversized output, and stop
   descendants on timeout or cancellation without exposing probe output.
 - Validate passive-history index predicates in read-only SQLite/PostgreSQL
