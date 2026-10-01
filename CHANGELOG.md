@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Own native version-probe process trees, reject oversized output, and stop
+  descendants on timeout or cancellation without exposing probe output.
 - Validate passive-history index predicates in read-only SQLite/PostgreSQL
   diagnostics; unexpected definitions report unavailable without being replaced.
 - Reuse one validated run snapshot across recording-cleanup artifacts with the
