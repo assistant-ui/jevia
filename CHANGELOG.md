@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Limit Jev routing responses to 1 MiB, including chunked and unknown-length
+  bodies; reject oversized responses without storing a decision or exposing data.
 - Back off cache coordination lock polling without repeatedly scanning history;
   reload evidence after waiting so concurrent feedback still informs routing.
 

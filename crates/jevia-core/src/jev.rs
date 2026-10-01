@@ -13,6 +13,9 @@ use uuid::Uuid;
 
 use crate::{Config, DecisionSource, JevConfig, RouteDecision, RouteRecord};
 
+// Routing responses are small classification results, not generated content.
+const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+
 /// Minimal Jev HTTP client. The API key is intentionally excluded from Debug,
 /// errors, and serialized values.
 pub struct JevClient {
@@ -71,9 +74,29 @@ impl JevClient {
             return Err(JevError::ApiStatus(status.as_u16()));
         }
 
-        let body = response.bytes().await?;
+        let body = read_response(response).await?;
         decode_decision(&body, config)
     }
+}
+
+async fn read_response(mut response: reqwest::Response) -> Result<Vec<u8>, JevError> {
+    let too_large = || JevError::Request("response exceeds 1 MiB limit");
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+    {
+        return Err(too_large());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        // Also bound chunked/unknown-length responses. Do not reserve from an
+        // untrusted header or retain a chunk that crosses the cumulative limit.
+        if chunk.len() > MAX_RESPONSE_BYTES - body.len() {
+            return Err(too_large());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 /// Hash every input that can change a routing decision without persisting task
