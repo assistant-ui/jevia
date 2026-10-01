@@ -37,7 +37,7 @@ async function migrateAndVerify(t, target, env) {
   await writeFile(historyPath, history);
   const before = await readdir(join(cwd, ".jevia"));
   const preview = await client.setupStorage(target, { importJsonl: true });
-  assert.match(preview, /No files changed or database connection attempted/);
+  assert.match(preview, /No project files changed or database connection attempted/);
   assert.equal(await readFile(configPath, "utf8"), config);
   assert.deepEqual(await readdir(join(cwd, ".jevia")), before);
   await assert.rejects(client.setupStorage(target, { apply: true, confirmStopped: true }), JeviaCommandError);
@@ -71,7 +71,7 @@ test("failed setup preserves config and does not expose database credentials", a
   const secret = "PRIVATE_DATABASE_SENTINEL";
   const { client, config, configPath } = await fixture(t, { SDK_TEST_DB: `invalid://${secret}` });
   const target = { backend: "postgres", project: "sdk-test", urlEnv: "SDK_TEST_DB" };
-  assert.match(await client.setupStorage(target), /No files changed or database connection attempted/);
+  assert.match(await client.setupStorage(target), /No project files changed or database connection attempted/);
   await assert.rejects(client.setupStorage(target, { apply: true, confirmStopped: true }), (error) => {
     assert.ok(error instanceof JeviaCommandError);
     assert.ok(!inspect(error).includes(secret));
