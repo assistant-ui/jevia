@@ -165,14 +165,9 @@ fn read_regular(path: &Path) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-async fn saved_observations(
-    id: &str,
-    storage: &Storage,
+fn saved_observations(
+    record: jevia_core::RouteRecord,
 ) -> std::result::Result<HarnessObservations, &'static str> {
-    let record = storage
-        .get_for_replay(id)
-        .await
-        .map_err(|_| "history_unavailable_or_missing")?;
     let state = record.lifecycle.ok_or("unknown_lifecycle")?.state;
     if state.is_active() || state == RunState::Routed {
         return Err("active_or_pending_run");
@@ -182,6 +177,9 @@ async fn saved_observations(
         .and_then(|e| e.observations)
         .ok_or("missing_saved_observations")
 }
+
+mod history;
+use history::HistoryBatch;
 
 fn eligible(
     file: &Artifact,
@@ -233,17 +231,11 @@ async fn cleanup(paths: &ProjectPaths, storage: &Storage, apply: bool) -> Result
     }
     plan.files
         .sort_by(|a, b| a.owner.cmp(&b.owner).then(a.path.cmp(&b.path)));
-    // Keep one lease across all artifacts of a run, including SQL session locks
-    // whose connection shutdown may complete asynchronously after drop.
-    let mut run_guard: Option<(String, crate::storage::ExecutionGuard)> = None;
-    // Sorted owners let us retain just one run's validated snapshot, rather than
-    // rereading the complete JSONL history for every artifact. On apply this
-    // snapshot is loaded under the run lease, held until its last artifact.
-    let mut saved: Option<(
-        String,
-        std::result::Result<HarnessObservations, &'static str>,
-    )> = None;
-    for file in &plan.files {
+    // JSONL scans once per bounded owner batch. SQL already has indexed point
+    // lookups; retain one owner/connection there. Apply leases cover the entire
+    // batch snapshot and all moves; no history lock is held during filesystem work.
+    let mut batch = HistoryBatch::default();
+    for (index, file) in plan.files.iter().enumerate() {
         // Never acquire leases or query storage for artifacts we cannot move.
         let retain = if matches!(file.kind, "journal" | "loss_marker") {
             Some("replay_source")
@@ -256,18 +248,34 @@ async fn cleanup(paths: &ProjectPaths, storage: &Storage, apply: bool) -> Result
             *plan.report.retained.entry(reason).or_default() += 1;
             continue;
         }
-        if apply
-            && let Some(id) = &file.owner
-            && run_guard.as_ref().is_none_or(|(owner, _)| owner != id)
-        {
-            drop(run_guard.take());
-            match storage.execution_guard(id).await {
-                Ok(lease) => run_guard = Some((id.clone(), lease)),
-                Err(_) => {
-                    *plan.report.retained.entry("execution_busy").or_default() += 1;
-                    continue;
+        let id = file.owner.as_ref().expect("owned auxiliary artifact");
+        if !batch.saved.contains_key(id) {
+            let limit = if matches!(storage, Storage::Jsonl(_)) {
+                crate::store::LOOKUP_BATCH_SIZE
+            } else {
+                1
+            };
+            let mut ids = BTreeSet::new();
+            for candidate in &plan.files[index..] {
+                if !matches!(candidate.kind, "journal" | "loss_marker")
+                    && let Some(owner) = &candidate.owner
+                {
+                    ids.insert(owner.clone());
+                    if ids.len() == limit {
+                        break;
+                    }
                 }
             }
+            drop(std::mem::take(&mut batch));
+            batch = HistoryBatch::load(storage, ids, apply).await;
+            #[cfg(test)]
+            {
+                plan.report.history_reads += batch.reads;
+            }
+        }
+        if matches!(batch.saved.get(id), Some(Err("execution_busy"))) {
+            *plan.report.retained.entry("execution_busy").or_default() += 1;
+            continue;
         }
         let refreshed;
         let journals = if apply {
@@ -279,7 +287,6 @@ async fn cleanup(paths: &ProjectPaths, storage: &Storage, apply: bool) -> Result
         } else {
             &plan.journals
         };
-        let id = file.owner.as_ref().expect("owned auxiliary artifact");
         if journals.contains(id) {
             *plan
                 .report
@@ -288,14 +295,7 @@ async fn cleanup(paths: &ProjectPaths, storage: &Storage, apply: bool) -> Result
                 .or_default() += 1;
             continue;
         }
-        if saved.as_ref().is_none_or(|(owner, _)| owner != id) {
-            saved = Some((id.clone(), saved_observations(id, storage).await));
-            #[cfg(test)]
-            {
-                plan.report.history_reads += 1;
-            }
-        }
-        let result = match &saved.as_ref().expect("loaded run snapshot").1 {
+        let result = match batch.saved.get(id).expect("loaded owner batch") {
             Ok(observations) => eligible(file, observations),
             Err(reason) => Err(*reason),
         };

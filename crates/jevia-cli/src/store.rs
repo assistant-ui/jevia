@@ -21,7 +21,7 @@ pub(crate) use maintenance::archivable;
 pub use maintenance::{Maintenance, Report as MaintenanceReport, maintain};
 
 mod lookup;
-pub use lookup::{get, try_get, try_get_until};
+pub use lookup::{LOOKUP_BATCH_SIZE, get, try_get, try_get_many, try_get_until};
 
 mod rewrite;
 use rewrite::update_unlocked;

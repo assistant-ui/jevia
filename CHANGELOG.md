@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Batch JSONL recording-cleanup history lookups across up to 32 owners, keeping
+  execution leases, complete-stream validation, and per-artifact safety checks.
 - Recover recording directories beyond 4,096 entries using complete scans and
   bounded rotating replay windows; retain ambiguous inputs and stabilize the
   replay fairness test independently of filesystem timing.
