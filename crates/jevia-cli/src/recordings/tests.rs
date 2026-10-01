@@ -275,19 +275,24 @@ async fn linked_files_and_archive_directory_are_rejected() {
 }
 
 #[tokio::test]
-async fn truncated_scan_cannot_apply_partial_cleanup() {
+async fn large_directory_cleanup_inventories_all_names() {
     let f = Fixture::new(StorageConfig::Jsonl).await;
     f.storage.append(&f.record).await.unwrap();
     let plugin = f.plugin();
-    for i in 0..SCAN_LIMIT {
+    for i in 0..5000 {
         fs::write(f.paths.directory.join(format!("unrelated-{i}")), "").unwrap();
     }
     let inspected = scan(&f.paths.directory).unwrap();
-    assert!(!inspected.report.scan_complete);
-    assert_eq!(inspected.report.scanned_entries, SCAN_LIMIT);
-    assert!(cleanup(&f.paths, &f.storage, true).await.is_err());
+    assert!(inspected.report.scan_complete);
+    assert!(inspected.report.scanned_entries > 5000);
+    let marker = f.file("jevia-events-", ".loss", b"retained");
+    assert_eq!(cleanup(&f.paths, &f.storage, true).await.unwrap().moved, 0);
     assert!(plugin.exists());
-    assert!(!f.paths.directory.join("recording-archives").exists());
+    fs::remove_file(marker).unwrap();
+    let report = cleanup(&f.paths, &f.storage, true).await.unwrap();
+    assert_eq!(report.moved, 1);
+    assert!(!plugin.exists());
+    assert!(report.archive.unwrap().is_dir());
 }
 
 #[test]
@@ -307,7 +312,7 @@ fn auxiliary_prefix_retains_only_valid_journal_ownership() {
 }
 
 #[tokio::test]
-async fn cleanup_reads_history_once_per_owner_but_checks_every_artifact() {
+async fn cleanup_batches_jsonl_owners_but_checks_every_artifact() {
     for backend in local_backends() {
         let mut f = Fixture::new(backend).await;
         for _ in 0..2 {
@@ -329,11 +334,16 @@ async fn cleanup_reads_history_once_per_owner_but_checks_every_artifact() {
             f.file("jevia-observer-", "-unknown.mjs", b"PRIVATE unknown plugin");
         }
         let preview = cleanup(&f.paths, &f.storage, false).await.unwrap();
-        assert_eq!(preview.history_reads, 2);
+        let reads = if matches!(f.storage, Storage::Jsonl(_)) {
+            1
+        } else {
+            2
+        };
+        assert_eq!(preview.history_reads, reads);
         assert_eq!(preview.eligible, 40);
         assert_eq!(preview.retained["contents_not_known_saved"], 2);
         let applied = cleanup(&f.paths, &f.storage, true).await.unwrap();
-        assert_eq!(applied.history_reads, 2);
+        assert_eq!(applied.history_reads, reads);
         assert_eq!(applied.moved, 40);
         assert_eq!(applied.retained["contents_not_known_saved"], 2);
         assert_eq!(f.storage.check_deep().await.unwrap(), 2);
@@ -359,4 +369,36 @@ async fn cached_lookup_failure_never_permits_cleanup() {
         assert_eq!(report.retained["history_unavailable_or_missing"], 2);
         assert!(plugin.exists() && checkpoint.exists());
     }
+}
+
+#[tokio::test]
+async fn cleanup_bounds_batches_and_holds_each_selected_owner_lease() {
+    let mut f = Fixture::new(StorageConfig::Jsonl).await;
+    let mut ids = Vec::new();
+    for index in 0..65 {
+        f.record.decision.run_id = format!("00000000-0000-0000-0000-{index:012x}");
+        ids.push(f.record.decision.run_id.clone());
+        f.storage.append(&f.record).await.unwrap();
+        f.plugin();
+    }
+    let preview = cleanup(&f.paths, &f.storage, false).await.unwrap();
+    assert_eq!(preview.history_reads, 3);
+    assert_eq!(preview.eligible, 65);
+    let held = f.storage.execution_guard(&ids[10]).await.unwrap();
+    let batch_ids = ids[..32].iter().cloned().collect();
+    let batch = HistoryBatch::load(&f.storage, batch_ids, true).await;
+    assert!(matches!(batch.saved[&ids[10]], Err("execution_busy")));
+    assert!(f.storage.execution_guard(&ids[0]).await.is_err());
+    assert_eq!(batch.saved.len(), 32);
+    drop(batch);
+    assert!(f.storage.execution_guard(&ids[0]).await.is_ok());
+    let applied = cleanup(&f.paths, &f.storage, true).await.unwrap();
+    assert_eq!(applied.history_reads, 3);
+    assert_eq!(applied.moved, 64);
+    assert_eq!(applied.retained["execution_busy"], 1);
+    drop(held);
+    let last = cleanup(&f.paths, &f.storage, true).await.unwrap();
+    assert_eq!(last.moved, 1);
+    assert_eq!(last.history_reads, 1);
+    assert_eq!(f.storage.check_deep().await.unwrap(), 65);
 }

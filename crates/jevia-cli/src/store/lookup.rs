@@ -1,4 +1,32 @@
 use super::*;
+use std::collections::{BTreeMap, BTreeSet};
+
+pub const LOOKUP_BATCH_SIZE: usize = 32;
+
+/// One fully validated snapshot for a bounded group of cleanup owners. Missing
+/// IDs stay absent; duplicate IDs retain the existing first-match semantics.
+pub fn try_get_many(path: &Path, ids: &BTreeSet<String>) -> Result<BTreeMap<String, RouteRecord>> {
+    if ids.len() > LOOKUP_BATCH_SIZE {
+        bail!("history lookup batch is too large");
+    }
+    if ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let lock = private_lock_options().open(path.with_extension("lock"))?;
+    lock.try_lock_shared()
+        .context("history busy; cleanup deferred")?;
+    let _guard = crate::lease::FileLock::new(lock);
+    let mut found = BTreeMap::new();
+    read_records(path, |record| {
+        if ids.contains(&record.decision.run_id) {
+            found
+                .entry(record.decision.run_id.clone())
+                .or_insert(record);
+        }
+        Ok(())
+    })?;
+    Ok(found)
+}
 
 /// Keep only the requested record, but validate the entire shared-lock snapshot.
 pub fn get(path: &Path, id: &str) -> Result<RouteRecord> {
@@ -58,6 +86,36 @@ mod tests {
             "confidence": 0.9, "probabilities": {}, "fallback_applied": false, "jev_model": "test",
             "created_at_ms": id, "task": "private 🦀", "outcome": "unknown"
         })).unwrap()
+    }
+
+    #[test]
+    fn batch_lookup_is_bounded_validates_the_tail_and_keeps_first_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("runs.jsonl");
+        let first = record(0);
+        let mut duplicate = first.clone();
+        duplicate.task = Some("later".into());
+        let raw = [first.clone(), record(1), duplicate]
+            .iter()
+            .map(|r| serde_json::to_string(r).unwrap() + "\n")
+            .collect::<String>();
+        fs::write(&path, &raw).unwrap();
+        let ids = ["run-0".to_owned(), "missing".to_owned()]
+            .into_iter()
+            .collect();
+        let found = try_get_many(&path, &ids).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found["run-0"], first);
+        let oversized = (0..=LOOKUP_BATCH_SIZE)
+            .map(|i| format!("run-{i}"))
+            .collect();
+        assert!(try_get_many(&path, &oversized).is_err());
+        let held = acquire_lock(&path, LockMode::Exclusive).unwrap();
+        assert!(try_get_many(&path, &ids).is_err());
+        drop(held);
+        fs::write(&path, format!("{raw}PRIVATE invalid tail")).unwrap();
+        let error = try_get_many(&path, &ids).unwrap_err();
+        assert!(!format!("{error:#}").contains("PRIVATE"));
     }
 
     #[test]

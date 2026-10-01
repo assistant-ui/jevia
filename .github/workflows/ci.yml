@@ -158,7 +158,9 @@ jobs:
           toolchain: 1.92.0
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Test PostgreSQL contracts and complete CLI flow
-        run: cargo test --locked -p jevia postgres -- --ignored
+        # Tests share tables and some create temporary indexes. Unique project
+        # IDs do not isolate DDL locks or query plans from those index changes.
+        run: cargo test --locked -p jevia postgres -- --ignored --test-threads=1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
           version: 10.9.0
