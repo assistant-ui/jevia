@@ -305,6 +305,10 @@ Jevia closes that loop:
 
 The application owns the policy. Jev supplies a structured decision signal.
 
+Jev routing responses are limited to 1 MiB, including chunked responses and
+responses without a content-length header. An oversized response fails safely
+without caching a decision or recording a routed run. Request timeouts still apply.
+
 ## Quick start
 
 Use the copyable installer on the [Jevia landing page](https://jevia.dev). It

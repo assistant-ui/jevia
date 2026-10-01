@@ -4,6 +4,10 @@
 
 - Reuse one validated run snapshot across recording-cleanup artifacts with the
   same owner, retaining per-file safety checks and execution leases on apply.
+- Limit Jev routing responses to 1 MiB, including chunked and unknown-length
+  bodies; reject oversized responses without storing a decision or exposing data.
+- Back off cache coordination lock polling without repeatedly scanning history;
+  reload evidence after waiting so concurrent feedback still informs routing.
 
 ## 0.1.7 — 2026-09-30
 

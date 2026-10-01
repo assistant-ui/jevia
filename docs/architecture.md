@@ -192,7 +192,9 @@ corruption is reported without rewriting the file; `jevia cache clear` is the
 explicit recovery operation.
 
 On a cache miss, a bounded set of 256 stable OS-lock stripes coordinates live
-requests across processes. A lease covers the live request and cache insertion,
+requests across processes. Waiters poll only the lease with capped backoff and
+reload history after waiting, preserving fresh feedback without repeated full
+history scans during contention. A lease covers the live request and cache insertion,
 not global history/cache locks. Waiters reload evidence and recheck the cache;
 changed evidence selects a new fingerprint. Waits are bounded (Jev timeout plus
 one second, capped at 30 seconds), then fail open to live routing. API failures
