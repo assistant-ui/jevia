@@ -12,6 +12,41 @@ fn cli(root: &Path) -> Command {
     command
 }
 
+#[test]
+#[cfg(unix)]
+fn setup_and_checks_reject_fifo_history_without_waiting_for_a_writer() {
+    use std::{process::Command as Process, time::Duration};
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let path = dir.path().join(".jevia/runs.jsonl");
+    assert!(
+        Process::new("mkfifo")
+            .arg(&path)
+            .status()
+            .unwrap()
+            .success()
+    );
+    for args in [
+        vec!["storage", "setup", "sqlite"],
+        vec!["storage", "check"],
+        vec!["storage", "check", "--deep"],
+    ] {
+        cli(dir.path())
+            .timeout(Duration::from_secs(5))
+            .args(args)
+            .assert()
+            .failure();
+        assert!(
+            std::fs::symlink_metadata(&path)
+                .unwrap()
+                .file_type()
+                .is_fifo()
+        );
+    }
+    use std::os::unix::fs::FileTypeExt;
+    assert!(!dir.path().join(".jevia/jevia.db").exists());
+}
+
 fn init(root: &Path) -> String {
     cli(root).arg("init").assert().success();
     let mut config = Config::default();
