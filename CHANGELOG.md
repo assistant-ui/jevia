@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reuse one validated run snapshot across recording-cleanup artifacts with the
+  same owner, retaining per-file safety checks and execution leases on apply.
+
 ## 0.1.7 — 2026-09-30
 
 - Refresh the locked `yoke-derive` patch dependency to 0.8.4, replacing the
