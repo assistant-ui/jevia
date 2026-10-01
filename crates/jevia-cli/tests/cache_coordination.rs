@@ -392,6 +392,64 @@ fn busy_lease_has_a_bounded_wait_and_falls_back_to_live() {
     assert_eq!(server.requests.load(Ordering::SeqCst), 1);
 }
 
+#[test]
+fn feedback_during_coordination_is_reloaded_after_release_or_expiry() {
+    use sha2::{Digest, Sha256};
+    for expire in [false, true] {
+        let root = tempdir().unwrap();
+        let server = Server::new(false);
+        server.configure(root.path());
+        edit_config(root.path(), |config| config.jev.timeout_ms = 1000);
+        let directory = root.path().join(".jevia/cache-leases");
+        fs::create_dir_all(&directory).unwrap();
+        // Hold all stripes so changed evidence cannot accidentally avoid waiting.
+        let mut guards = Vec::new();
+        for stripe in 0..256 {
+            let key = format!("{stripe:02x}");
+            let name = Sha256::digest(key.as_bytes())
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            let guard = fs::File::create(directory.join(format!("{name}.lock"))).unwrap();
+            guard.lock().unwrap();
+            guards.push(guard);
+        }
+        let child = route_with_options(root.path(), false, true);
+        thread::sleep(Duration::from_millis(100));
+        assert_eq!(server.requests.load(Ordering::SeqCst), 0);
+        let feedback = serde_json::json!({
+            "schema_version":6, "run_id":"feedback-during-wait", "tier":"fast",
+            "suggested_tier":"fast", "confidence":0.9, "probabilities":{},
+            "fallback_applied":false, "jev_model":"fixture", "created_at_ms":1,
+            "task":null, "outcome":"success", "lifecycle":{"state":"completed"},
+            "outcome_evidence":{"source":"manual", "recorded_at_ms":1}
+        });
+        let history_lock = fs::File::create(root.path().join(".jevia/runs.lock")).unwrap();
+        history_lock.lock().unwrap();
+        fs::write(
+            root.path().join(".jevia/runs.jsonl"),
+            format!("{feedback}\n"),
+        )
+        .unwrap();
+        history_lock.unlock().unwrap();
+        if !expire {
+            for guard in &guards {
+                guard.unlock().unwrap();
+            }
+        }
+        let output = wait_bounded(child);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(*server.evidence_counts.lock().unwrap(), [1]);
+        if expire {
+            assert!(String::from_utf8_lossy(&output.stderr).contains("coordination=timed_out"));
+        }
+    }
+}
+
 fn explained(root: &Path, bypass: bool) -> (serde_json::Value, String) {
     let output = route_with_options(root, bypass, true)
         .wait_with_output()

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Back off cache coordination lock polling without repeatedly scanning history;
+  reload evidence after waiting so concurrent feedback still informs routing.
+
 ## 0.1.7 — 2026-09-30
 
 - Refresh the locked `yoke-derive` patch dependency to 0.8.4, replacing the
