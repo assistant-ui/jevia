@@ -207,8 +207,10 @@ remain available for later events. Read-only `stats`/`runs show` do not replay.
 `runs recover` also replays after its existing lifecycle safety checks (including
 PostgreSQL's `--confirm-stopped`). Journals are removed only after terminal
 persistence; corrupt, ambiguous, or unavailable journals are retained for inspection.
-Replay scans at most 4,096 directory entries/128 candidate runs per invocation,
-with a two-second total budget before routing; it is not an unbounded repair job.
+Replay retains at most 128 candidate runs (two journal names per run suffice to
+detect ambiguity), with a two-second total budget before routing. It enumerates
+the complete directory before acting, without a fixed directory-entry ceiling;
+this is not an unbounded repair job.
 The same budget applies to recovery replay. Busy journal/history locks are skipped
 immediately, not waited on once per journal; an expired attempt retains its files
 for a later invocation. File scanning and journal/history reads run off the async
@@ -217,9 +219,9 @@ Since CLI 0.1.7, a private atomic cursor in `.jevia/replay-state/`
 rotates this candidate window between invocations, including past busy, corrupt,
 or ambiguous attempts. Concurrent replay passes do not race the cursor; explicit
 `runs recover <id>` does not move it. The two-second budget still applies.
-Incomplete directory scans (including more than 4,096 entries) defer replay
+Incomplete directory scans (including a read error or exhausted budget) defer replay
 without deleting anything, because an unseen duplicate could make a journal
-ambiguous. Oversized directories require inspection/maintenance; the cursor is
+ambiguous. Slow directories may still require explicit inspection/maintenance; the cursor is
 not an unbounded background repair service or a guarantee against slow storage.
 Routing receives bounded event counts and model summaries, not session IDs/raw events.
 
@@ -1383,10 +1385,12 @@ jevia recordings cleanup --apply --confirm-stopped --json
 checkpoint filenames. It does not read their payloads, parse configuration or
 history, contact providers/databases, replay events, or change files. It reports
 aggregate counts, not run IDs or event data. Project discovery still requires a
-`.jevia/config.toml` file. Scans stop at 4,096 directory entries (including
-unrelated files); incomplete inspection reports `scan_complete: false` and exits
-nonzero. Cleanup refuses an incomplete scan before moving anything; a very large
-directory needs manual inspection, not repeated partial cleanup.
+`.jevia/config.toml` file. Explicit inspection/cleanup inventories all directory
+entries, including directories larger than 4,096 names. Unrelated names are not
+retained in memory; inventory memory scales with artifact filenames, not payloads.
+A read error aborts rather than treating a partial inventory as complete. Apply
+still refreshes the complete journal/marker inventory before each move. These
+operator-requested commands do not use automatic replay's two-second budget.
 
 `cleanup` without `--apply` is an advisory preview using the configured JSONL,
 SQLite, or PostgreSQL history. It may open normal storage/locking sidecars, but

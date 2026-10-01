@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Recover recording directories beyond 4,096 entries using complete scans and
+  bounded rotating replay windows; retain ambiguous inputs and stabilize the
+  replay fairness test independently of filesystem timing.
 - Validate passive-history index predicates in read-only SQLite/PostgreSQL
   diagnostics; unexpected definitions report unavailable without being replaced.
 - Reuse one validated run snapshot across recording-cleanup artifacts with the

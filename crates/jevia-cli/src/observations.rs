@@ -262,17 +262,17 @@ async fn replay_with_budget(
 fn replay_candidates(
     directory: &Path,
     only: Option<&str>,
+    after: Option<&str>,
     deadline: std::time::Instant,
-) -> Result<std::collections::BTreeMap<String, Vec<PathBuf>>> {
-    let mut candidates = std::collections::BTreeMap::<String, Vec<PathBuf>>::new();
+) -> Result<Vec<(String, Vec<PathBuf>)>> {
+    // Keep only the first 128 owners in cursor order, but enumerate ALL names
+    // before returning. An unseen duplicate must never look like a unique run.
+    let mut candidates = std::collections::BTreeMap::<(bool, String), Vec<PathBuf>>::new();
     if std::time::Instant::now() >= deadline {
-        return Ok(candidates);
+        bail!("replay scan budget exhausted");
     }
     let entries = fs::read_dir(directory)?;
-    for (index, entry) in entries.take(4097).enumerate() {
-        if index == 4096 {
-            bail!("recording directory scan limit reached; replay deferred");
-        }
+    for entry in entries {
         let entry = entry?;
         if std::time::Instant::now() >= deadline {
             bail!("replay scan budget exhausted");
@@ -295,9 +295,29 @@ fn replay_candidates(
         {
             continue;
         }
-        candidates.entry(id.into()).or_default().push(entry.path());
+        let key = (after.is_some_and(|after| id <= after), id.to_owned());
+        if candidates.len() == 128
+            && candidates
+                .last_key_value()
+                .is_some_and(|(last, _)| &key > last)
+        {
+            continue;
+        }
+        let files = candidates.entry(key).or_default();
+        if files.len() < 2 {
+            files.push(entry.path()); // Two names suffice to prove ambiguity.
+        }
+        if candidates.len() > 128 {
+            candidates.pop_last();
+        }
     }
-    Ok(candidates)
+    if std::time::Instant::now() >= deadline {
+        bail!("replay scan budget exhausted");
+    }
+    Ok(candidates
+        .into_iter()
+        .map(|((_, id), files)| (id, files))
+        .collect())
 }
 
 async fn replay_until(
@@ -309,19 +329,18 @@ async fn replay_until(
     let directory = paths.directory.clone();
     let only = only.map(str::to_owned);
     let Ok(Ok((mut candidates, cursor))) = tokio::task::spawn_blocking(move || {
-        let candidates = replay_candidates(&directory, only.as_deref(), deadline)?;
-        let cursor = if only.is_none() && !candidates.is_empty() {
+        let cursor = if only.is_none() {
             Some(std::sync::Arc::new(cursor::Cursor::open(&directory)?))
         } else {
             None
         };
-        let mut candidates: Vec<_> = candidates.into_iter().collect();
-        if let Some(cursor) = &cursor
-            && let Some(after) = cursor.read()?
-        {
-            let next = candidates.partition_point(|(id, _)| id <= &after);
-            candidates.rotate_left(next);
-        }
+        let after = cursor
+            .as_ref()
+            .map(|cursor| cursor.read())
+            .transpose()?
+            .flatten();
+        let candidates =
+            replay_candidates(&directory, only.as_deref(), after.as_deref(), deadline)?;
         Ok::<_, anyhow::Error>((candidates, cursor))
     })
     .await
