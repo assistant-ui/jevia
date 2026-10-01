@@ -275,19 +275,24 @@ async fn linked_files_and_archive_directory_are_rejected() {
 }
 
 #[tokio::test]
-async fn truncated_scan_cannot_apply_partial_cleanup() {
+async fn large_directory_cleanup_inventories_all_names() {
     let f = Fixture::new(StorageConfig::Jsonl).await;
     f.storage.append(&f.record).await.unwrap();
     let plugin = f.plugin();
-    for i in 0..SCAN_LIMIT {
+    for i in 0..5000 {
         fs::write(f.paths.directory.join(format!("unrelated-{i}")), "").unwrap();
     }
     let inspected = scan(&f.paths.directory).unwrap();
-    assert!(!inspected.report.scan_complete);
-    assert_eq!(inspected.report.scanned_entries, SCAN_LIMIT);
-    assert!(cleanup(&f.paths, &f.storage, true).await.is_err());
+    assert!(inspected.report.scan_complete);
+    assert!(inspected.report.scanned_entries > 5000);
+    let marker = f.file("jevia-events-", ".loss", b"retained");
+    assert_eq!(cleanup(&f.paths, &f.storage, true).await.unwrap().moved, 0);
     assert!(plugin.exists());
-    assert!(!f.paths.directory.join("recording-archives").exists());
+    fs::remove_file(marker).unwrap();
+    let report = cleanup(&f.paths, &f.storage, true).await.unwrap();
+    assert_eq!(report.moved, 1);
+    assert!(!plugin.exists());
+    assert!(report.archive.unwrap().is_dir());
 }
 
 #[test]

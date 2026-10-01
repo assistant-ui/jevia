@@ -4,6 +4,11 @@
 
 - Batch JSONL recording-cleanup history lookups across up to 32 owners, keeping
   execution leases, complete-stream validation, and per-artifact safety checks.
+- Recover recording directories beyond 4,096 entries using complete scans and
+  bounded rotating replay windows; retain ambiguous inputs and stabilize the
+  replay fairness test independently of filesystem timing.
+- Own native version-probe process trees, reject oversized output, and stop
+  descendants on timeout or cancellation without exposing probe output.
 - Validate passive-history index predicates in read-only SQLite/PostgreSQL
   diagnostics; unexpected definitions report unavailable without being replaced.
 - Reuse one validated run snapshot across recording-cleanup artifacts with the

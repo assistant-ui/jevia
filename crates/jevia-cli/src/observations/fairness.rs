@@ -44,10 +44,15 @@ async fn corrupt_prefix_cannot_starve_a_later_valid_journal() {
         totals: None,
     };
     save_journal(&target, observations.clone()).unwrap();
-    replay(&paths, &storage, None).await;
+    for index in 0..5000 {
+        fs::write(paths.directory.join(format!("unrelated-{index}")), "").unwrap();
+    }
+    // Test candidate rotation independently of host scheduling/IO speed. The
+    // production two-second deadline has separate expiry/retention contracts.
+    replay_with_budget(&paths, &storage, None, Duration::from_secs(30)).await;
     assert!(target.exists());
     // Cursor survives a new invocation; no corrupt file has to be deleted first.
-    replay(&paths, &storage, None).await;
+    replay_with_budget(&paths, &storage, None, Duration::from_secs(30)).await;
     assert!(!target.exists());
     let saved = storage.get(id).await.unwrap();
     assert_eq!(
@@ -80,19 +85,54 @@ async fn corrupt_prefix_cannot_starve_a_later_valid_journal() {
 }
 
 #[test]
-fn incomplete_directory_scans_never_treat_a_partial_set_as_unambiguous() {
+fn large_directory_scans_keep_bounded_windows_and_find_late_duplicates() {
     let dir = tempfile::tempdir().unwrap();
-    for index in 0..4097 {
+    for index in 0..5000 {
         fs::write(dir.path().join(format!("unrelated-{index}")), "").unwrap();
     }
-    assert!(
+    for index in (0..300).rev() {
+        fs::write(
+            dir.path().join(format!(
+                "jevia-events-00000000-0000-0000-0000-{index:012x}-a.jsonl"
+            )),
+            "",
+        )
+        .unwrap();
+    }
+    let id = "00000000-0000-0000-0000-000000000001";
+    for suffix in ["b", "c"] {
+        fs::write(
+            dir.path().join(format!("jevia-events-{id}-{suffix}.jsonl")),
+            "",
+        )
+        .unwrap();
+    }
+    let scan = |after| {
         replay_candidates(
             dir.path(),
             None,
-            std::time::Instant::now() + Duration::from_secs(10)
+            after,
+            std::time::Instant::now() + Duration::from_secs(30),
         )
-        .is_err()
-    );
+        .unwrap()
+    };
+    let first = scan(None);
+    assert_eq!(first.len(), 128);
+    assert_eq!(first[1].1.len(), 2);
+    let next = scan(Some(&first.last().unwrap().0));
+    assert_eq!(next[0].0, "00000000-0000-0000-0000-000000000080");
+    let wrapped = scan(Some("ffffffff-ffff-ffff-ffff-ffffffffffff"));
+    assert_eq!(wrapped, first);
+    let targeted = replay_candidates(
+        dir.path(),
+        Some(id),
+        None,
+        std::time::Instant::now() + Duration::from_secs(30),
+    )
+    .unwrap();
+    assert_eq!(targeted.len(), 1);
+    assert_eq!(targeted[0].1.len(), 2);
+    assert!(replay_candidates(dir.path(), None, None, std::time::Instant::now()).is_err());
 }
 
 #[test]
