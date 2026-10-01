@@ -90,8 +90,7 @@ pub fn export(path: &Path, mut output: impl Write) -> Result<usize> {
     let _lock = acquire_lock(path, LockMode::Shared)?;
     let mut count = 0;
     read_records(path, |record| {
-        serde_json::to_writer(&mut output, &record)?;
-        output.write_all(b"\n")?;
+        output.write_all(&crate::jsonl::encode(&record)?)?;
         count += 1;
         Ok(())
     })?;
@@ -204,8 +203,7 @@ pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
         .parent()
         .context("run history path does not have a parent directory")?;
     fs::create_dir_all(parent).with_context(|| format!("could not create {}", parent.display()))?;
-    let mut encoded = serde_json::to_vec(record).context("could not encode run record")?;
-    encoded.push(b'\n');
+    let mut encoded = crate::jsonl::encode(record)?;
 
     let _lock = acquire_lock(path, LockMode::Exclusive)?;
     let mut file = private_append_options()

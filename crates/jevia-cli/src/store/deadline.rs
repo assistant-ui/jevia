@@ -15,29 +15,7 @@ pub(super) fn read_line_until(
     line: &mut Vec<u8>,
     deadline: Option<Instant>,
 ) -> Result<bool> {
-    line.clear();
-    if deadline.is_none() {
-        return reader
-            .read_until(b'\n', line)
-            .map(|count| count != 0)
-            .context("could not read run history");
-    }
-    loop {
-        check_deadline(deadline)?;
-        let bytes = reader.fill_buf().context("could not read run history")?;
-        check_deadline(deadline)?;
-        if bytes.is_empty() {
-            return Ok(!line.is_empty());
-        }
-        let bytes = &bytes[..bytes.len().min(64 * 1024)];
-        let newline = bytes.iter().position(|byte| *byte == b'\n');
-        let count = newline.map_or(bytes.len(), |position| position + 1);
-        line.extend_from_slice(&bytes[..count]);
-        reader.consume(count);
-        if newline.is_some() {
-            return Ok(true);
-        }
-    }
+    crate::jsonl::read_line(reader, line, || check_deadline(deadline))
 }
 
 #[cfg(test)]

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bound streaming history, import, health, and cache JSONL lines to 8 MiB;
+  reject oversized records without truncation or publishing partial rewrites.
 - Stream guided database setup through private validated snapshots and raw-source
   fingerprints, preserving read-only previews and configuration-last switching.
 - Batch JSONL recording-cleanup history lookups across up to 32 owners, keeping
