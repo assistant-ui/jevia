@@ -972,7 +972,8 @@ the selected backend. These options require v0.1.2 or newer.
 ### SQLite: local database, no server
 
 Streaming JSONL history, health checks, imports, and cache reads accept at most
-8 MiB per physical line (including its newline). Oversized lines fail with a
+8 MiB per physical line (including its newline; an unterminated final line must
+leave one byte for that newline). Oversized lines fail with a
 redacted error and are never truncated or skipped. JSONL appends and rewrites
 also reject oversized output before publication. Existing oversized history
 must be inspected and reduced explicitly; this does not bound the total memory

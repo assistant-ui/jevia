@@ -14,6 +14,12 @@ pub fn read_line(
         let bytes = reader.fill_buf().context("could not read JSONL input")?;
         check()?;
         if bytes.is_empty() {
+            // Reserve the newline an append would add to an unterminated tail.
+            if line.len() == MAX_LINE_BYTES {
+                bail!(
+                    "unterminated JSONL line leaves no room within 8 MiB for a newline; input retained"
+                );
+            }
             return Ok(!line.is_empty());
         }
         let bytes = &bytes[..bytes.len().min(64 * 1024)];
@@ -92,14 +98,19 @@ mod tests {
         assert!(crate::store::append(&path, &record).is_err());
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert!(encode(&record).is_err());
+        let mut tail = serde_json::to_vec(&crate::tests::sample_record()).unwrap();
+        tail.resize(MAX_LINE_BYTES, b' ');
+        std::fs::write(&path, &tail).unwrap();
+        assert!(crate::store::append(&path, &crate::tests::sample_record()).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), tail);
     }
     #[test]
     fn physical_line_limit_covers_newline_eof_and_whitespace() {
         for ending in ["", "\n"] {
-            let raw = " ".repeat(MAX_LINE_BYTES - ending.len()) + ending;
+            let raw = " ".repeat(MAX_LINE_BYTES - 1) + ending;
             assert_eq!(
                 lines(raw.as_bytes()).next().unwrap().unwrap().len(),
-                MAX_LINE_BYTES
+                MAX_LINE_BYTES - 1 + ending.len()
             );
             let raw = " ".repeat(MAX_LINE_BYTES) + "x" + ending;
             let mut lines = lines(raw.as_bytes());
