@@ -212,7 +212,11 @@ jevia harness health opencode --require-events
 ```
 
 `--require-events` exits nonzero when no matching execution exists or its capture
-is empty, unavailable, disabled, unsupported, or partial. With `--json`, the
+is empty, unavailable, disabled, unsupported, or partial. The saved recording must
+also identify a native source (`claude_hooks`, `codex_hooks`, or `opencode_plugin`);
+application/SDK events and records without a source do not satisfy this check.
+SDK recording and feedback remain optional, and recorded application history
+continues to inform routing. With `--json`, the
 report schema stays unchanged: `ok` describes reading the report, while the exit
 status additionally enforces the event requirement. This checks the latest saved
 execution, not the current configuration, a fresh launch, all possible event

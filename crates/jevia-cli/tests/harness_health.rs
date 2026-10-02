@@ -119,6 +119,67 @@ fn recording_health_is_bounded_redacted_and_does_not_replay_or_launch() {
         .args(["harness", "health", "codex", "--require-events"])
         .assert()
         .success();
+    // The saved source, not a harness label or today's configuration, establishes
+    // native provenance. SDK recordings remain readable and are never rewritten.
+    for source in [
+        Some(ObservationSource::Application),
+        Some(ObservationSource::ClaudeHooks),
+        Some(ObservationSource::CodexHooks),
+        Some(ObservationSource::OpencodePlugin),
+    ] {
+        record
+            .execution
+            .as_mut()
+            .unwrap()
+            .observations
+            .as_mut()
+            .unwrap()
+            .source = source;
+        let saved = serde_json::to_vec(&record).unwrap();
+        fs::write(paths.join("runs.jsonl"), &saved).unwrap();
+        cli(dir.path())
+            .args(["harness", "health", "codex", "--json"])
+            .assert()
+            .success();
+        let native = source.is_some() && source != Some(ObservationSource::Application);
+        for json in [false, true] {
+            let mut command = cli(dir.path());
+            command.args(["harness", "health", "codex", "--require-events"]);
+            if json {
+                command.arg("--json");
+            }
+            let assertion = command.assert();
+            let assertion = if native {
+                assertion.success()
+            } else {
+                assertion.failure()
+            };
+            let stdout = String::from_utf8_lossy(&assertion.get_output().stdout);
+            if native {
+                assert!(stdout.contains("Native events were received"));
+            } else {
+                assert!(!stdout.contains("Native events were received"));
+                assert!(stdout.contains("do not confirm native harness capture"));
+            }
+            if json {
+                let report: Value = serde_json::from_str(&stdout).unwrap();
+                assert_eq!(report["ok"], true);
+                assert_eq!(
+                    report["latest"]["source"],
+                    serde_json::to_value(source).unwrap()
+                );
+            }
+        }
+        assert_eq!(fs::read(paths.join("runs.jsonl")).unwrap(), saved);
+    }
+    record
+        .execution
+        .as_mut()
+        .unwrap()
+        .observations
+        .as_mut()
+        .unwrap()
+        .source = Some(ObservationSource::CodexHooks);
     for status in [ObservationStatus::NoEvents, ObservationStatus::Partial] {
         record
             .execution
