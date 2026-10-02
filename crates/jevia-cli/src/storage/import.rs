@@ -54,9 +54,7 @@ impl Snapshot {
             for record in read_records(BufReader::new(&mut reader)) {
                 let record = record?;
                 validator.check(&record)?;
-                serde_json::to_writer(&mut writer, &record)
-                    .context("could not write import snapshot")?;
-                writer.write_all(b"\n")?;
+                writer.write_all(&crate::jsonl::encode(&record)?)?;
                 count += 1;
             }
             writer.flush().context("could not flush import snapshot")?;
@@ -104,27 +102,29 @@ pub(crate) fn source_fingerprint(path: &Path) -> Result<Option<[u8; 32]>> {
 }
 
 fn read_records(reader: impl BufRead) -> impl Iterator<Item = Result<RouteRecord>> {
-    reader.lines().enumerate().filter_map(|(index, line)| {
-        let line = match line {
-            Ok(line) => line,
-            Err(_) => {
-                return Some(Err(anyhow!(
-                    "could not read import record on line {} (contents redacted)",
-                    index + 1
-                )));
+    crate::jsonl::lines(reader)
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let line = match line {
+                Ok(line) => line,
+                Err(_) => {
+                    return Some(Err(anyhow!(
+                        "could not read import record on line {} (contents redacted)",
+                        index + 1
+                    )));
+                }
+            };
+            if line.trim().is_empty() {
+                return None;
             }
-        };
-        if line.trim().is_empty() {
-            return None;
-        }
-        // Serde errors may quote private enum values; do not retain their source.
-        Some(serde_json::from_str(&line).map_err(|_| {
-            anyhow!(
-                "invalid import record on line {} (contents redacted)",
-                index + 1
-            )
-        }))
-    })
+            // Serde errors may quote private enum values; do not retain their source.
+            Some(serde_json::from_str(&line).map_err(|_| {
+                anyhow!(
+                    "invalid import record on line {} (contents redacted)",
+                    index + 1
+                )
+            }))
+        })
 }
 
 #[derive(Default)]

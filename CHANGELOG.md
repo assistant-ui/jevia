@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bound streaming history, import, health, and cache JSONL lines to 8 MiB;
+  reject oversized records without truncation or publishing partial rewrites.
 - Reject special history inputs without waiting for FIFO writers, including
   setup snapshots, source rechecks, imports, and history health reads.
 - Stream guided database setup through private validated snapshots and raw-source

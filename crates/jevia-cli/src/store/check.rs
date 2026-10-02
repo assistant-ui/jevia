@@ -1,8 +1,4 @@
-use std::{
-    collections::HashSet,
-    io::{BufRead, BufReader},
-    path::Path,
-};
+use std::{collections::HashSet, io::BufReader, path::Path};
 
 use anyhow::{Context, Result, anyhow, bail};
 use jevia_core::{RECORD_SCHEMA_VERSION, RouteRecord};
@@ -40,7 +36,7 @@ pub fn check_deep(path: &Path) -> Result<usize> {
         return Ok(0);
     };
     let mut ids = HashSet::new();
-    for (index, line) in BufReader::new(file).lines().enumerate() {
+    for (index, line) in crate::jsonl::lines(BufReader::new(file)).enumerate() {
         let position = index + 1;
         let line = line.with_context(|| format!("could not read history line {position}"))?;
         if line.trim().is_empty() {

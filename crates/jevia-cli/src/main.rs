@@ -4,6 +4,7 @@ mod diagnostics;
 mod explain;
 mod file_lock;
 mod harness;
+mod jsonl;
 mod lease;
 mod local_ignore;
 mod observations;
