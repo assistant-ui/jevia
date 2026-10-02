@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Skip recording-cleanup rescans for ineligible artifacts; retain fresh,
+  allocation-light replay-source checks before every possible archive move.
 - Bound streaming history, import, health, and cache JSONL lines to 8 MiB;
   reject oversized records without truncation or publishing partial rewrites.
 - Reject special history inputs without waiting for FIFO writers, including
