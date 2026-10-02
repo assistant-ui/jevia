@@ -16,6 +16,7 @@ const OPENCODE_EVENTS: &[&str] = &[
     "Stop",
     "StopFailure",
     "PostToolUse",
+    "PostToolUseFailure",
     "SubagentStart",
     "ModelObserved",
 ];
@@ -57,8 +58,10 @@ pub(super) fn conflicts(source: ObservationSource, args: &[String]) -> bool {
                 })
         }
         ObservationSource::OpencodePlugin => args.iter().any(|a| {
-            matches!(a.as_str(), "--attach" | "attach" | "serve" | "web")
-                || a.starts_with("--attach=")
+            matches!(
+                a.as_str(),
+                "--attach" | "attach" | "serve" | "web" | "--pure"
+            ) || a.starts_with("--attach=")
         }),
     }
 }
@@ -137,8 +140,15 @@ pub(super) fn install(
             );
             result.args.push("--no-daemon".into());
             for event in CODEX_EVENTS {
+                // Cold process startup can exceed two seconds on a busy host.
+                // Codex caps SessionEnd/Interrupt at three seconds.
+                let timeout = if matches!(*event, "SessionEnd" | "Interrupt") {
+                    3
+                } else {
+                    5
+                };
                 let value = format!(
-                    "hooks.{event}=[{{hooks=[{{type=\"command\",command={},timeout=2}}]}}]",
+                    "hooks.{event}=[{{hooks=[{{type=\"command\",command={},timeout={timeout}}}]}}]",
                     serde_json::to_string(&command)?
                 );
                 result.args.extend(["-c".into(), value]);
@@ -361,7 +371,7 @@ mod tests {
         ] {
             assert!(conflicts(ObservationSource::CodexHooks, &[arg.into()]));
         }
-        for arg in ["attach", "serve", "--attach=http://host"] {
+        for arg in ["attach", "serve", "--attach=http://host", "--pure"] {
             assert!(conflicts(ObservationSource::OpencodePlugin, &[arg.into()]));
         }
     }
@@ -439,6 +449,11 @@ mod tests {
             config.parse::<toml_edit::DocumentMut>().unwrap();
             assert!(!config.contains("--journal"));
             assert!(!config.contains("bypass"));
+            if config.starts_with("hooks.SessionEnd=") || config.starts_with("hooks.Interrupt=") {
+                assert!(config.contains("timeout=3"));
+            } else {
+                assert!(config.contains("timeout=5"));
+            }
         }
     }
 }

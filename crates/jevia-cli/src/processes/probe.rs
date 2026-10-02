@@ -17,20 +17,20 @@ impl Drop for ProbeTree {
     }
 }
 
-pub async fn version_output(program: &str, root: &Path) -> Option<String> {
+pub async fn version_output(program: &str, root: &Path, budget: Duration) -> Option<String> {
     // Cold native launchers can take longer than two seconds on a busy host.
     // Keep the probe bounded without treating ordinary startup as unsupported.
-    output(program, &["--version"], root, Duration::from_secs(5)).await
+    output(program, &["--version"], root, budget).await
 }
 
 async fn output(program: &str, args: &[&str], root: &Path, budget: Duration) -> Option<String> {
     let mut command = CommandWrap::with_new(program, |command| {
         command
             .args(args)
-            .current_dir(root)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
+        set_working_directory(command, root);
     });
     command.wrap(KillOnDrop);
     #[cfg(unix)]
@@ -78,7 +78,7 @@ mod tests {
     async fn native_probe_accepts_success_and_rejects_failure_and_excess_output() {
         let dir = tempfile::tempdir().unwrap();
         assert!(
-            version_output("rustc", dir.path())
+            version_output("rustc", dir.path(), Duration::from_secs(5))
                 .await
                 .unwrap()
                 .starts_with("rustc ")

@@ -11,6 +11,11 @@ use std::{
 mod probe;
 pub use probe::version_output;
 
+fn set_working_directory(command: &mut tokio::process::Command, root: &Path) {
+    // Keep native launchers using PWD aligned with the actual child directory.
+    command.current_dir(root).env("PWD", root);
+}
+
 #[derive(Debug)]
 pub enum ProcessResult {
     Exited(ExitStatus),
@@ -125,14 +130,10 @@ impl Runner {
         timeout: Option<Duration>,
     ) -> Result<ProcessResult> {
         if !self.supervised {
-            return Ok(ProcessResult::Exited(
-                tokio::process::Command::new(program)
-                    .args(args)
-                    .envs(self.environment.iter().cloned())
-                    .current_dir(root)
-                    .status()
-                    .await?,
-            ));
+            let mut command = tokio::process::Command::new(program);
+            command.args(args).envs(self.environment.iter().cloned());
+            set_working_directory(&mut command, root);
+            return Ok(ProcessResult::Exited(command.status().await?));
         }
         let signals = self
             .signals
@@ -198,8 +199,9 @@ async fn supervise_with_ci(
         _ = std::future::ready(()) => {}
     }
     let mut command = CommandWrap::with_new(program, |command| {
-        command.args(args).current_dir(root).stdin(Stdio::null());
+        command.args(args).stdin(Stdio::null());
         command.envs(environment.iter().cloned());
+        set_working_directory(command, root);
         if ci {
             command.env("CI", "true");
         }
@@ -263,6 +265,24 @@ async fn supervise_with_ci(
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn child_directory_overrides_a_stale_inherited_pwd() {
+        let root = tempfile::tempdir().unwrap();
+        let mut command = tokio::process::Command::new("never-executed");
+        command.env("PWD", "/stale-parent-directory");
+        set_working_directory(&mut command, root.path());
+        assert_eq!(command.as_std().get_current_dir(), Some(root.path()));
+        assert_eq!(
+            command
+                .as_std()
+                .get_envs()
+                .find(|(key, _)| *key == "PWD")
+                .unwrap()
+                .1,
+            Some(root.path().as_os_str())
+        );
+    }
 
     #[tokio::test]
     async fn denied_group_probe_waits_until_absence_is_confirmed() {

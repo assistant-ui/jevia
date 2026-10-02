@@ -100,12 +100,20 @@ or `runs complete` step is needed. Extra verification is opt-in: a process exit
 remains an observed fact, not proof of task success. Existing explicitly enabled
 checks are preserved. See the [automatic CLI pipeline](docs/reference.md#automatic-cli-pipeline).
 
-CLI 0.1.6 native capture supports Claude Code 2.1.251+, tested Codex 0.158.x
+Current source supports Claude Code 2.x >= 2.1.212, tested Codex 0.158.x
 on macOS/Linux, and OpenCode v1 >= 1.18.33. Codex hooks require normal `/hooks`
 trust review. It records reported models and tool/turn activity without storing
 prompts or tool contents. Unsupported versions/remote sessions keep process facts.
 Coverage is best-effort, not a claim that every model attempt or successful fix is
 known. See [native capture limits](docs/reference.md#native-harness-observations).
+
+For the unreleased capture fixes, build this source first. Preview Codex's
+one-time hook review with `jevia harness review codex`, then add `--launch` to
+review it interactively. After a real run, `jevia harness health codex
+--require-events` fails if the latest stored native capture is absent or partial.
+The [live smoke check](docs/reference.md#opt-in-live-capture-check) tests actual
+providers and preserves its recordings; it does not treat an exit code as proof
+that events were captured. Older published binaries have different version gates.
 
 Harness and verifier processes are launched directly without shell
 interpolation. Credentials remain in the environment instead of the project

@@ -428,6 +428,12 @@ for (const source of ["codex_hooks", "opencode_plugin"]) {
           await hooks['chat.message']({ sessionID: 'private-native-session', model: { providerID: 'private', modelID: 'do-not-attribute' } }, { message: 'PRIVATE_PROMPT' });
           await hooks['chat.params']({ sessionID: 'private-native-session', model: { providerID: 'provider', id: 'observed-native' }, message: 'PRIVATE_PROMPT' }, {});
           await hooks['tool.execute.after']({ sessionID: 'private-native-session', tool: 'bash', args: 'PRIVATE_COMMAND' }, { output: 'PRIVATE_OUTPUT' });
+          const failure = { event: { type: 'message.part.updated', properties: { part: {
+            id: 'part_failure', sessionID: 'private-native-session', type: 'tool', tool: 'read',
+            state: { status: 'error', error: 'PRIVATE_ERROR', input: 'PRIVATE_INPUT' },
+          } } } };
+          await hooks.event(failure);
+          await hooks.event(failure); // repeated updates are one operational fact
           await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'private-native-session' } } });
           await hooks.event({ event: { type: 'session.error', properties: { sessionID: 'private-native-session', error: 'PRIVATE_ERROR' } } });
           // Repeated streaming updates are not counted as independent attempts.
@@ -453,8 +459,9 @@ for (const source of ["codex_hooks", "opencode_plugin"]) {
         const facts = record.execution.observations;
         assert.equal(facts.source, source);
         assert.equal(facts.status, "recorded");
-        assert.equal(facts.events.length, 6);
+        assert.equal(facts.events.length, source === "codex_hooks" ? 6 : 7);
         assert.equal(facts.totals.event_counts.tool_completed, 1);
+        assert.equal(facts.totals.event_counts.tool_failed, source === "codex_hooks" ? undefined : 1);
         assert.equal(facts.totals.event_counts.tool_succeeded, undefined);
         assert.ok(!JSON.stringify(record).includes("PRIVATE_"));
         await client.route(`after native ${supervised}`);

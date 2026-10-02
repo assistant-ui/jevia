@@ -35,6 +35,21 @@ fn recording_health_is_bounded_redacted_and_does_not_replay_or_launch() {
         ])
         .assert()
         .success();
+    // Review is a read-only preview unless the user explicitly requests launch.
+    let before_review = fs::read(dir.path().join(".jevia/config.toml")).unwrap();
+    cli(dir.path())
+        .args(["harness", "review", "codex"])
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read(dir.path().join(".jevia/config.toml")).unwrap(),
+        before_review
+    );
+    assert!(!dir.path().join(".jevia/runs.jsonl").exists());
+    cli(dir.path())
+        .args(["harness", "review", "codex", "--launch"])
+        .assert()
+        .failure();
     let paths = dir.path().join(".jevia");
     let mut config =
         Config::from_toml(&fs::read_to_string(paths.join("config.toml")).unwrap()).unwrap();
@@ -100,6 +115,30 @@ fn recording_health_is_bounded_redacted_and_does_not_replay_or_launch() {
     assert_eq!(report["latest"]["event_count"], 300);
     assert_eq!(report["latest"]["last_sampled_event_at_ms"], 300);
     assert_eq!(report["latest"]["sampled"], true);
+    cli(dir.path())
+        .args(["harness", "health", "codex", "--require-events"])
+        .assert()
+        .success();
+    for status in [ObservationStatus::NoEvents, ObservationStatus::Partial] {
+        record
+            .execution
+            .as_mut()
+            .unwrap()
+            .observations
+            .as_mut()
+            .unwrap()
+            .status = status;
+        fs::write(
+            paths.join("runs.jsonl"),
+            serde_json::to_vec(&record).unwrap(),
+        )
+        .unwrap();
+        cli(dir.path())
+            .args(["harness", "health", "codex", "--json", "--require-events"])
+            .assert()
+            .failure();
+    }
+    fs::write(paths.join("runs.jsonl"), &history).unwrap();
     assert_eq!(fs::read(paths.join("runs.jsonl")).unwrap(), history);
     assert_eq!(fs::read_to_string(journal).unwrap(), "PRIVATE journal");
     fs::write(paths.join("runs.jsonl"), b"PRIVATE corrupt history").unwrap();
@@ -116,6 +155,10 @@ fn recording_health_is_bounded_redacted_and_does_not_replay_or_launch() {
         "storage_unavailable"
     );
     fs::write(paths.join("runs.jsonl"), b"").unwrap();
+    cli(dir.path())
+        .args(["harness", "health", "codex", "--require-events"])
+        .assert()
+        .failure();
     let empty = cli(dir.path())
         .args(["harness", "health", "codex", "--json"])
         .assert()

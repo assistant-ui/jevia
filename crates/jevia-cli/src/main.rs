@@ -56,7 +56,7 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
-    /// Configure or inspect coding-agent harness adapters without launching them.
+    /// Configure, inspect, or explicitly launch a native hook-review session.
     Harness {
         #[command(subcommand)]
         action: harness::Action,

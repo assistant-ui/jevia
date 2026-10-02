@@ -83,7 +83,7 @@ pub fn warn_missing_events(observations: &HarnessObservations) {
         );
         if observations.source == Some(ObservationSource::CodexHooks) {
             eprintln!(
-                "jevia: review Jevia hooks with /hooks in Codex; hook trust or policy may prevent capture. Jevia does not bypass trust automatically"
+                "jevia: use `jevia harness review <name> --launch` for the standard Codex preset, then review /hooks; hook trust or policy may prevent capture. Jevia does not bypass trust automatically"
             );
         }
     } else if observations.status == Status::Partial {
@@ -153,7 +153,7 @@ impl Capture {
                 }
                 None => {
                     eprintln!(
-                        "jevia: native observations unavailable: version probe failed or exceeded its five-second deadline; retry or check the harness executable; process recording remains active"
+                        "jevia: native observations unavailable: version probe failed or exceeded its startup deadline; retry or check the harness executable; process recording remains active"
                     );
                     return capture;
                 }
@@ -470,7 +470,14 @@ async fn replay_until(
 }
 
 async fn supported_version(program: &str, root: &Path, source: ObservationSource) -> Option<bool> {
-    crate::processes::version_output(program, root)
+    // The npm-distributed OpenCode launcher took ~8s on a real cold macOS run.
+    // Keep a hard deadline, without mistaking launcher startup for incompatibility.
+    let budget = Duration::from_secs(if source == ObservationSource::OpencodePlugin {
+        15
+    } else {
+        5
+    });
+    crate::processes::version_output(program, root, budget)
         .await
         .map(|text| adapters::version_supported(source, &text))
 }
