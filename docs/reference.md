@@ -1,5 +1,16 @@
 # Jevia reference
 
+## CLI 0.1.8: native capture and storage safety
+
+CLI 0.1.8 fixes live Claude capture, adds preview-first Codex hook review and
+`harness health --require-events`, and improves native startup and OpenCode
+tool-failure recording. It also rejects special history inputs, bounds JSONL
+records and provider responses, and improves recovery and cleanup performance.
+Record schema 6, SQL schema 1, and recording/verification defaults are unchanged.
+Node SDK 0.1.3 remains compatible; no SDK upgrade is needed for these CLI fixes.
+Back up oversized history before explicit maintenance: streamed JSONL physical
+lines are now limited to 8 MiB and are never silently skipped or truncated.
+
 ## CLI 0.1.7: storage, replay, and diagnostics
 
 CLI 0.1.7 adds bounded-memory JSONL updates, consistent routing snapshots,
@@ -102,7 +113,7 @@ remain supported). No feedback or extra verification is needed for these metrics
 
 ### Native harness observations
 
-CLI 0.1.6 `jevia run` enables native capture automatically for supported direct
+CLI 0.1.8 `jevia run` enables native capture automatically for supported direct
 executables (including `.exe` names). It probes `--version` with a five-second
 deadline (15 seconds for the slower OpenCode launcher) before adding a session-local adapter. Probes own a process group/job,
 accept at most 256 bytes of successful UTF-8 output, and stop descendants on
@@ -187,10 +198,12 @@ the configured project directory for probes, interactive, and supervised runs.
 
 #### Before a demo
 
-Build this source with `cargo build --release -p jevia` and use that exact binary
-(the smoke script defaults to `target/release/jevia`). A previously installed CLI
-does not gain unreleased fixes automatically. Complete Codex's hook review, run
-a small real task, and then check the **saved** event coverage:
+Install CLI 0.1.8 with `cargo install jevia --version 0.1.8 --locked` and confirm
+`jevia --version`. Alternatively, build this source with
+`cargo build --release -p jevia`. The smoke script defaults to
+`target/release/jevia`; set `JEVIA_TEST_BINARY` to the absolute installed binary
+path to test that copy. Complete Codex's hook review with the same binary, run a
+small real task, and then check the **saved** event coverage:
 
 ```bash
 jevia harness health codex --require-events
@@ -421,7 +434,7 @@ PostgreSQL storage checks do connect to the configured database.
 To install the exact crates.io release with Rust 1.92 or newer:
 
 ```bash
-cargo install jevia --version 0.1.7 --locked
+cargo install jevia --version 0.1.8 --locked
 ```
 
 To try unreleased development changes instead:

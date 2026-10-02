@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.8 — 2026-10-02
+
 - Add a preview-first Codex hook-review session without bypassing native trust,
   and `harness health --require-events` for checking saved capture coverage.
 - Give Codex hooks bounded cold-start headroom and OpenCode's launcher a
@@ -41,6 +43,24 @@
   bodies; reject oversized responses without storing a decision or exposing data.
 - Back off cache coordination lock polling without repeatedly scanning history;
   reload evidence after waiting so concurrent feedback still informs routing.
+
+### Compatibility and upgrade
+
+Record schema 6, SQL schema 1, configuration, and the public Rust core API are
+unchanged from 0.1.7. Node SDK 0.1.3 remains compatible and is not republished.
+Recording/history reuse stay automatic; feedback and extra verification remain
+optional. Rust 1.92 and Node.js 20 remain the minimum supported versions.
+
+Back up history before maintenance. Existing JSONL lines over 8 MiB now require
+explicit inspection and reduction; oversized records are never silently skipped
+or truncated. Jev response bodies are limited to 1 MiB.
+
+Codex hook trust still requires explicit user review. Real-provider capture was
+observed for Claude, Codex, and OpenCode, but the successful Codex live test used
+an approved one-run trust bypass, not the ordinary persisted-trust flow. Jevia
+never injects that bypass automatically. Unsupported harnesses remain process-only.
+Saved activity and `health --require-events` do not prove task correctness or a
+fresh run's capture coverage.
 
 ## 0.1.7 — 2026-09-30
 

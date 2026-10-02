@@ -19,7 +19,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 process-wrap = { version = "10.0.1", features = ["tokio1"] }
 clap.workspace = true
-jevia-core = { version = "0.1.7", path = "../jevia-core" }
+jevia-core = { version = "0.1.8", path = "../jevia-core" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

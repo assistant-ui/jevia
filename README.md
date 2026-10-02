@@ -8,7 +8,8 @@ Use it with Claude Code, Codex, OpenCode, Gemini CLI, Cursor Agent, or a custom
 harness. Recording does not require extra tests or manual feedback; it is not tied
 to one programming language, model provider, or agent runtime.
 
-> CLI/core 0.1.7 and Node SDK 0.1.3 add storage and recovery improvements.
+> CLI/core 0.1.8 improves native recording, storage safety, and recovery.
+> The separately versioned Node SDK remains at 0.1.3 and supports this release.
 > Passive recording remains available since CLI 0.1.6 and Node SDK 0.1.2. CLI 0.1.4–0.1.5
 > enabled extra test discovery by default; 0.1.6 makes it opt-in. Back up history
 > and upgrade all clients sharing a store together before writing schema-6 records.
@@ -100,14 +101,14 @@ or `runs complete` step is needed. Extra verification is opt-in: a process exit
 remains an observed fact, not proof of task success. Existing explicitly enabled
 checks are preserved. See the [automatic CLI pipeline](docs/reference.md#automatic-cli-pipeline).
 
-Current source supports Claude Code 2.x >= 2.1.212, tested Codex 0.158.x
+CLI 0.1.8 supports Claude Code 2.x >= 2.1.212, tested Codex 0.158.x
 on macOS/Linux, and OpenCode v1 >= 1.18.33. Codex hooks require normal `/hooks`
 trust review. It records reported models and tool/turn activity without storing
 prompts or tool contents. Unsupported versions/remote sessions keep process facts.
 Coverage is best-effort, not a claim that every model attempt or successful fix is
 known. See [native capture limits](docs/reference.md#native-harness-observations).
 
-For the unreleased capture fixes, build this source first. Preview Codex's
+Upgrade to CLI 0.1.8 for these capture fixes. Preview Codex's
 one-time hook review with `jevia harness review codex`, then add `--launch` to
 review it interactively. After a real run, `jevia harness health codex
 --require-events` fails if the latest stored native capture is absent or partial.
