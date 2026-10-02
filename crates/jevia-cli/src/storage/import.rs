@@ -11,6 +11,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use jevia_core::{RECORD_SCHEMA_VERSION, RouteRecord};
 use sha2::{Digest, Sha256};
 
+use crate::regular_file::open_optional;
 use crate::store;
 
 pub(crate) struct Snapshot {
@@ -53,9 +54,7 @@ impl Snapshot {
             for record in read_records(BufReader::new(&mut reader)) {
                 let record = record?;
                 validator.check(&record)?;
-                serde_json::to_writer(&mut writer, &record)
-                    .context("could not write import snapshot")?;
-                writer.write_all(b"\n")?;
+                writer.write_all(&crate::jsonl::encode(&record)?)?;
                 count += 1;
             }
             writer.flush().context("could not flush import snapshot")?;
@@ -88,19 +87,6 @@ impl<R: Read> Read for HashingReader<R> {
     }
 }
 
-fn open_optional(path: &Path) -> Result<Option<File>> {
-    match File::open(path) {
-        Ok(file) => {
-            if !file.metadata()?.is_file() {
-                bail!("source JSONL history must be a regular file");
-            }
-            Ok(Some(file))
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error).context("could not read source JSONL history"),
-    }
-}
-
 pub(crate) fn source_fingerprint(path: &Path) -> Result<Option<[u8; 32]>> {
     open_optional(path)?
         .map(|file| {
@@ -116,27 +102,29 @@ pub(crate) fn source_fingerprint(path: &Path) -> Result<Option<[u8; 32]>> {
 }
 
 fn read_records(reader: impl BufRead) -> impl Iterator<Item = Result<RouteRecord>> {
-    reader.lines().enumerate().filter_map(|(index, line)| {
-        let line = match line {
-            Ok(line) => line,
-            Err(_) => {
-                return Some(Err(anyhow!(
-                    "could not read import record on line {} (contents redacted)",
-                    index + 1
-                )));
+    crate::jsonl::lines(reader)
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let line = match line {
+                Ok(line) => line,
+                Err(_) => {
+                    return Some(Err(anyhow!(
+                        "could not read import record on line {} (contents redacted)",
+                        index + 1
+                    )));
+                }
+            };
+            if line.trim().is_empty() {
+                return None;
             }
-        };
-        if line.trim().is_empty() {
-            return None;
-        }
-        // Serde errors may quote private enum values; do not retain their source.
-        Some(serde_json::from_str(&line).map_err(|_| {
-            anyhow!(
-                "invalid import record on line {} (contents redacted)",
-                index + 1
-            )
-        }))
-    })
+            // Serde errors may quote private enum values; do not retain their source.
+            Some(serde_json::from_str(&line).map_err(|_| {
+                anyhow!(
+                    "invalid import record on line {} (contents redacted)",
+                    index + 1
+                )
+            }))
+        })
 }
 
 #[derive(Default)]

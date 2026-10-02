@@ -65,9 +65,8 @@ fn stream_update(
             record.schema_version = RECORD_SCHEMA_VERSION;
             result = Some(record.clone());
         }
-        serde_json::to_writer(&mut output, &record).context("could not encode run record")?;
         output
-            .write_all(b"\n")
+            .write_all(&crate::jsonl::encode(&record)?)
             .context("could not terminate run record")?;
         Ok(())
     })?;
