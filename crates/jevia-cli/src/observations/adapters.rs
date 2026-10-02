@@ -87,7 +87,10 @@ pub(super) fn version_supported(source: ObservationSource, output: &str) -> bool
         return false;
     };
     match source {
-        ObservationSource::ClaudeHooks => [*major, *minor, *patch] >= [2, 1, 251],
+        // 2.1.212 was exercised with real SessionStart, Read, Stop and
+        // SessionEnd hooks. Do not exclude it merely because newer event
+        // kinds were added to the adapter later.
+        ObservationSource::ClaudeHooks => *major == 2 && [*minor, *patch] >= [1, 212],
         ObservationSource::CodexHooks => *major == 0 && *minor == 158,
         ObservationSource::OpencodePlugin => *major == 1 && [*minor, *patch] >= [18, 33],
         ObservationSource::Application => false,
@@ -365,6 +368,12 @@ mod tests {
 
     #[test]
     fn version_gates_are_conservative() {
+        for version in ["2.1.212 (Claude Code)", "2.1.251", "2.1.287"] {
+            assert!(version_supported(ObservationSource::ClaudeHooks, version));
+        }
+        for version in ["2.1.211", "3.0.0", "2.1.212-beta", "PRIVATE_OUTPUT"] {
+            assert!(!version_supported(ObservationSource::ClaudeHooks, version));
+        }
         for version in [
             "codex-cli 0.158.0-alpha.2",
             "codex-cli 0.158.0",

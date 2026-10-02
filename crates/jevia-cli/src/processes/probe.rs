@@ -18,7 +18,9 @@ impl Drop for ProbeTree {
 }
 
 pub async fn version_output(program: &str, root: &Path) -> Option<String> {
-    output(program, &["--version"], root, Duration::from_secs(2)).await
+    // Cold native launchers can take longer than two seconds on a busy host.
+    // Keep the probe bounded without treating ordinary startup as unsupported.
+    output(program, &["--version"], root, Duration::from_secs(5)).await
 }
 
 async fn output(program: &str, args: &[&str], root: &Path, budget: Duration) -> Option<String> {

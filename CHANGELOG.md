@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Enable automatic Claude Code capture from the live-tested 2.1.212 version,
+  and report actual native observation status and counts instead of claiming
+  events were recorded when only process metadata was saved.
+- Allow five seconds for cold harness version probes and distinguish probe
+  failures from unsupported versions. Add an opt-in live-provider smoke check
+  that requires real tool and turn events, preserving the actual recording.
+
 - Skip recording-cleanup rescans for ineligible artifacts; retain fresh,
   allocation-light replay-source checks before every possible archive move.
 - Bound streaming history, import, health, and cache JSONL lines to 8 MiB;

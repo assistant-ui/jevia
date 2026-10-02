@@ -677,6 +677,13 @@ async fn execute_observed_harness(
         }
     };
     execution.observations = Some(capture.snapshot_after(&previous));
+    let observed = execution
+        .observations
+        .as_ref()
+        .expect("capture initialized");
+    let coverage = observations::coverage(observed);
+    observations::warn_missing_events(observed);
+    eprintln!("jevia: {coverage}");
     // Optional verifiers must not inherit a harness adapter's private config.
     runner.set_environment(&[]);
     let status = match status {
@@ -717,9 +724,7 @@ async fn execute_observed_harness(
                 Some(execution),
             )
             .await?;
-        eprintln!(
-            "jevia: process=failed outcome=unknown observations=recorded duration_ms={duration_ms}"
-        );
+        eprintln!("jevia: process=failed outcome=unknown {coverage} duration_ms={duration_ms}");
         return Ok(child_exit_code(&status));
     }
 
@@ -733,7 +738,7 @@ async fn execute_observed_harness(
             )
             .await?;
         eprintln!(
-            "jevia: process=success outcome=unknown verification=not_run observations=recorded duration_ms={duration_ms}"
+            "jevia: process=success outcome=unknown verification=not_run {coverage} duration_ms={duration_ms}"
         );
         return Ok(child_exit_code(&status));
     };
