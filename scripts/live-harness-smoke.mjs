@@ -7,14 +7,14 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const harness = process.argv[2];
-assert.ok(["claude", "codex"].includes(harness), "Usage: node scripts/live-harness-smoke.mjs claude|codex");
+assert.ok(["claude", "codex", "opencode"].includes(harness), "Usage: node scripts/live-harness-smoke.mjs claude|codex|opencode");
 assert.equal(process.env.JEVIA_LIVE_TEST, "1", "Set JEVIA_LIVE_TEST=1 to authorize live, potentially paid API calls");
 assert.ok(process.env.TYPESAFE_API_KEY, "TYPESAFE_API_KEY must be supplied through the environment");
 const binary = resolve(process.env.JEVIA_TEST_BINARY ?? "target/release/jevia");
 const model = harness === "claude"
   ? process.env.JEVIA_LIVE_CLAUDE_MODEL ?? "sonnet"
-  : process.env.JEVIA_LIVE_CODEX_MODEL;
-assert.ok(model, "Set JEVIA_LIVE_CODEX_MODEL to a model available to your Codex account");
+  : harness === "codex" ? process.env.JEVIA_LIVE_CODEX_MODEL : process.env.JEVIA_LIVE_OPENCODE_MODEL;
+assert.ok(model, "Set JEVIA_LIVE_CODEX_MODEL or JEVIA_LIVE_OPENCODE_MODEL to an available model");
 const cwd = mkdtempSync(join(tmpdir(), "jevia-live-smoke-"));
 const snapshot = join(cwd, ".jevia", "runs.jsonl");
 console.log(`Disposable project: ${cwd}`);
@@ -33,13 +33,24 @@ checked(binary, ["init"]);
 checked(binary, ["harness", "setup", harness, "--preset", harness, "--apply",
   ...["fast", "balanced", "strong"].flatMap((tier) => ["--model", `${tier}=${model}`])]);
 writeFileSync(join(cwd, "input.txt"), "The checksum label is JEVIA-LIVE-37. Compute 17 + 25.\n");
+if (harness === "opencode") {
+  writeFileSync(join(cwd, "opencode.json"), JSON.stringify({
+    autoupdate: false, share: "disabled",
+    permission: { "*": "deny", read: "allow", external_directory: "deny" },
+  }));
+}
 const extra = harness === "claude"
   ? ["--allowedTools", "Read", "--max-budget-usd", "0.50", "--no-session-persistence"]
-  : ["--sandbox", "read-only", "--ignore-user-config", "--ephemeral"];
+  : harness === "codex" ? ["--sandbox", "read-only", "--ignore-user-config", "--ephemeral"] : [];
 // Deliberately do not bypass hook trust. Missing events must fail this check.
 const result = call(binary, ["run", harness,
   "Read input.txt using your file-reading tool. Return the checksum label and arithmetic result. Do not modify files, inspect other directories, use the network, or spawn agents.",
   "--non-interactive", "--timeout-seconds", "90", "--no-cache", "--explain", "--", ...extra]);
+// Jevia's own redacted diagnostics explain setup failures without echoing
+// arbitrary provider logs, shell commands, or local configuration.
+for (const line of (result.stderr ?? "").split("\n")) {
+  if (/^jevia: (native |observations=|explain )/.test(line)) console.log(line);
+}
 const records = readFileSync(snapshot, "utf8").trim().split("\n").map(JSON.parse);
 const record = records.at(-1);
 const observations = record.execution?.observations;

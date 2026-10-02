@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a preview-first Codex hook-review session without bypassing native trust,
+  and `harness health --require-events` for checking saved capture coverage.
+- Give Codex hooks bounded cold-start headroom and OpenCode's launcher a
+  15-second version-probe budget; preserve OpenCode's explicit `--pure` setting.
+  Extend the opt-in real-provider smoke check to OpenCode.
+- Keep child `PWD` aligned with the actual project directory so native launchers
+  do not resolve tasks against a stale parent directory. Record deduplicated
+  OpenCode tool-error facts without retaining error text or inferring task failure.
+
 - Enable automatic Claude Code capture from the live-tested 2.1.212 version,
   and report actual native observation status and counts instead of claiming
   events were recorded when only process metadata was saved.

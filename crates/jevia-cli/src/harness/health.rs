@@ -130,7 +130,12 @@ async fn inspect(paths: &ProjectPaths, name: &str) -> Report {
     report
 }
 
-pub async fn run(paths: &ProjectPaths, name: &str, json: bool) -> Result<ExitCode> {
+pub async fn run(
+    paths: &ProjectPaths,
+    name: &str,
+    json: bool,
+    require_events: bool,
+) -> Result<ExitCode> {
     let report = inspect(paths, name).await;
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -150,7 +155,17 @@ pub async fn run(paths: &ProjectPaths, name: &str, json: bool) -> Result<ExitCod
         }
         println!("{}", report.limitations);
     }
-    Ok(if report.ok {
+    let has_events = report.latest.as_ref().is_some_and(|latest| {
+        latest.status == Some(ObservationStatus::Recorded)
+            && latest.event_count > 0
+            && latest.discarded_inputs == 0
+    });
+    if require_events && !has_events && !json {
+        eprintln!(
+            "jevia: required native events are missing or partial; do not treat this recording as demo-ready"
+        );
+    }
+    Ok(if report.ok && (!require_events || has_events) {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE

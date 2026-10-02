@@ -5,6 +5,10 @@ import { spawn } from "node:child_process";
 export default async function jeviaObservations() {
   const executable = process.env.JEVIA_OBSERVATION_EXECUTABLE;
   const journal = process.env.JEVIA_OBSERVATION_JOURNAL;
+  // Error parts can be published more than once. Retain only bounded opaque
+  // identifiers, never their arguments, outputs, or error text.
+  const failedParts = new Set();
+  let failuresTruncated = false;
   const identifier = (value) => typeof value === "string" && value.length > 0 &&
     value.length <= 256 && !/[^a-zA-Z0-9._:/@+-]/.test(value) ? value : undefined;
 
@@ -41,6 +45,18 @@ export default async function jeviaObservations() {
     "tool.execute.after": async ({ sessionID, tool }) => emit("PostToolUse", { session_id: sessionID, tool_name: tool }),
     event: async ({ event }) => {
       const p = event?.properties;
+      if (event?.type === "message.part.updated" && p?.part?.type === "tool" && p.part.state?.status === "error") {
+        const id = identifier(p.part.id);
+        if (id && failedParts.has(id)) return;
+        if (!id || failedParts.size >= 1024) {
+          if (failuresTruncated) return;
+          failuresTruncated = true;
+          // The collector marks this unrecognized input as discarded/partial.
+          return emit("UnobservedToolFailure");
+        }
+        failedParts.add(id);
+        return emit("PostToolUseFailure", { session_id: p.part.sessionID, tool_name: p.part.tool });
+      }
       if (event?.type === "session.created") {
         return emit(p?.info?.parentID ? "SubagentStart" : "SessionStart", {
           session_id: p?.info?.id, agent_id: p?.info?.parentID ? p.info.id : undefined,
@@ -48,7 +64,7 @@ export default async function jeviaObservations() {
       }
       if (event?.type === "session.idle") return emit("Stop", { session_id: p?.sessionID });
       if (event?.type === "session.error") return emit("StopFailure", { session_id: p?.sessionID });
-      // message.updated and part.updated can repeat: not counted as attempts.
+      // Other message/part updates are not counted as independent attempts.
     },
   };
 }

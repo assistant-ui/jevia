@@ -104,7 +104,7 @@ remain supported). No feedback or extra verification is needed for these metrics
 
 CLI 0.1.6 `jevia run` enables native capture automatically for supported direct
 executables (including `.exe` names). It probes `--version` with a five-second
-deadline before adding a session-local adapter. Probes own a process group/job,
+deadline (15 seconds for the slower OpenCode launcher) before adding a session-local adapter. Probes own a process group/job,
 accept at most 256 bytes of successful UTF-8 output, and stop descendants on
 failure, timeout, or cancellation. Failed probes allow up to one additional
 second for cleanup and never expose captured output. No user/project config is
@@ -115,7 +115,7 @@ stays on. Other harnesses, including Gemini, retain process facts only.
 | --- | --- | --- |
 | Claude Code | 2.x >= 2.1.212 | Silent exec-form hooks; preserves custom `--settings`, `--bare`, and `--safe-mode` by skipping injection. Managed settings may disable hooks. Version 2.1.212 was verified with a real file-read task and session/tool/turn events. |
 | Codex | 0.158.x stable or the tested 0.158.0-alpha.2, macOS/Linux | Inline session hook overrides. `exec`/`review` run locally; interactive launches get `--no-daemon` to isolate the journal environment. Existing `-c`/`--config`, `--disable`, remote/attach/server arguments skip injection. Windows stays process-only. |
-| OpenCode | v1 >= 1.18.33, < 2 | Private dependency-free `.mjs` plugin appended through `OPENCODE_CONFIG_CONTENT`; existing valid JSON overrides and plugin entries are preserved. Invalid/JSONC inline overrides and remote/attach/server launches stay process-only. |
+| OpenCode | v1 >= 1.18.33, < 2 | Private dependency-free `.mjs` plugin appended through `OPENCODE_CONFIG_CONTENT`; existing valid JSON overrides and plugin entries are preserved. Invalid/JSONC inline overrides, `--pure`, and remote/attach/server launches stay process-only. |
 
 Compatible wrappers can explicitly set `observations = "claude_hooks"`,
 `"codex_hooks"`, or `"opencode_plugin"` in their harness table. These bypass the
@@ -134,6 +134,22 @@ also fire for nonzero shell exits. `Interrupt` is `turn_interrupted`, not task
 failure. Reported model IDs attach only to the event that contains them; no
 cross-subagent model-switch inference is made.
 
+For the standard Codex preset, use `jevia harness review codex` to preview the
+review flow, then `jevia harness review codex --launch` in a terminal. This opens
+a local read-only Codex session with the same Jevia hook definitions. Open
+`/hooks`, inspect the `capture-event` commands and approve only those you accept,
+then quit. Jevia submits no task, routes nothing, and does not save this review
+session as task evidence. Only Codex persists your explicit trust choice. The
+preview does not execute anything; custom presets and disabled capture are not
+silently rewritten. Use the same installed Jevia binary for review and runs:
+changing its path or hook definitions can require renewed review.
+
+Regular Codex observation hooks allow five seconds for cold process startup;
+`SessionEnd` and `Interrupt` use the harness's three-second maximum. Jevia never
+adds `--dangerously-bypass-hook-trust` automatically. A live test using an
+explicitly approved one-run bypass confirms adapter dispatch, **not** persisted
+trust for later runs.
+
 The run summary reports actual capture coverage (`observations=recorded`,
 `no_events`, `unavailable`, `partial`, `disabled`, or `unsupported`) and the
 observed event count. Saving process metadata does **not** mean native events
@@ -149,6 +165,7 @@ existing authenticated harness CLIs and `TYPESAFE_API_KEY` in the environment:
 ```bash
 JEVIA_LIVE_TEST=1 node scripts/live-harness-smoke.mjs claude
 JEVIA_LIVE_TEST=1 JEVIA_LIVE_CODEX_MODEL=your-model node scripts/live-harness-smoke.mjs codex
+JEVIA_LIVE_TEST=1 JEVIA_LIVE_OPENCODE_MODEL=provider/model node scripts/live-harness-smoke.mjs opencode
 ```
 
 This makes potentially paid API calls, uses a disposable synthetic project,
@@ -157,9 +174,38 @@ events or bypasses hook trust. A successful process with zero native events
 **fails** the check. It requires both a tool event and turn completion, and
 leaves the project and recording available for inspection. All tiers use the
 same selected harness model to isolate capture behavior; this is not a model
-quality benchmark. The Claude call has a $0.50 budget; both have a 90-second
+quality benchmark. The Claude call has a $0.50 budget; all have a 90-second
 harness deadline. The separate CI native-contract tests use loopback model
 responses and are not evidence of a successful live-provider run.
+
+OpenCode error tool parts produce `tool_failed` facts; repeated updates for the
+same part are counted once. The adapter retains at most 1,024 opaque failed-part
+IDs per session; beyond that it reports partial capture instead of guessing
+counts. Error text, tool arguments, and tool output are not stored. These are
+tool-level errors, not assessed task failures. Child `PWD` is synchronized with
+the configured project directory for probes, interactive, and supervised runs.
+
+#### Before a demo
+
+Build this source with `cargo build --release -p jevia` and use that exact binary
+(the smoke script defaults to `target/release/jevia`). A previously installed CLI
+does not gain unreleased fixes automatically. Complete Codex's hook review, run
+a small real task, and then check the **saved** event coverage:
+
+```bash
+jevia harness health codex --require-events
+jevia harness health claude --require-events
+jevia harness health opencode --require-events
+```
+
+`--require-events` exits nonzero when no matching execution exists or its capture
+is empty, unavailable, disabled, unsupported, or partial. With `--json`, the
+report schema stays unchanged: `ok` describes reading the report, while the exit
+status additionally enforces the event requirement. This checks the latest saved
+execution, not the current configuration, a fresh launch, all possible event
+types, or task correctness. Inspect the run ID so an old successful recording
+cannot be mistaken for the run you are demonstrating. Do not advertise a harness
+as live-verified merely because its contract tests or process exit succeeded.
 
 OpenCode uses its [plugin API](https://opencode.ai/docs/plugins/) and
 [runtime config override](https://opencode.ai/docs/config/). The adapter contract
@@ -431,6 +477,8 @@ jevia runs --json
 | `jevia harness presets` | List the built-in Codex, Claude Code, OpenCode, and Gemini CLI command templates. |
 | `jevia harness setup <name>` | Preview an explicit harness template; back up and save only with `--apply`. |
 | `jevia harness check <name> [--json]` | Inspect configuration and local executable candidates without launching programs or calling APIs. |
+| `jevia harness review <name> [--launch]` | Preview or explicitly open a read-only native Codex hook-review session; never auto-approve trust. |
+| `jevia harness health <name> [--json] [--require-events]` | Inspect recent saved capture; optionally fail if native events are missing or partial. |
 | `jevia route <task>` | Ask Jev for a tier and record the decision. |
 | <code>jevia run &lt;harness&gt; &lt;task&gt;</code> | Route, launch, and record automatically; additional verification is opt-in. |
 | `jevia runs` | Inspect recent records in the configured backend. |
