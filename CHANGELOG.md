@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject special history inputs without waiting for FIFO writers, including
+  setup snapshots, source rechecks, imports, and history health reads.
 - Stream guided database setup through private validated snapshots and raw-source
   fingerprints, preserving read-only previews and configuration-last switching.
 - Batch JSONL recording-cleanup history lookups across up to 32 owners, keeping

@@ -1,6 +1,5 @@
 use std::{
     collections::HashSet,
-    fs::File,
     io::{BufRead, BufReader},
     path::Path,
 };
@@ -37,10 +36,8 @@ pub fn check_deep(path: &Path) -> Result<usize> {
         return Ok(0);
     }
     let _lock = acquire_lock(path, LockMode::Shared)?;
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
-        Err(error) => return Err(error).context("could not open history for deep check"),
+    let Some(file) = crate::regular_file::open_optional(path)? else {
+        return Ok(0);
     };
     let mut ids = HashSet::new();
     for (index, line) in BufReader::new(file).lines().enumerate() {

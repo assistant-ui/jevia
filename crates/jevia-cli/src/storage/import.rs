@@ -11,6 +11,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use jevia_core::{RECORD_SCHEMA_VERSION, RouteRecord};
 use sha2::{Digest, Sha256};
 
+use crate::regular_file::open_optional;
 use crate::store;
 
 pub(crate) struct Snapshot {
@@ -85,19 +86,6 @@ impl<R: Read> Read for HashingReader<R> {
         let count = self.reader.read(bytes)?;
         self.hash.update(&bytes[..count]);
         Ok(count)
-    }
-}
-
-fn open_optional(path: &Path) -> Result<Option<File>> {
-    match File::open(path) {
-        Ok(file) => {
-            if !file.metadata()?.is_file() {
-                bail!("source JSONL history must be a regular file");
-            }
-            Ok(Some(file))
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error).context("could not read source JSONL history"),
     }
 }
 
