@@ -9,12 +9,19 @@ import { basename, dirname } from "node:path";
 // never a payload or an exact missing-event count. Do not depend on spawning
 // another collector when the executable itself may be unavailable.
 async function recordLoss(journal) {
-  if (!/^jevia-events-.+\.jsonl$/.test(basename(journal)) || !(await lstat(journal)).isFile()) {
+  if (!/^jevia-events-.+\.jsonl$/.test(basename(journal))) {
     throw new Error("invalid journal");
   }
   const file = await open(journal, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
   try {
-    if (!(await file.stat()).isFile()) throw new Error("invalid journal");
+    // Validate the opened handle, not a pre-open check that could race with
+    // replacement. The path check also rejects symlinks where O_NOFOLLOW is
+    // unavailable. Reads below always use this checked handle.
+    const metadata = await file.stat();
+    const pathMetadata = await lstat(journal);
+    if (!metadata.isFile() || !pathMetadata.isFile() || metadata.dev !== pathMetadata.dev || metadata.ino !== pathMetadata.ino) {
+      throw new Error("invalid journal");
+    }
     const buffer = Buffer.alloc(512 * 1024 + 1);
     let length = 0;
     while (length < buffer.length) {

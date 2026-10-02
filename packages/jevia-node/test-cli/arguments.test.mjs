@@ -438,7 +438,8 @@ for (const source of ["codex_hooks", "opencode_plugin"]) {
           await hooks.event({ event: { type: 'session.error', properties: { sessionID: 'private-native-session', error: 'PRIVATE_ERROR' } } });
           // Repeated streaming updates are not counted as independent attempts.
           await hooks.event({ event: { type: 'message.updated', properties: { info: 'PRIVATE_OUTPUT' } } });
-          // A missing collector is silent and must not fail a tool or session.
+          // A missing collector marks incomplete capture without failing a tool
+          // or session. Successful events remain available to future routing.
           process.env.JEVIA_OBSERVATION_EXECUTABLE = '/missing-jevia-collector';
           const unavailable = await plugin.default({});
           await unavailable['tool.execute.after']({ tool: 'bash', sessionID: 'private-native-session' }, {});
@@ -458,7 +459,8 @@ for (const source of ["codex_hooks", "opencode_plugin"]) {
         assert.equal(record.execution.model, "requested-alias");
         const facts = record.execution.observations;
         assert.equal(facts.source, source);
-        assert.equal(facts.status, "recorded");
+        assert.equal(facts.status, source === "opencode_plugin" ? "partial" : "recorded");
+        assert.equal(facts.totals.discarded_inputs, source === "opencode_plugin" ? 1 : 0);
         assert.equal(facts.events.length, source === "codex_hooks" ? 6 : 7);
         assert.equal(facts.totals.event_counts.tool_completed, 1);
         assert.equal(facts.totals.event_counts.tool_failed, source === "codex_hooks" ? undefined : 1);
