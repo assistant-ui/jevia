@@ -7,9 +7,9 @@ use std::{
 
 pub fn open_optional(path: &Path) -> Result<Option<File>> {
     match std::fs::metadata(path) {
-        Ok(metadata) if !metadata.is_file() => bail!("history input must be a regular file"),
+        Ok(metadata) if !metadata.is_file() => bail!("input must be a regular file"),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error).context("could not inspect history input"),
+        Err(error) => return Err(error).context("could not inspect regular input"),
         _ => {}
     }
     let mut options = OpenOptions::new();
@@ -23,10 +23,10 @@ pub fn open_optional(path: &Path) -> Result<Option<File>> {
     let file = match options.open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error).context("could not open history input"),
+        Err(error) => return Err(error).context("could not open regular input"),
     };
     if !file.metadata()?.is_file() {
-        bail!("history input must be a regular file");
+        bail!("input must be a regular file");
     }
     Ok(Some(file))
 }

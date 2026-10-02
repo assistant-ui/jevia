@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{BufReader, BufWriter, Write},
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
@@ -163,13 +163,10 @@ fn load(path: &Path) -> Result<Vec<CacheEntry>> {
 }
 
 fn load_unlocked(path: &Path) -> Result<Vec<CacheEntry>> {
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => {
-            return Err(error)
-                .with_context(|| format!("could not open cache at {}", path.display()));
-        }
+    let Some(file) = crate::regular_file::open_optional(path)
+        .with_context(|| format!("could not open cache at {}", path.display()))?
+    else {
+        return Ok(Vec::new());
     };
 
     let mut entries = Vec::new();
@@ -268,7 +265,7 @@ fn sync_parent(path: &Path) -> Result<()> {
     let parent = path
         .parent()
         .context("cache path does not have a parent directory")?;
-    File::open(parent)
+    fs::File::open(parent)
         .with_context(|| format!("could not open {} for syncing", parent.display()))?
         .sync_all()
         .with_context(|| format!("could not sync {}", parent.display()))
@@ -299,6 +296,17 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn lookup_and_insert_reject_non_regular_cache_without_replacement() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("cache.jsonl");
+        fs::create_dir(&path).unwrap();
+        assert!(lookup_at(&path, "key", 100).is_err());
+        assert!(insert_at(&path, entry("key", 100, 200), 10).is_err());
+        assert!(path.is_dir());
+        assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
+    }
 
     #[test]
     fn expiry_clock_is_sampled_after_a_contended_load() {
