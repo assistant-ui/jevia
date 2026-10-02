@@ -107,10 +107,7 @@ pub(crate) fn with_import_reader<T>(
         bail!("import source is not a file");
     }
     let _lock = acquire_lock(path, LockMode::Shared)?;
-    let file = File::open(path).context("could not open import source")?;
-    if !file.metadata()?.is_file() {
-        bail!("import source is not a file");
-    }
+    let file = crate::regular_file::open_optional(path)?.context("import source is missing")?;
     read(BufReader::new(file))
 }
 
@@ -124,13 +121,8 @@ fn read_records_until(
     visit: impl FnMut(RouteRecord) -> Result<()>,
 ) -> Result<()> {
     check_deadline(deadline)?;
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => {
-            return Err(error)
-                .with_context(|| format!("could not open run history at {}", path.display()));
-        }
+    let Some(file) = crate::regular_file::open_optional(path)? else {
+        return Ok(());
     };
 
     read_records_from_until(BufReader::new(file), path, deadline, visit)

@@ -11,6 +11,7 @@ mod observations;
 mod paths;
 mod processes;
 mod recordings;
+mod regular_file;
 mod setup;
 mod stats;
 mod storage;
