@@ -20,6 +20,13 @@ assert!(config.tiers.contains_key(&config.router.fallback_tier));
 
 Requires Rust 1.92 or newer. The API is experimental.
 
+## Upgrading to 0.1.8
+
+The public Rust API, record schema 6, and configuration are unchanged from 0.1.7.
+The Jev client now rejects response bodies over 1 MiB, including chunked responses,
+without retaining private response contents in errors. The coordinated CLI patch
+improves native capture, storage safety, and recovery; the Node SDK remains 0.1.3.
+
 ## Upgrading to 0.1.7
 
 The Rust core API, record schema 6, and configuration are unchanged from 0.1.6.
