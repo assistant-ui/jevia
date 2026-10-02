@@ -19,20 +19,24 @@ fn oversized_history_is_rejected_without_mutation_or_database_creation() {
     for args in [
         vec!["storage", "check"],
         vec!["storage", "check", "--deep"],
-        vec!["history", "--json"],
+        vec!["runs", "--json"],
         vec!["storage", "setup", "sqlite", "--import-jsonl"],
+        vec!["runs", "repair", "--apply"],
+        vec!["runs", "archive", "--keep", "1", "--apply"],
     ] {
         let output = Command::cargo_bin("jevia")
             .unwrap()
             .current_dir(dir.path())
             .args(args)
             .assert()
-            .failure()
+            .code(1)
             .get_output()
             .clone();
         assert!(output.stderr.len() < 4096);
         assert!(!String::from_utf8_lossy(&output.stderr).contains("private_padding"));
         assert_eq!(fs::read_to_string(&path).unwrap(), raw);
         assert!(!dir.path().join(".jevia/jevia.db").exists());
+        assert!(!dir.path().join(".jevia/history-backups").exists());
+        assert!(!dir.path().join(".jevia/history-archives").exists());
     }
 }
