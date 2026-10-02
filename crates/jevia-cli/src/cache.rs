@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, BufWriter, Write},
+    io::{BufReader, BufWriter, Write},
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -173,7 +173,7 @@ fn load_unlocked(path: &Path) -> Result<Vec<CacheEntry>> {
     };
 
     let mut entries = Vec::new();
-    for (index, line) in BufReader::new(file).lines().enumerate() {
+    for (index, line) in crate::jsonl::lines(BufReader::new(file)).enumerate() {
         let line = line.with_context(|| {
             format!("could not read line {} from {}", index + 1, path.display())
         })?;
@@ -214,9 +214,8 @@ fn write_unlocked(path: &Path, entries: &[CacheEntry]) -> Result<()> {
     {
         let mut writer = BufWriter::new(temporary.as_file_mut());
         for entry in entries {
-            serde_json::to_writer(&mut writer, entry).context("could not encode cache entry")?;
             writer
-                .write_all(b"\n")
+                .write_all(&crate::jsonl::encode(entry)?)
                 .context("could not terminate cache entry")?;
         }
         writer.flush().context("could not flush routing cache")?;
