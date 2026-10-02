@@ -87,6 +87,33 @@ fn local_backends() -> [StorageConfig; 2] {
     ]
 }
 
+#[tokio::test]
+async fn ineligible_artifacts_skip_rescans_but_every_possible_move_is_rechecked() {
+    let f = Fixture::new(StorageConfig::Jsonl).await;
+    f.storage.append(&f.record).await.unwrap();
+    for i in 0..2000 {
+        f.file(
+            "jevia-observer-",
+            &format!("-{i}.mjs"),
+            b"not a known plugin",
+        );
+    }
+    let retained = cleanup(&f.paths, &f.storage, true).await.unwrap();
+    assert_eq!(retained.moved, 0);
+    assert_eq!(retained.journal_scans, 0);
+    f.plugin();
+    f.checkpoint();
+    let moved = cleanup(&f.paths, &f.storage, true).await.unwrap();
+    assert_eq!(moved.moved, 2);
+    assert_eq!(moved.journal_scans, 2);
+    assert!(!has_replay_source(&f.paths.directory, &f.record.decision.run_id).unwrap());
+    for extension in [".jsonl", ".loss"] {
+        let late = f.file("jevia-events-", extension, b"pending");
+        assert!(has_replay_source(&f.paths.directory, &f.record.decision.run_id).unwrap());
+        fs::remove_file(late).unwrap();
+    }
+}
+
 async fn contract(backend: StorageConfig) {
     let f = Fixture::new(backend).await;
     f.storage.append(&f.record).await.unwrap();

@@ -1046,6 +1046,14 @@ the selected backend. These options require v0.1.2 or newer.
 
 ### SQLite: local database, no server
 
+Streaming JSONL history, health checks, imports, and cache reads accept at most
+8 MiB per physical line (including its newline; an unterminated final line must
+leave one byte for that newline). Oversized lines fail with a
+redacted error and are never truncated or skipped. JSONL appends and rewrites
+also reject oversized output before publication. Existing oversized history
+must be inspected and reduced explicitly; this does not bound the total memory
+of explicit repair/archive operations or arbitrary SQL rows.
+
 The guided CLI path avoids editing TOML by hand (run `jevia init` first):
 
 ```sh
@@ -1499,6 +1507,12 @@ the owning run UUID; older unowned files are intentionally left for manual revie
 Symlinks are rejected; Unix hard-linked files are also retained. This is
 cooperating-process maintenance, not a sandbox against arbitrary filesystem
 writers. Keep the project directory protected with filesystem permissions/ACLs.
+
+Cleanup avoids rescanning the directory for artifacts already known to be
+ineligible. Every possible archive move still checks freshly for that owner's
+journal/loss marker, rechecks file contents, and holds its execution lease.
+Large batches of eligible files can still require repeated directory reads;
+the optimization does not remove these safety checks.
 
 Eligible files are **moved, not deleted**, into a unique ignored
 `.jevia/recording-archives/cleanup-*` directory. The report includes the archive

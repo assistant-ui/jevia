@@ -47,6 +47,9 @@ struct Report {
     #[cfg(test)]
     #[serde(skip)]
     history_reads: usize,
+    #[cfg(test)]
+    #[serde(skip)]
+    journal_scans: usize,
 }
 
 struct Artifact {
@@ -94,6 +97,8 @@ fn scan(directory: &Path) -> Result<Scan> {
             archive: None,
             #[cfg(test)]
             history_reads: 0,
+            #[cfg(test)]
+            journal_scans: 0,
         },
         files: vec![],
         journals: BTreeSet::new(),
@@ -163,6 +168,21 @@ fn read_regular(path: &Path) -> Result<Vec<u8>> {
         bail!("recording file too large");
     }
     Ok(bytes)
+}
+
+// Fresh safety check before each possible move. Unlike inventory, retain no
+// unrelated paths/counts and stop as soon as this owner's replay source is found.
+fn has_replay_source(directory: &Path, id: &str) -> Result<bool> {
+    for entry in fs::read_dir(directory)? {
+        let name = entry?.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if (name.ends_with(".jsonl") || name.ends_with(".loss"))
+            && owner(name, "jevia-events-").as_deref() == Some(id)
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn saved_observations(
@@ -277,17 +297,9 @@ async fn cleanup(paths: &ProjectPaths, storage: &Storage, apply: bool) -> Result
             *plan.report.retained.entry("execution_busy").or_default() += 1;
             continue;
         }
-        let refreshed;
-        let journals = if apply {
-            refreshed = scan(&paths.directory)?;
-            if !refreshed.report.scan_complete {
-                bail!("recording scan changed; any prior moves remain in the recording archive");
-            }
-            &refreshed.journals
-        } else {
-            &plan.journals
-        };
-        if journals.contains(id) {
+        // An initial replay source is enough to retain a file conservatively.
+        // No fresh scan is needed for files we will not move.
+        if plan.journals.contains(id) {
             *plan
                 .report
                 .retained
@@ -302,6 +314,20 @@ async fn cleanup(paths: &ProjectPaths, storage: &Storage, apply: bool) -> Result
         match result {
             Err(reason) => *plan.report.retained.entry(reason).or_default() += 1,
             Ok(bytes) => {
+                if apply {
+                    #[cfg(test)]
+                    {
+                        plan.report.journal_scans += 1;
+                    }
+                    if has_replay_source(&paths.directory, id)? {
+                        *plan
+                            .report
+                            .retained
+                            .entry("pending_journal_or_marker")
+                            .or_default() += 1;
+                        continue;
+                    }
+                }
                 plan.report.eligible += 1;
                 if apply {
                     if read_regular(&file.path).ok().as_ref() != Some(&bytes) {

@@ -18,6 +18,12 @@
   failures from unsupported versions. Add an opt-in live-provider smoke check
   that requires real tool and turn events, preserving the actual recording.
 
+- Skip recording-cleanup rescans for ineligible artifacts; retain fresh,
+  allocation-light replay-source checks before every possible archive move.
+- Bound streaming history, import, health, and cache JSONL lines to 8 MiB;
+  reject oversized records without truncation or publishing partial rewrites.
+- Reject special history inputs without waiting for FIFO writers, including
+  setup snapshots, source rechecks, imports, and history health reads.
 - Stream guided database setup through private validated snapshots and raw-source
   fingerprints, preserving read-only previews and configuration-last switching.
 - Batch JSONL recording-cleanup history lookups across up to 32 owners, keeping

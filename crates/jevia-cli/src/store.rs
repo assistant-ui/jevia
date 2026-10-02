@@ -90,8 +90,7 @@ pub fn export(path: &Path, mut output: impl Write) -> Result<usize> {
     let _lock = acquire_lock(path, LockMode::Shared)?;
     let mut count = 0;
     read_records(path, |record| {
-        serde_json::to_writer(&mut output, &record)?;
-        output.write_all(b"\n")?;
+        output.write_all(&crate::jsonl::encode(&record)?)?;
         count += 1;
         Ok(())
     })?;
@@ -108,10 +107,7 @@ pub(crate) fn with_import_reader<T>(
         bail!("import source is not a file");
     }
     let _lock = acquire_lock(path, LockMode::Shared)?;
-    let file = File::open(path).context("could not open import source")?;
-    if !file.metadata()?.is_file() {
-        bail!("import source is not a file");
-    }
+    let file = crate::regular_file::open_optional(path)?.context("import source is missing")?;
     read(BufReader::new(file))
 }
 
@@ -125,13 +121,8 @@ fn read_records_until(
     visit: impl FnMut(RouteRecord) -> Result<()>,
 ) -> Result<()> {
     check_deadline(deadline)?;
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => {
-            return Err(error)
-                .with_context(|| format!("could not open run history at {}", path.display()));
-        }
+    let Some(file) = crate::regular_file::open_optional(path)? else {
+        return Ok(());
     };
 
     read_records_from_until(BufReader::new(file), path, deadline, visit)
@@ -204,8 +195,7 @@ pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
         .parent()
         .context("run history path does not have a parent directory")?;
     fs::create_dir_all(parent).with_context(|| format!("could not create {}", parent.display()))?;
-    let mut encoded = serde_json::to_vec(record).context("could not encode run record")?;
-    encoded.push(b'\n');
+    let mut encoded = crate::jsonl::encode(record)?;
 
     let _lock = acquire_lock(path, LockMode::Exclusive)?;
     let mut file = private_append_options()
