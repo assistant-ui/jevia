@@ -60,6 +60,37 @@ pub fn capture_conflicts(source: ObservationSource, args: &[String]) -> bool {
     adapters::conflicts(source, args)
 }
 
+/// Report capture coverage, not just the fact that a process record exists.
+pub fn coverage(observations: &HarnessObservations) -> String {
+    let status = match observations.status {
+        Status::Unsupported => "unsupported",
+        Status::Disabled => "disabled",
+        Status::Unavailable => "unavailable",
+        Status::NoEvents => "no_events",
+        Status::Recorded => "recorded",
+        Status::Partial => "partial",
+    };
+    format!(
+        "observations={status} events={}",
+        observations.event_count()
+    )
+}
+
+pub fn warn_missing_events(observations: &HarnessObservations) {
+    if observations.status == Status::NoEvents {
+        eprintln!(
+            "jevia: no native events received; process facts alone do not establish task success"
+        );
+        if observations.source == Some(ObservationSource::CodexHooks) {
+            eprintln!(
+                "jevia: review Jevia hooks with /hooks in Codex; hook trust or policy may prevent capture. Jevia does not bypass trust automatically"
+            );
+        }
+    } else if observations.status == Status::Partial {
+        eprintln!("jevia: native event capture is partial; some observations may be missing");
+    }
+}
+
 #[derive(Clone)]
 pub struct Capture {
     journal: Option<PathBuf>,
@@ -105,18 +136,28 @@ impl Capture {
         }
         // Auto-detection must not add unknown hook settings to an older harness.
         // Explicit claude_hooks is the contract for compatible wrapper executables.
-        if mode == ObservationMode::Auto
-            && !supported_version(
+        if mode == ObservationMode::Auto {
+            let supported = supported_version(
                 &invocation.program,
                 directory.parent().unwrap_or(directory),
                 source,
             )
-            .await
-        {
-            eprintln!(
-                "jevia: native observations unavailable: harness version outside tested adapter contract; process recording remains active"
-            );
-            return capture;
+            .await;
+            match supported {
+                Some(true) => {}
+                Some(false) => {
+                    eprintln!(
+                        "jevia: native observations unavailable: harness version outside tested adapter contract; process recording remains active"
+                    );
+                    return capture;
+                }
+                None => {
+                    eprintln!(
+                        "jevia: native observations unavailable: version probe failed or exceeded its five-second deadline; retry or check the harness executable; process recording remains active"
+                    );
+                    return capture;
+                }
+            }
         }
         if capture.install(directory, run_id).is_err() {
             eprintln!(
@@ -428,10 +469,10 @@ async fn replay_until(
     }
 }
 
-async fn supported_version(program: &str, root: &Path, source: ObservationSource) -> bool {
+async fn supported_version(program: &str, root: &Path, source: ObservationSource) -> Option<bool> {
     crate::processes::version_output(program, root)
         .await
-        .is_some_and(|text| adapters::version_supported(source, &text))
+        .map(|text| adapters::version_supported(source, &text))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -693,6 +734,42 @@ mod tests {
         Config, DecisionSource, ExecutionEvidence, Outcome, RouteDecision, RouteRecord, RunState,
         StorageConfig,
     };
+
+    #[test]
+    fn coverage_distinguishes_process_records_from_native_events() {
+        for (status, label) in [
+            (Status::Unsupported, "unsupported"),
+            (Status::Disabled, "disabled"),
+            (Status::Unavailable, "unavailable"),
+            (Status::NoEvents, "no_events"),
+            (Status::Recorded, "recorded"),
+            (Status::Partial, "partial"),
+        ] {
+            let mut observed = HarnessObservations {
+                source: Some(ObservationSource::ClaudeHooks),
+                status,
+                events: vec![],
+                totals: None,
+            };
+            assert_eq!(
+                coverage(&observed),
+                format!("observations={label} events=0")
+            );
+            observed.events.push(HarnessEvent {
+                kind: Kind::TurnCompleted,
+                recorded_at_ms: 1,
+                session_id: None,
+                agent_id: None,
+                model: None,
+                previous_model: None,
+                tool_name: None,
+            });
+            assert_eq!(
+                coverage(&observed),
+                format!("observations={label} events=1")
+            );
+        }
+    }
 
     #[tokio::test]
     async fn capture_repairs_legacy_ignore_rules_before_creating_private_files() {
@@ -1230,9 +1307,21 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let program = dir.path().join("claude");
         let id = uuid::Uuid::new_v4().to_string();
-        fs::write(&program, "#!/bin/sh\nprintf '2.1.251 (Claude Code)\\n'\n").unwrap();
+        assert_eq!(
+            supported_version(
+                "./missing-claude",
+                dir.path(),
+                ObservationSource::ClaudeHooks
+            )
+            .await,
+            None
+        );
+        fs::write(&program, "#!/bin/sh\nprintf '2.1.212 (Claude Code)\\n'\n").unwrap();
         fs::set_permissions(&program, fs::Permissions::from_mode(0o700)).unwrap();
-        assert!(supported_version("./claude", dir.path(), ObservationSource::ClaudeHooks).await);
+        assert_eq!(
+            supported_version("./claude", dir.path(), ObservationSource::ClaudeHooks).await,
+            Some(true)
+        );
         let invocation = HarnessInvocation {
             program: program.to_str().unwrap().into(),
             args: vec!["--print".into(), "task".into()],
@@ -1254,6 +1343,10 @@ mod tests {
                 .any(|e| e.file_name().to_string_lossy().starts_with("jevia-events-"))
         );
         fs::write(&program, "#!/bin/sh\nprintf '2.1.100 (Claude Code)\\n'\n").unwrap();
+        assert_eq!(
+            supported_version("./claude", dir.path(), ObservationSource::ClaudeHooks).await,
+            Some(false)
+        );
         let capture = Capture::prepare(ObservationMode::Auto, &invocation, dir.path(), &id).await;
         assert_eq!(capture.args, invocation.args);
         assert_eq!(capture.snapshot().status, Status::Unavailable);

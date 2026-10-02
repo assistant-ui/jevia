@@ -103,7 +103,7 @@ remain supported). No feedback or extra verification is needed for these metrics
 ### Native harness observations
 
 CLI 0.1.6 `jevia run` enables native capture automatically for supported direct
-executables (including `.exe` names). It probes `--version` with a two-second
+executables (including `.exe` names). It probes `--version` with a five-second
 deadline before adding a session-local adapter. Probes own a process group/job,
 accept at most 256 bytes of successful UTF-8 output, and stop descendants on
 failure, timeout, or cancellation. Failed probes allow up to one additional
@@ -113,7 +113,7 @@ stays on. Other harnesses, including Gemini, retain process facts only.
 
 | Harness | Auto-detection contract | Capture and limits |
 | --- | --- | --- |
-| Claude Code | 2.1.251+ | Silent exec-form hooks; preserves custom `--settings`, `--bare`, and `--safe-mode` by skipping injection. Managed settings may disable hooks. |
+| Claude Code | 2.x >= 2.1.212 | Silent exec-form hooks; preserves custom `--settings`, `--bare`, and `--safe-mode` by skipping injection. Managed settings may disable hooks. Version 2.1.212 was verified with a real file-read task and session/tool/turn events. |
 | Codex | 0.158.x stable or the tested 0.158.0-alpha.2, macOS/Linux | Inline session hook overrides. `exec`/`review` run locally; interactive launches get `--no-daemon` to isolate the journal environment. Existing `-c`/`--config`, `--disable`, remote/attach/server arguments skip injection. Windows stays process-only. |
 | OpenCode | v1 >= 1.18.33, < 2 | Private dependency-free `.mjs` plugin appended through `OPENCODE_CONFIG_CONTENT`; existing valid JSON overrides and plugin entries are preserved. Invalid/JSONC inline overrides and remote/attach/server launches stay process-only. |
 
@@ -133,6 +133,33 @@ event fields. Codex `PostToolUse` becomes neutral `tool_completed`, because it c
 also fire for nonzero shell exits. `Interrupt` is `turn_interrupted`, not task
 failure. Reported model IDs attach only to the event that contains them; no
 cross-subagent model-switch inference is made.
+
+The run summary reports actual capture coverage (`observations=recorded`,
+`no_events`, `unavailable`, `partial`, `disabled`, or `unsupported`) and the
+observed event count. Saving process metadata does **not** mean native events
+were captured. A zero-event run warns explicitly; it remains an unknown task
+outcome, even when the process exits zero. `recorded` means some events arrived,
+not proof of complete coverage or a successfully solved task.
+
+#### Opt-in live capture check
+
+After `cargo build --release -p jevia`, run the real-provider smoke check with
+existing authenticated harness CLIs and `TYPESAFE_API_KEY` in the environment:
+
+```bash
+JEVIA_LIVE_TEST=1 node scripts/live-harness-smoke.mjs claude
+JEVIA_LIVE_TEST=1 JEVIA_LIVE_CODEX_MODEL=your-model node scripts/live-harness-smoke.mjs codex
+```
+
+This makes potentially paid API calls, uses a disposable synthetic project,
+and prints the path to its actual `runs.jsonl`. It never injects synthetic
+events or bypasses hook trust. A successful process with zero native events
+**fails** the check. It requires both a tool event and turn completion, and
+leaves the project and recording available for inspection. All tiers use the
+same selected harness model to isolate capture behavior; this is not a model
+quality benchmark. The Claude call has a $0.50 budget; both have a 90-second
+harness deadline. The separate CI native-contract tests use loopback model
+responses and are not evidence of a successful live-provider run.
 
 OpenCode uses its [plugin API](https://opencode.ai/docs/plugins/) and
 [runtime config override](https://opencode.ai/docs/config/). The adapter contract

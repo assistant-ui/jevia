@@ -127,6 +127,9 @@ test("real Codex accepts injected hooks but preserves normal trust review", { sk
   assert.equal(record.execution.observations.source, "codex_hooks");
   assert.equal(record.execution.observations.status, "no_events");
   assert.deepEqual(record.execution.observations.events, []);
-  // Positive trusted-hook dispatch is covered by the existing contract fixtures.
-  // Do not seed private trust state or bypass review to turn this assertion green.
+  assert.match(result.stderr, /observations=no_events events=0/);
+  assert.match(result.stderr, /no native events received/);
+  assert.doesNotMatch(result.stderr, /observations=recorded/);
+  // This is a negative coverage test, not proof that trusted hooks dispatch.
+  // scripts/live-harness-smoke.mjs requires real tool and turn events to pass.
 });
