@@ -1425,6 +1425,12 @@ Symlinks are rejected; Unix hard-linked files are also retained. This is
 cooperating-process maintenance, not a sandbox against arbitrary filesystem
 writers. Keep the project directory protected with filesystem permissions/ACLs.
 
+Cleanup avoids rescanning the directory for artifacts already known to be
+ineligible. Every possible archive move still checks freshly for that owner's
+journal/loss marker, rechecks file contents, and holds its execution lease.
+Large batches of eligible files can still require repeated directory reads;
+the optimization does not remove these safety checks.
+
 Eligible files are **moved, not deleted**, into a unique ignored
 `.jevia/recording-archives/cleanup-*` directory. The report includes the archive
 path. Files already moved remain recoverable even if a later operation fails;

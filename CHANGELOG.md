@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Skip recording-cleanup rescans for ineligible artifacts; retain fresh,
+  allocation-light replay-source checks before every possible archive move.
 - Stream guided database setup through private validated snapshots and raw-source
   fingerprints, preserving read-only previews and configuration-last switching.
 - Batch JSONL recording-cleanup history lookups across up to 32 owners, keeping
