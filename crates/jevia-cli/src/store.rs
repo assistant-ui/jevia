@@ -335,15 +335,6 @@ pub fn record_state(
     })
 }
 
-pub fn checkpoint_observations(
-    path: &Path,
-    run_id: &str,
-    observations: HarnessObservations,
-    supervisor: bool,
-) -> Result<RouteRecord> {
-    checkpoint_observations_until(path, run_id, observations, supervisor, None)
-}
-
 pub fn checkpoint_observations_until(
     path: &Path,
     run_id: &str,

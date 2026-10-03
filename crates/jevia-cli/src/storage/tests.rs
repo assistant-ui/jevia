@@ -28,6 +28,93 @@ fn sqlite_config() -> Config {
     }
 }
 
+#[test]
+fn dropped_live_checkpoint_cannot_write_after_its_worker_deadline() {
+    use jevia_core::{HarnessEvent, HarnessEventKind, ObservationSource, ObservationStatus};
+    use std::time::{Duration, Instant};
+
+    let directory = tempfile::tempdir().unwrap();
+    let paths = ProjectPaths::at(directory.path().into());
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .max_blocking_threads(1)
+        .build()
+        .unwrap();
+    let original = runtime.block_on(async {
+        let storage = Storage::open(&Config::default(), &paths, true)
+            .await
+            .unwrap();
+        storage.append(&sample("checkpoint")).await.unwrap();
+        let mut observations = HarnessObservations {
+            source: Some(ObservationSource::ClaudeHooks),
+            status: ObservationStatus::NoEvents,
+            events: vec![],
+            totals: None,
+        };
+        storage
+            .state(
+                "checkpoint",
+                RunState::Running,
+                Outcome::Unknown,
+                Some(ExecutionEvidence {
+                    observations: Some(observations.clone()),
+                    harness: "test".into(),
+                    model: "test".into(),
+                    duration_ms: 0,
+                    exit_code: None,
+                    verification: None,
+                }),
+            )
+            .await
+            .unwrap();
+        let original = std::fs::read(&paths.runs).unwrap();
+        observations.observe(HarnessEvent {
+            kind: HarnessEventKind::TurnCompleted,
+            recorded_at_ms: 1,
+            session_id: None,
+            agent_id: None,
+            model: None,
+            previous_model: None,
+            tool_name: None,
+        });
+
+        // Occupy the only worker: cancellation must also stop work that has not
+        // started yet, not just stop waiting for its JoinHandle.
+        let (started, ready) = std::sync::mpsc::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let holder = tokio::task::spawn_blocking(move || {
+            started.send(()).unwrap();
+            let _ = wait.recv_timeout(Duration::from_secs(5));
+        });
+        ready.recv_timeout(Duration::from_secs(5)).unwrap();
+        let deadline = Instant::now() + Duration::from_millis(20);
+        let result = tokio::time::timeout_at(
+            deadline.into(),
+            storage.checkpoint_observations("checkpoint", observations, true, Some(deadline)),
+        )
+        .await;
+        release.send(()).unwrap();
+        holder.await.unwrap();
+        assert!(
+            result.is_err(),
+            "the queued worker outlives its async waiter"
+        );
+        original
+    });
+    // Runtime shutdown joins even detached blocking work before inspecting state.
+    drop(runtime);
+    assert_eq!(std::fs::read(&paths.runs).unwrap(), original);
+    let saved = store::record_state(
+        &paths.runs,
+        "checkpoint",
+        RunState::Completed,
+        Outcome::Unknown,
+        None,
+    )
+    .unwrap();
+    assert_eq!(saved.lifecycle.unwrap().state, RunState::Completed);
+}
+
 #[tokio::test]
 async fn jsonl_checkpoints_skip_busy_history_and_reject_late_supervisor_writes() {
     use jevia_core::{ObservationSource, ObservationStatus};
@@ -74,7 +161,7 @@ async fn jsonl_checkpoints_skip_busy_history_and_reject_late_supervisor_writes()
     });
     let started = Instant::now();
     let result = storage
-        .checkpoint_observations("checkpoint", observations.clone(), true)
+        .checkpoint_observations("checkpoint", observations.clone(), true, None)
         .await;
     let elapsed = started.elapsed();
     let _ = release.send(());
@@ -88,7 +175,7 @@ async fn jsonl_checkpoints_skip_busy_history_and_reject_late_supervisor_writes()
         "checkpoint waited on the lock"
     );
     storage
-        .checkpoint_observations("checkpoint", observations.clone(), true)
+        .checkpoint_observations("checkpoint", observations.clone(), true, None)
         .await
         .unwrap();
     storage
@@ -97,13 +184,13 @@ async fn jsonl_checkpoints_skip_busy_history_and_reject_late_supervisor_writes()
         .unwrap();
     assert!(
         storage
-            .checkpoint_observations("checkpoint", observations.clone(), true)
+            .checkpoint_observations("checkpoint", observations.clone(), true, None)
             .await
             .is_err()
     );
     // Explicit recovery/replay can still restore observations on terminal runs.
     storage
-        .checkpoint_observations("checkpoint", observations, false)
+        .checkpoint_observations("checkpoint", observations, false, None)
         .await
         .unwrap();
     assert_eq!(
@@ -325,7 +412,7 @@ async fn terminal_snapshot_contract(config: Config) {
             tool_name: None,
         });
         storage
-            .checkpoint_observations(&id, observed, true)
+            .checkpoint_observations(&id, observed, true, None)
             .await
             .unwrap();
         execution.observations.as_mut().unwrap().status = ObservationStatus::Partial;
