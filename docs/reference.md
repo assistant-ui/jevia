@@ -1092,7 +1092,8 @@ leave one byte for that newline). Oversized lines fail with a
 redacted error and are never truncated or skipped. JSONL appends and rewrites
 also reject oversized output before publication. Existing oversized history
 must be inspected and reduced explicitly; this does not bound the total memory
-of explicit repair/archive operations or arbitrary SQL rows.
+of arbitrary SQL rows. Unreleased JSONL repair/archive streams payloads but still
+keeps a set of unique run IDs for duplicate detection.
 
 The guided CLI path avoids editing TOML by hand (run `jevia init` first):
 
@@ -1450,6 +1451,14 @@ values must be finite and within 0–1. The 8 MiB physical-line limit also appli
 including space for a final newline. Invalid complete records are refused even
 when a later tail is repairable. Preview and apply leave the original bytes
 untouched and create no backup/archive on validation failure.
+
+Unreleased: JSONL maintenance streams one bounded physical line at a time.
+Preview retains only run IDs and counts, not full records or output buffers.
+Apply makes a second validated pass under the same exclusive history lock,
+streaming exact bytes to private recovery files and a temporary replacement.
+Both passes must have matching counts and a SHA-256 digest before recovery files
+are finalized and history is atomically replaced. Memory grows with unique run
+IDs and the largest record, not the combined history, backup, and archive sizes.
 
 Archival works with JSONL, SQLite, and PostgreSQL. It keeps the most recently
 **appended** `--keep` eligible terminal records (minimum one), plus every active,
