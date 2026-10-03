@@ -1,0 +1,248 @@
+diff --git a/dist/chunk-CQAX5ICZ.mjs b/dist/chunk-CQAX5ICZ.mjs
+index 4fc22722ef8b34554a819728175ebbc74bd04a8f..b60d500a10e95dba1db64d69988b821654dbfe72 100644
+--- a/dist/chunk-CQAX5ICZ.mjs
++++ b/dist/chunk-CQAX5ICZ.mjs
+@@ -178,8 +178,8 @@ async function fileExists(filePath) {
+ }
+ __name(fileExists, "fileExists");
+ async function globFiles(pattern, cwd) {
+-  const glob = await import("fast-glob");
+-  return glob.default(pattern, { cwd, absolute: false });
++  const glob = await import("tinyglobby");
++  return glob.glob(pattern, { cwd, absolute: false });
+ }
+ __name(globFiles, "globFiles");
+ function parseSearchParams(searchParams) {
+diff --git a/dist/chunk-MLOW6JIR.mjs b/dist/chunk-MLOW6JIR.mjs
+index a81e49adc967243b61960139dae76ee5994746a7..f82d32504bd7abc7d29b86e5d45896554afc0e41 100644
+--- a/dist/chunk-MLOW6JIR.mjs
++++ b/dist/chunk-MLOW6JIR.mjs
+@@ -8238,11 +8238,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+   );
+   const patterns = /* @__PURE__ */ new Set();
+   const routeModulePatterns = /* @__PURE__ */ new Set();
+-  const glob = await import("fast-glob");
++  const glob = await import("tinyglobby");
+   for (const source of sourceRoots) {
+     const appDir = path12.join(source.root, source.srcDir, "app");
+     if (fs7.existsSync(appDir)) {
+-      const routeModuleFiles = await glob.default(
++      const routeModuleFiles = await glob.glob(
+         `**/{page,layout,loading,error}.{${componentExtensions.join(",")},md,mdx}`,
+         {
+           cwd: appDir,
+diff --git a/dist/chunk-WGAHNWTK.mjs b/dist/chunk-WGAHNWTK.mjs
+index fe6cab42649d564642548b016fc28214bc0a8c99..d28407b07022f5eef52856af6ea49eb62cc37870 100644
+--- a/dist/chunk-WGAHNWTK.mjs
++++ b/dist/chunk-WGAHNWTK.mjs
+@@ -94,8 +94,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+     return [];
+   }
+   try {
+-    const glob = await import("fast-glob");
+-    return await glob.default("**/*.{ts,tsx,js,jsx}", {
++    const glob = await import("tinyglobby");
++    return await glob.glob("**/*.{ts,tsx,js,jsx}", {
+       cwd: srcRoot,
+       absolute: true,
+       ignore: [
+diff --git a/dist/index.cjs b/dist/index.cjs
+index b1febdc9589f64fbef3ab3e2b47a60d61bc92518..6810d986d0cda6d660348c7f9dc33841855dc221 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -548,8 +548,8 @@ async function fileExists(filePath) {
+   }
+ }
+ async function globFiles(pattern, cwd) {
+-  const glob = await import("fast-glob");
+-  return glob.default(pattern, { cwd, absolute: false });
++  const glob = await import("tinyglobby");
++  return glob.glob(pattern, { cwd, absolute: false });
+ }
+ function parseSearchParams(searchParams) {
+   return searchParamsToObject(searchParams);
+@@ -12328,8 +12328,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+     return [];
+   }
+   try {
+-    const glob = await import("fast-glob");
+-    return await glob.default("**/*.{ts,tsx,js,jsx}", {
++    const glob = await import("tinyglobby");
++    return await glob.glob("**/*.{ts,tsx,js,jsx}", {
+       cwd: srcRoot,
+       absolute: true,
+       ignore: [
+@@ -26366,11 +26366,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+   );
+   const patterns = /* @__PURE__ */ new Set();
+   const routeModulePatterns = /* @__PURE__ */ new Set();
+-  const glob = await import("fast-glob");
++  const glob = await import("tinyglobby");
+   for (const source of sourceRoots) {
+     const appDir = path20.join(source.root, source.srcDir, "app");
+     if (fs9.existsSync(appDir)) {
+-      const routeModuleFiles = await glob.default(
++      const routeModuleFiles = await glob.glob(
+         `**/{page,layout,loading,error}.{${componentExtensions.join(",")},md,mdx}`,
+         {
+           cwd: appDir,
+diff --git a/dist/internal/build-runtime.cjs b/dist/internal/build-runtime.cjs
+index 4029bf51e284f3c1ab3a5b8e6119eb4daa5fcd91..5827c06e39063cdb6e69a8fd9cd8bbb8a9a3f2f7 100644
+--- a/dist/internal/build-runtime.cjs
++++ b/dist/internal/build-runtime.cjs
+@@ -4455,8 +4455,8 @@ async function fileExists(filePath) {
+   }
+ }
+ async function globFiles(pattern, cwd) {
+-  const glob = await import("fast-glob");
+-  return glob.default(pattern, { cwd, absolute: false });
++  const glob = await import("tinyglobby");
++  return glob.glob(pattern, { cwd, absolute: false });
+ }
+ var import_path, logger;
+ var init_utils = __esm({
+@@ -12028,8 +12028,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+     return [];
+   }
+   try {
+-    const glob = await import("fast-glob");
+-    return await glob.default("**/*.{ts,tsx,js,jsx}", {
++    const glob = await import("tinyglobby");
++    return await glob.glob("**/*.{ts,tsx,js,jsx}", {
+       cwd: srcRoot,
+       absolute: true,
+       ignore: [
+@@ -25685,11 +25685,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+   );
+   const patterns = /* @__PURE__ */ new Set();
+   const routeModulePatterns = /* @__PURE__ */ new Set();
+-  const glob = await import("fast-glob");
++  const glob = await import("tinyglobby");
+   for (const source of sourceRoots) {
+     const appDir = path30.join(source.root, source.srcDir, "app");
+     if (fs10.existsSync(appDir)) {
+-      const routeModuleFiles = await glob.default(
++      const routeModuleFiles = await glob.glob(
+         `**/{page,layout,loading,error}.{${componentExtensions.join(",")},md,mdx}`,
+         {
+           cwd: appDir,
+diff --git a/dist/plugin.cjs b/dist/plugin.cjs
+index c444d6e3ad76e6dadf32b6e976ae3b9e18917cfd..d49675103643e65adb1ed3626730638da15802f2 100644
+--- a/dist/plugin.cjs
++++ b/dist/plugin.cjs
+@@ -1361,8 +1361,8 @@ async function fileExists(filePath) {
+   }
+ }
+ async function globFiles(pattern, cwd) {
+-  const glob = await import("fast-glob");
+-  return glob.default(pattern, { cwd, absolute: false });
++  const glob = await import("tinyglobby");
++  return glob.glob(pattern, { cwd, absolute: false });
+ }
+ var import_path, logger;
+ var init_utils = __esm({
+@@ -16672,8 +16672,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+     return [];
+   }
+   try {
+-    const glob = await import("fast-glob");
+-    return await glob.default("**/*.{ts,tsx,js,jsx}", {
++    const glob = await import("tinyglobby");
++    return await glob.glob("**/*.{ts,tsx,js,jsx}", {
+       cwd: srcRoot,
+       absolute: true,
+       ignore: [
+@@ -27892,11 +27892,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+   );
+   const patterns = /* @__PURE__ */ new Set();
+   const routeModulePatterns = /* @__PURE__ */ new Set();
+-  const glob = await import("fast-glob");
++  const glob = await import("tinyglobby");
+   for (const source of sourceRoots) {
+     const appDir = path20.join(source.root, source.srcDir, "app");
+     if (fs9.existsSync(appDir)) {
+-      const routeModuleFiles = await glob.default(
++      const routeModuleFiles = await glob.glob(
+         `**/{page,layout,loading,error}.{${componentExtensions.join(",")},md,mdx}`,
+         {
+           cwd: appDir,
+diff --git a/dist/server.cjs b/dist/server.cjs
+index fcc928e647c588192b0c59dac819a96ba1ed00cd..da50f4c33447fe85f9b55566e60c01e792bde17f 100644
+--- a/dist/server.cjs
++++ b/dist/server.cjs
+@@ -1166,8 +1166,8 @@ async function fileExists(filePath) {
+   }
+ }
+ async function globFiles(pattern, cwd) {
+-  const glob = await import("fast-glob");
+-  return glob.default(pattern, { cwd, absolute: false });
++  const glob = await import("tinyglobby");
++  return glob.glob(pattern, { cwd, absolute: false });
+ }
+ function parseSearchParams(searchParams) {
+   return searchParamsToObject(searchParams);
+@@ -19244,8 +19244,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+     return [];
+   }
+   try {
+-    const glob = await import("fast-glob");
+-    return await glob.default("**/*.{ts,tsx,js,jsx}", {
++    const glob = await import("tinyglobby");
++    return await glob.glob("**/*.{ts,tsx,js,jsx}", {
+       cwd: srcRoot,
+       absolute: true,
+       ignore: [
+@@ -31147,11 +31147,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+   );
+   const patterns = /* @__PURE__ */ new Set();
+   const routeModulePatterns = /* @__PURE__ */ new Set();
+-  const glob = await import("fast-glob");
++  const glob = await import("tinyglobby");
+   for (const source of sourceRoots) {
+     const appDir = path20.join(source.root, source.srcDir, "app");
+     if (fs9.existsSync(appDir)) {
+-      const routeModuleFiles = await glob.default(
++      const routeModuleFiles = await glob.glob(
+         `**/{page,layout,loading,error}.{${componentExtensions.join(",")},md,mdx}`,
+         {
+           cwd: appDir,
+diff --git a/dist/vite.cjs b/dist/vite.cjs
+index 5397c42908d8a33e4304d143a0bb847a86b8cd66..d03a40940485c09ce4a649f0c213499f111c895b 100644
+--- a/dist/vite.cjs
++++ b/dist/vite.cjs
+@@ -1156,8 +1156,8 @@ async function fileExists(filePath) {
+   }
+ }
+ async function globFiles(pattern, cwd) {
+-  const glob = await import("fast-glob");
+-  return glob.default(pattern, { cwd, absolute: false });
++  const glob = await import("tinyglobby");
++  return glob.glob(pattern, { cwd, absolute: false });
+ }
+ var import_path, logger;
+ var init_utils = __esm({
+@@ -17104,8 +17104,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+     return [];
+   }
+   try {
+-    const glob = await import("fast-glob");
+-    return await glob.default("**/*.{ts,tsx,js,jsx}", {
++    const glob = await import("tinyglobby");
++    return await glob.glob("**/*.{ts,tsx,js,jsx}", {
+       cwd: srcRoot,
+       absolute: true,
+       ignore: [
+@@ -28343,11 +28343,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+   );
+   const patterns = /* @__PURE__ */ new Set();
+   const routeModulePatterns = /* @__PURE__ */ new Set();
+-  const glob = await import("fast-glob");
++  const glob = await import("tinyglobby");
+   for (const source of sourceRoots) {
+     const appDir = path20.join(source.root, source.srcDir, "app");
+     if (fs9.existsSync(appDir)) {
+-      const routeModuleFiles = await glob.default(
++      const routeModuleFiles = await glob.glob(
+         `**/{page,layout,loading,error}.{${componentExtensions.join(",")},md,mdx}`,
+         {
+           cwd: appDir,
