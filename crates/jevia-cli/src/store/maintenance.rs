@@ -1,6 +1,8 @@
 use std::{collections::HashSet, path::PathBuf};
 
+use crate::recordings::PendingRecordings;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use super::*;
 
@@ -23,9 +25,14 @@ pub struct Report {
     pub archive: Option<PathBuf>,
 }
 
-struct Line<'a> {
-    bytes: &'a [u8],
-    record: Option<RouteRecord>,
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Scan {
+    records: usize,
+    candidates: usize,
+    truncated_tail_bytes: usize,
+    has_valid_bytes: bool,
+    ends_with_newline: bool,
+    digest: [u8; 32],
 }
 
 /// Preview by default. The same stable lock covers inspection, durable backup,
@@ -56,7 +63,7 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
     }
     let _lock = acquire_lock(path, LockMode::Exclusive)?;
     let pending = if matches!(operation, Maintenance::Archive { .. }) {
-        Some(crate::recordings::PendingRecordings::scan(parent)?)
+        Some(PendingRecordings::scan(parent)?)
     } else {
         None
     };
@@ -65,145 +72,166 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
     else {
         return Ok(report);
     };
-    let mut original = Vec::new();
-    file.read_to_end(&mut original)
-        .context("could not read history for maintenance")?;
-    drop(file);
-    let mut lines = Vec::new();
-    let mut ids = HashSet::new();
-    let mut offset = 0;
-    for (index, bytes) in original.split_inclusive(|byte| *byte == b'\n').enumerate() {
-        // Match normal JSONL reads, including room for a repaired final newline.
-        // Even whitespace and truncated tails must not bypass the input bound.
-        if bytes.len() > crate::jsonl::MAX_LINE_BYTES
-            || (bytes.len() == crate::jsonl::MAX_LINE_BYTES && !bytes.ends_with(b"\n"))
-        {
-            bail!(
-                "JSONL line {} exceeds the 8 MiB limit including its newline (contents redacted); refusing to rewrite history",
-                index + 1
-            );
-        }
-        if bytes.iter().all(u8::is_ascii_whitespace) {
-            lines.push(Line {
-                bytes,
-                record: None,
-            });
-            offset += bytes.len();
-            continue;
-        }
-        // Distinguish syntactically truncated JSON from a complete JSON value
-        // whose schema/types we do not understand. Never repair the latter.
-        let value: serde_json::Value = match serde_json::from_slice(bytes) {
-            Ok(value) => value,
-            Err(error)
-                if matches!(operation, Maintenance::Repair)
-                    && error.is_eof()
-                    && !bytes.ends_with(b"\n")
-                    && offset + bytes.len() == original.len() =>
-            {
-                report.truncated_tail_bytes = bytes.len();
-                break;
-            }
-            Err(error) => {
-                return Err(crate::diagnostics::json_line("JSON", index + 1, &error))
-                    .context("refusing to rewrite history");
-            }
-        };
-        let record: RouteRecord = serde_json::from_value(value)
-            .map_err(|error| crate::diagnostics::json_line("record", index + 1, &error))
-            .context("refusing to rewrite history")?;
-        if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
-            bail!(
-                "unsupported schema {} on line {}; refusing to rewrite history",
-                record.schema_version,
-                index + 1
-            );
-        }
-        record
-            .decision
-            .validate()
-            .map_err(anyhow::Error::msg)
-            .with_context(|| {
-                format!(
-                    "invalid routing decision on line {} (contents redacted); refusing to rewrite history",
-                    index + 1
-                )
-            })?;
-        if !ids.insert(record.decision.run_id.clone()) {
-            bail!(
-                "duplicate run id on line {}; refusing to rewrite history",
-                index + 1
-            );
-        }
-        lines.push(Line {
-            bytes,
-            record: Some(record),
-        });
-        offset += bytes.len();
-    }
-    let eligible = |record: &RouteRecord| {
-        archivable(record)
-            && pending
-                .as_ref()
-                .is_none_or(|pending| !pending.contains(&record.decision.run_id))
-    };
-    let candidates = lines
-        .iter()
-        .filter(|line| line.record.as_ref().is_some_and(&eligible))
-        .count();
-    let mut to_archive = match operation {
+    // Preview keeps only identifiers for duplicate detection and one bounded line.
+    // Validate everything before creating recovery files, even for a late error.
+    let before = scan(&mut file, operation, pending.as_ref(), |_, _, _| Ok(()))?;
+    report.archived_records = match operation {
         Maintenance::Repair => 0,
-        Maintenance::Archive { keep } => candidates.saturating_sub(keep),
+        Maintenance::Archive { keep } => before.candidates.saturating_sub(keep),
     };
-    let mut retained = Vec::new();
-    let mut archived = Vec::new();
-    for line in lines {
-        if to_archive > 0 && line.record.as_ref().is_some_and(&eligible) {
-            archived.extend_from_slice(line.bytes);
-            report.archived_records += 1;
-            to_archive -= 1;
-        } else {
-            retained.extend_from_slice(line.bytes);
-            report.retained_records += usize::from(line.record.is_some());
-        }
-    }
-    if (matches!(operation, Maintenance::Repair) || report.archived_records > 0)
-        && !retained.is_empty()
-        && !retained.ends_with(b"\n")
-    {
-        retained.push(b'\n');
-        report.added_final_newline = true;
-    }
-    report.would_change = retained != original;
+    report.retained_records = before.records - report.archived_records;
+    report.truncated_tail_bytes = before.truncated_tail_bytes;
+    // keep >= 1 ensures the final eligible row is retained. Whitespace, pending
+    // rows, and active rows are retained too, so the last valid byte survives.
+    report.added_final_newline = (matches!(operation, Maintenance::Repair)
+        || report.archived_records > 0)
+        && before.has_valid_bytes
+        && !before.ends_with_newline;
+    report.would_change = report.archived_records > 0
+        || report.truncated_tail_bytes > 0
+        || report.added_final_newline;
     if !apply || !report.would_change {
         return Ok(report);
     }
 
-    // Save exact bytes, including corruption and unknown additive JSON fields,
-    // before changing anything. No snapshot is ever overwritten or auto-deleted.
-    let backup = snapshot(&parent.join("history-backups"), &original)?;
+    let mut backup = Snapshot::new(&parent.join("history-backups"))?;
+    let mut archive = if report.archived_records > 0 {
+        Some(Snapshot::new(&parent.join("history-archives"))?)
+    } else {
+        None
+    };
+    let mut replacement = NamedTempFile::new_in(parent)?;
+    let mut remaining = report.archived_records;
+    file.rewind()?;
+    let after = {
+        let mut retained = BufWriter::new(replacement.as_file_mut());
+        let after = scan(
+            &mut file,
+            operation,
+            pending.as_ref(),
+            |bytes, eligible, truncated| {
+                backup.writer.write_all(bytes)?;
+                if truncated {
+                    return Ok(());
+                }
+                if eligible && remaining > 0 {
+                    archive
+                        .as_mut()
+                        .context("missing archive writer")?
+                        .writer
+                        .write_all(bytes)?;
+                    remaining -= 1;
+                } else {
+                    retained.write_all(bytes)?;
+                }
+                Ok(())
+            },
+        )?;
+        if report.added_final_newline {
+            retained.write_all(b"\n")?;
+        }
+        retained.flush()?;
+        after
+    };
+    validate_snapshot(&before, &after, remaining)?;
+    drop(file); // Windows replacement cannot retain an open source handle.
+    replacement.as_file().sync_all()?;
+    // Publish durable, exact recovery bytes before replacing history. Includes
+    // truncated tails and unknown additive fields; never normalize user records.
+    let backup = backup.finish()?;
     report.backup = Some(backup.clone());
-    if !archived.is_empty() {
-        report.archive = Some(
-            snapshot(&parent.join("history-archives"), &archived).with_context(|| {
-                format!(
-                    "archive failed; original history backup: {}",
-                    backup.display()
-                )
-            })?,
-        );
+    if let Some(archive) = archive {
+        report.archive = Some(archive.finish().with_context(|| {
+            format!(
+                "archive failed; original history backup: {}",
+                backup.display()
+            )
+        })?);
     }
     if let Some(pending) = pending {
         pending.recheck(parent)?;
     }
-    replace(path, &retained).with_context(|| {
-        format!(
-            "could not commit maintenance; original history backup: {}",
-            backup.display()
-        )
-    })?;
+    replacement
+        .persist(path)
+        .map_err(|error| error.error)
+        .with_context(|| {
+            format!(
+                "could not commit maintenance; original history backup: {}",
+                backup.display()
+            )
+        })?;
+    sync_parent(path)?;
     report.applied = true;
     Ok(report)
+}
+
+fn validate_snapshot(before: &Scan, after: &Scan, remaining: usize) -> Result<()> {
+    if before != after || remaining != 0 {
+        bail!("history changed during maintenance; original history was not replaced");
+    }
+    Ok(())
+}
+
+/// Two passes under one exclusive lock. Memory grows with unique IDs, not task
+/// text, event payloads, or copies of the entire source/retained/archive streams.
+fn scan(
+    file: &mut File,
+    operation: Maintenance,
+    pending: Option<&PendingRecordings>,
+    mut visit: impl FnMut(&[u8], bool, bool) -> Result<()>,
+) -> Result<Scan> {
+    let mut reader = BufReader::new(file);
+    let mut bytes = Vec::new();
+    let mut ids = HashSet::new();
+    let mut result = Scan::default();
+    let mut hash = Sha256::new();
+    let mut index = 0;
+    while crate::jsonl::read_line(&mut reader, &mut bytes, || Ok(()))? {
+        index += 1;
+        hash.update(&bytes);
+        let mut eligible = false;
+        if !bytes.iter().all(u8::is_ascii_whitespace) {
+            let value: serde_json::Value = match serde_json::from_slice(&bytes) {
+                Ok(value) => value,
+                Err(error)
+                    if matches!(operation, Maintenance::Repair)
+                        && error.is_eof()
+                        && !bytes.ends_with(b"\n") =>
+                {
+                    result.truncated_tail_bytes = bytes.len();
+                    visit(&bytes, false, true)?;
+                    break;
+                }
+                Err(error) => {
+                    return Err(crate::diagnostics::json_line("JSON", index, &error))
+                        .context("refusing to rewrite history");
+                }
+            };
+            let record: RouteRecord = serde_json::from_value(value)
+                .map_err(|error| crate::diagnostics::json_line("record", index, &error))
+                .context("refusing to rewrite history")?;
+            if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
+                bail!(
+                    "unsupported schema {} on line {index}; refusing to rewrite history",
+                    record.schema_version
+                );
+            }
+            record.decision.validate().map_err(anyhow::Error::msg).with_context(||
+                format!("invalid routing decision on line {index} (contents redacted); refusing to rewrite history"))?;
+            eligible = archivable(&record)
+                && pending.is_none_or(|pending| !pending.contains(&record.decision.run_id));
+            if !ids.insert(record.decision.run_id) {
+                bail!("duplicate run id on line {index}; refusing to rewrite history");
+            }
+            result.records += 1;
+            result.candidates += usize::from(eligible);
+        }
+        result.has_valid_bytes = true;
+        result.ends_with_newline = bytes.ends_with(b"\n");
+        visit(&bytes, eligible, false)?;
+    }
+    result.digest = hash.finalize().into();
+    Ok(result)
 }
 
 pub(crate) fn archivable(record: &RouteRecord) -> bool {
@@ -213,36 +241,43 @@ pub(crate) fn archivable(record: &RouteRecord) -> bool {
     }
 }
 
-fn snapshot(directory: &Path, bytes: &[u8]) -> Result<PathBuf> {
-    let mut builder = fs::DirBuilder::new();
-    builder.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
-    builder
-        .create(directory)
-        .context("could not create history snapshot directory")?;
-    sync_parent(directory)?;
-    let mut temporary = tempfile::Builder::new()
-        .prefix("runs-")
-        .suffix(".jsonl")
-        .tempfile_in(directory)?;
-    temporary.write_all(bytes)?;
-    temporary.as_file().sync_all()?;
-    let (_, path) = temporary.keep().map_err(|error| error.error)?;
-    sync_parent(&path)?;
-    Ok(path)
+struct Snapshot {
+    writer: BufWriter<NamedTempFile>,
 }
 
-fn replace(path: &Path, bytes: &[u8]) -> Result<()> {
-    let mut temporary =
-        NamedTempFile::new_in(path.parent().context("history path has no parent")?)?;
-    temporary.write_all(bytes)?;
-    temporary.as_file().sync_all()?;
-    temporary.persist(path).map_err(|error| error.error)?;
-    sync_parent(path)
+impl Snapshot {
+    fn new(directory: &Path) -> Result<Self> {
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder
+            .create(directory)
+            .context("could not create history snapshot directory")?;
+        sync_parent(directory)?;
+        let temporary = tempfile::Builder::new()
+            .prefix("runs-")
+            .suffix(".jsonl")
+            .tempfile_in(directory)?;
+        Ok(Self {
+            writer: BufWriter::new(temporary),
+        })
+    }
+
+    fn finish(mut self) -> Result<PathBuf> {
+        self.writer.flush()?;
+        self.writer.get_ref().as_file().sync_all()?;
+        let temporary = self
+            .writer
+            .into_inner()
+            .map_err(|error| error.into_error())?;
+        let (_, path) = temporary.keep().map_err(|error| error.error)?;
+        sync_parent(&path)?;
+        Ok(path)
+    }
 }
 
 #[cfg(test)]
@@ -394,5 +429,100 @@ mod tests {
             2
         );
         assert_eq!(fs::read(&path).unwrap(), third);
+    }
+
+    #[test]
+    fn streaming_archive_preserves_raw_bytes_across_buffers_and_trailing_whitespace() {
+        let root = tempdir().unwrap();
+        let path = root.path().join("runs.jsonl");
+        let mut original = b" \r\n".to_vec();
+        let mut expected_archive = Vec::new();
+        for id in 0..500 {
+            let mut raw = row(
+                &format!("run-{id}"),
+                Some(RunState::Completed),
+                Outcome::Unknown,
+            );
+            raw.pop();
+            raw.extend_from_slice(b"\r\n");
+            original.extend_from_slice(&raw);
+            if id < 498 {
+                expected_archive.extend_from_slice(&raw);
+            }
+        }
+        // Keep unknown JSON fields, CRLF, blank lines and an unterminated space.
+        original.extend_from_slice(b"\r\n ");
+        fs::write(&path, &original).unwrap();
+        let operation = Maintenance::Archive { keep: 2 };
+        let preview = maintain(&path, operation, false).unwrap();
+        assert_eq!(preview.archived_records, 498);
+        assert_eq!(preview.retained_records, 2);
+        assert!(preview.added_final_newline);
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+        let applied = maintain(&path, operation, true).unwrap();
+        assert_eq!(fs::read(applied.backup.unwrap()).unwrap(), original);
+        assert_eq!(
+            fs::read(applied.archive.unwrap()).unwrap(),
+            expected_archive
+        );
+        let expected = [
+            b" \r\n".as_slice(),
+            &original[3 + expected_archive.len()..],
+            b"\n",
+        ]
+        .concat();
+        assert_eq!(fs::read(&path).unwrap(), expected);
+    }
+
+    #[test]
+    fn two_pass_validation_detects_changed_bytes_even_with_the_same_counts() {
+        let root = tempdir().unwrap();
+        let path = root.path().join("runs.jsonl");
+        let first = row("first", None, Outcome::Success);
+        fs::write(&path, &first).unwrap();
+        let scan_file = || {
+            scan(
+                &mut File::open(&path).unwrap(),
+                Maintenance::Repair,
+                None,
+                |_, _, _| Ok(()),
+            )
+            .unwrap()
+        };
+        let before = scan_file();
+        validate_snapshot(&before, &scan_file(), 0).unwrap();
+        fs::write(
+            &path,
+            String::from_utf8(first)
+                .unwrap()
+                .replace("private task", "changed task"),
+        )
+        .unwrap();
+        let after = scan_file();
+        assert_eq!(before.records, after.records);
+        assert_eq!(before.candidates, after.candidates);
+        assert!(validate_snapshot(&before, &after, 0).is_err());
+        assert!(validate_snapshot(&before, &before, 1).is_err());
+    }
+
+    #[test]
+    fn streaming_repair_handles_empty_and_whitespace_only_inputs() {
+        for raw in [b"".as_slice(), b" \r\n", b" ", b"{"] {
+            let root = tempdir().unwrap();
+            let path = root.path().join("runs.jsonl");
+            fs::write(&path, raw).unwrap();
+            let applied = maintain(&path, Maintenance::Repair, true).unwrap();
+            assert_eq!(applied.retained_records, 0);
+            let expected = match raw {
+                b"{" => b"".as_slice(),
+                b" " => b" \n",
+                _ => raw,
+            };
+            assert_eq!(fs::read(&path).unwrap(), expected);
+            assert_eq!(applied.would_change, raw != expected);
+            if let Some(backup) = applied.backup {
+                assert_eq!(fs::read(backup).unwrap(), raw);
+            }
+        }
     }
 }

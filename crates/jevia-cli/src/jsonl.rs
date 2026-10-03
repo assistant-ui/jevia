@@ -17,7 +17,7 @@ pub fn read_line(
             // Reserve the newline an append would add to an unterminated tail.
             if line.len() == MAX_LINE_BYTES {
                 bail!(
-                    "unterminated JSONL line leaves no room within 8 MiB for a newline; input retained"
+                    "unterminated JSONL line leaves no room within the 8 MiB limit for a newline; input retained"
                 );
             }
             return Ok(!line.is_empty());
