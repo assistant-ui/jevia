@@ -33,3 +33,23 @@ test("the installed dependency graph removes the vulnerable glob chain", async (
   const farmRequire = createRequire(require.resolve("@farm.js/core"));
   assert.equal(typeof farmRequire("tinyglobby").glob, "function");
 });
+
+test("Farm upgrades keep CLI/core and version-scoped security protections aligned", async () => {
+  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const installed = JSON.parse(await readFile(new URL("../node_modules/@farm.js/core/package.json", import.meta.url), "utf8"));
+  const cli = JSON.parse(await readFile(new URL("../node_modules/@farm.js/cli/package.json", import.meta.url), "utf8"));
+  const version = manifest.dependencies["@farm.js/core"];
+  const key = `@farm.js/core@${version}`;
+  assert.equal(manifest.devDependencies["@farm.js/cli"], version);
+  assert.equal(installed.version, version);
+  assert.equal(cli.version, version);
+  assert.equal(cli.dependencies["@farm.js/core"], version);
+  assert.equal(manifest.pnpm.overrides[`${key}>fast-glob`], "-");
+  assert.equal(manifest.pnpm.overrides[`${key}>@scalar/api-reference`], "1.72.1");
+  assert.equal(manifest.pnpm.packageExtensions[key]?.dependencies.tinyglobby, "0.2.17");
+  const patch = manifest.pnpm.patchedDependencies[key];
+  assert.equal(typeof patch, "string", "the current Farm version requires its reviewed glob patch");
+  const contents = await readFile(new URL(`../${patch}`, import.meta.url), "utf8");
+  assert.match(contents, /\+.*import\("tinyglobby"\)/);
+  assert.doesNotMatch(contents, /\+.*import\("fast-glob"\)/);
+});

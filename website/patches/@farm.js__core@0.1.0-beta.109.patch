@@ -1,23 +1,8 @@
-diff --git a/dist/chunk-CQAX5ICZ.mjs b/dist/chunk-CQAX5ICZ.mjs
-index 4fc22722ef8b34554a819728175ebbc74bd04a8f..b60d500a10e95dba1db64d69988b821654dbfe72 100644
---- a/dist/chunk-CQAX5ICZ.mjs
-+++ b/dist/chunk-CQAX5ICZ.mjs
-@@ -178,8 +178,8 @@ async function fileExists(filePath) {
- }
- __name(fileExists, "fileExists");
- async function globFiles(pattern, cwd) {
--  const glob = await import("fast-glob");
--  return glob.default(pattern, { cwd, absolute: false });
-+  const glob = await import("tinyglobby");
-+  return glob.glob(pattern, { cwd, absolute: false });
- }
- __name(globFiles, "globFiles");
- function parseSearchParams(searchParams) {
-diff --git a/dist/chunk-MLOW6JIR.mjs b/dist/chunk-MLOW6JIR.mjs
-index a81e49adc967243b61960139dae76ee5994746a7..f82d32504bd7abc7d29b86e5d45896554afc0e41 100644
---- a/dist/chunk-MLOW6JIR.mjs
-+++ b/dist/chunk-MLOW6JIR.mjs
-@@ -8238,11 +8238,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+diff --git a/dist/chunk-2FA6E6KZ.mjs b/dist/chunk-2FA6E6KZ.mjs
+index e45f19c49e96333d4eae40838c17559710bec5d4..f94050aa3e98de43d33fdae4ebd8e2336acda071 100644
+--- a/dist/chunk-2FA6E6KZ.mjs
++++ b/dist/chunk-2FA6E6KZ.mjs
+@@ -8231,11 +8231,11 @@ async function createRouteTypeDeclarations(options, outPath) {
    );
    const patterns = /* @__PURE__ */ new Set();
    const routeModulePatterns = /* @__PURE__ */ new Set();
@@ -31,11 +16,11 @@ index a81e49adc967243b61960139dae76ee5994746a7..f82d32504bd7abc7d29b86e5d4589655
          `**/{page,layout,loading,error}.{${componentExtensions.join(",")},md,mdx}`,
          {
            cwd: appDir,
-diff --git a/dist/chunk-WGAHNWTK.mjs b/dist/chunk-WGAHNWTK.mjs
-index fe6cab42649d564642548b016fc28214bc0a8c99..d28407b07022f5eef52856af6ea49eb62cc37870 100644
---- a/dist/chunk-WGAHNWTK.mjs
-+++ b/dist/chunk-WGAHNWTK.mjs
-@@ -94,8 +94,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+diff --git a/dist/chunk-5CNWWU5L.mjs b/dist/chunk-5CNWWU5L.mjs
+index f451c565b7f24d4e2c0c158d8596936b5e719481..d6a533f6bdea96c6a66d42e1b0c38063bf3e3d20 100644
+--- a/dist/chunk-5CNWWU5L.mjs
++++ b/dist/chunk-5CNWWU5L.mjs
+@@ -95,8 +95,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
      return [];
    }
    try {
@@ -46,11 +31,26 @@ index fe6cab42649d564642548b016fc28214bc0a8c99..d28407b07022f5eef52856af6ea49eb6
        cwd: srcRoot,
        absolute: true,
        ignore: [
+diff --git a/dist/chunk-S5T2QB7N.mjs b/dist/chunk-S5T2QB7N.mjs
+index c11048fa927ee1d49b98a860958c9117cdcacc10..8641a280e54b35e883a7178368cf78d00266469c 100644
+--- a/dist/chunk-S5T2QB7N.mjs
++++ b/dist/chunk-S5T2QB7N.mjs
+@@ -178,8 +178,8 @@ async function fileExists(filePath) {
+ }
+ __name(fileExists, "fileExists");
+ async function globFiles(pattern, cwd) {
+-  const glob = await import("fast-glob");
+-  return glob.default(pattern, { cwd, absolute: false });
++  const glob = await import("tinyglobby");
++  return glob.glob(pattern, { cwd, absolute: false });
+ }
+ __name(globFiles, "globFiles");
+ function parseSearchParams(searchParams) {
 diff --git a/dist/index.cjs b/dist/index.cjs
-index b1febdc9589f64fbef3ab3e2b47a60d61bc92518..6810d986d0cda6d660348c7f9dc33841855dc221 100644
+index 8c48648c60bec7ee97654e85d02a060834709ba0..3abab64420e12c8874071dfb836a373e9b5086a3 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
-@@ -548,8 +548,8 @@ async function fileExists(filePath) {
+@@ -607,8 +607,8 @@ async function fileExists(filePath) {
    }
  }
  async function globFiles(pattern, cwd) {
@@ -61,7 +61,7 @@ index b1febdc9589f64fbef3ab3e2b47a60d61bc92518..6810d986d0cda6d660348c7f9dc33841
  }
  function parseSearchParams(searchParams) {
    return searchParamsToObject(searchParams);
-@@ -12328,8 +12328,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+@@ -12387,8 +12387,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
      return [];
    }
    try {
@@ -72,7 +72,7 @@ index b1febdc9589f64fbef3ab3e2b47a60d61bc92518..6810d986d0cda6d660348c7f9dc33841
        cwd: srcRoot,
        absolute: true,
        ignore: [
-@@ -26366,11 +26366,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+@@ -26424,11 +26424,11 @@ async function createRouteTypeDeclarations(options, outPath) {
    );
    const patterns = /* @__PURE__ */ new Set();
    const routeModulePatterns = /* @__PURE__ */ new Set();
@@ -87,10 +87,10 @@ index b1febdc9589f64fbef3ab3e2b47a60d61bc92518..6810d986d0cda6d660348c7f9dc33841
          {
            cwd: appDir,
 diff --git a/dist/internal/build-runtime.cjs b/dist/internal/build-runtime.cjs
-index 4029bf51e284f3c1ab3a5b8e6119eb4daa5fcd91..5827c06e39063cdb6e69a8fd9cd8bbb8a9a3f2f7 100644
+index f23cac023ce84e70bc39c5ea209e4159a482f394..01d57dcd6e6d00def9828f379f2f6e4085f31880 100644
 --- a/dist/internal/build-runtime.cjs
 +++ b/dist/internal/build-runtime.cjs
-@@ -4455,8 +4455,8 @@ async function fileExists(filePath) {
+@@ -4458,8 +4458,8 @@ async function fileExists(filePath) {
    }
  }
  async function globFiles(pattern, cwd) {
@@ -101,7 +101,7 @@ index 4029bf51e284f3c1ab3a5b8e6119eb4daa5fcd91..5827c06e39063cdb6e69a8fd9cd8bbb8
  }
  var import_path, logger;
  var init_utils = __esm({
-@@ -12028,8 +12028,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+@@ -12087,8 +12087,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
      return [];
    }
    try {
@@ -112,7 +112,7 @@ index 4029bf51e284f3c1ab3a5b8e6119eb4daa5fcd91..5827c06e39063cdb6e69a8fd9cd8bbb8
        cwd: srcRoot,
        absolute: true,
        ignore: [
-@@ -25685,11 +25685,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+@@ -25743,11 +25743,11 @@ async function createRouteTypeDeclarations(options, outPath) {
    );
    const patterns = /* @__PURE__ */ new Set();
    const routeModulePatterns = /* @__PURE__ */ new Set();
@@ -127,10 +127,10 @@ index 4029bf51e284f3c1ab3a5b8e6119eb4daa5fcd91..5827c06e39063cdb6e69a8fd9cd8bbb8
          {
            cwd: appDir,
 diff --git a/dist/plugin.cjs b/dist/plugin.cjs
-index c444d6e3ad76e6dadf32b6e976ae3b9e18917cfd..d49675103643e65adb1ed3626730638da15802f2 100644
+index 970a47b90abb46bdfbc9b41c50b215dcdf08b9f9..49f01f7b4f64b3552209651d10980427865f31c9 100644
 --- a/dist/plugin.cjs
 +++ b/dist/plugin.cjs
-@@ -1361,8 +1361,8 @@ async function fileExists(filePath) {
+@@ -1364,8 +1364,8 @@ async function fileExists(filePath) {
    }
  }
  async function globFiles(pattern, cwd) {
@@ -141,7 +141,7 @@ index c444d6e3ad76e6dadf32b6e976ae3b9e18917cfd..d49675103643e65adb1ed3626730638d
  }
  var import_path, logger;
  var init_utils = __esm({
-@@ -16672,8 +16672,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+@@ -16731,8 +16731,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
      return [];
    }
    try {
@@ -152,7 +152,7 @@ index c444d6e3ad76e6dadf32b6e976ae3b9e18917cfd..d49675103643e65adb1ed3626730638d
        cwd: srcRoot,
        absolute: true,
        ignore: [
-@@ -27892,11 +27892,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+@@ -27948,11 +27948,11 @@ async function createRouteTypeDeclarations(options, outPath) {
    );
    const patterns = /* @__PURE__ */ new Set();
    const routeModulePatterns = /* @__PURE__ */ new Set();
@@ -167,10 +167,10 @@ index c444d6e3ad76e6dadf32b6e976ae3b9e18917cfd..d49675103643e65adb1ed3626730638d
          {
            cwd: appDir,
 diff --git a/dist/server.cjs b/dist/server.cjs
-index fcc928e647c588192b0c59dac819a96ba1ed00cd..da50f4c33447fe85f9b55566e60c01e792bde17f 100644
+index bea5ea2dce3bfb4b2043b1126dcf21fcb3d3c3ab..b43babb0f4095efd9d8a578a64239d260531ea51 100644
 --- a/dist/server.cjs
 +++ b/dist/server.cjs
-@@ -1166,8 +1166,8 @@ async function fileExists(filePath) {
+@@ -1169,8 +1169,8 @@ async function fileExists(filePath) {
    }
  }
  async function globFiles(pattern, cwd) {
@@ -181,7 +181,7 @@ index fcc928e647c588192b0c59dac819a96ba1ed00cd..da50f4c33447fe85f9b55566e60c01e7
  }
  function parseSearchParams(searchParams) {
    return searchParamsToObject(searchParams);
-@@ -19244,8 +19244,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+@@ -19303,8 +19303,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
      return [];
    }
    try {
@@ -192,7 +192,7 @@ index fcc928e647c588192b0c59dac819a96ba1ed00cd..da50f4c33447fe85f9b55566e60c01e7
        cwd: srcRoot,
        absolute: true,
        ignore: [
-@@ -31147,11 +31147,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+@@ -31203,11 +31203,11 @@ async function createRouteTypeDeclarations(options, outPath) {
    );
    const patterns = /* @__PURE__ */ new Set();
    const routeModulePatterns = /* @__PURE__ */ new Set();
@@ -207,10 +207,10 @@ index fcc928e647c588192b0c59dac819a96ba1ed00cd..da50f4c33447fe85f9b55566e60c01e7
          {
            cwd: appDir,
 diff --git a/dist/vite.cjs b/dist/vite.cjs
-index 5397c42908d8a33e4304d143a0bb847a86b8cd66..d03a40940485c09ce4a649f0c213499f111c895b 100644
+index f086b916d1dcdccc5561b5b38add90c643a5c5da..320608462348b32420755f6a1e83c8b535ef2c4c 100644
 --- a/dist/vite.cjs
 +++ b/dist/vite.cjs
-@@ -1156,8 +1156,8 @@ async function fileExists(filePath) {
+@@ -1159,8 +1159,8 @@ async function fileExists(filePath) {
    }
  }
  async function globFiles(pattern, cwd) {
@@ -221,7 +221,7 @@ index 5397c42908d8a33e4304d143a0bb847a86b8cd66..d03a40940485c09ce4a649f0c213499f
  }
  var import_path, logger;
  var init_utils = __esm({
-@@ -17104,8 +17104,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+@@ -17163,8 +17163,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
      return [];
    }
    try {
@@ -232,7 +232,7 @@ index 5397c42908d8a33e4304d143a0bb847a86b8cd66..d03a40940485c09ce4a649f0c213499f
        cwd: srcRoot,
        absolute: true,
        ignore: [
-@@ -28343,11 +28343,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+@@ -28399,11 +28399,11 @@ async function createRouteTypeDeclarations(options, outPath) {
    );
    const patterns = /* @__PURE__ */ new Set();
    const routeModulePatterns = /* @__PURE__ */ new Set();
