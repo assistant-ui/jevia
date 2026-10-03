@@ -186,6 +186,7 @@ impl Storage {
         id: &str,
         observations: HarnessObservations,
         supervisor: bool,
+        deadline: Option<std::time::Instant>,
     ) -> Result<RouteRecord> {
         match self {
             Self::Jsonl(paths) => {
@@ -195,13 +196,24 @@ impl Storage {
                 // worker never waits for a busy history lock; the journal is the
                 // durable retry source. A late supervisor write rejects terminal runs.
                 tokio::task::spawn_blocking(move || {
-                    store::checkpoint_observations(&path, &id, observations, supervisor)
+                    store::checkpoint_observations_until(
+                        &path,
+                        &id,
+                        observations,
+                        supervisor,
+                        deadline,
+                    )
                 })
                 .await?
             }
             Self::Database(db) => {
-                db.checkpoint_observations(id, observations, supervisor)
-                    .await
+                let write = db.checkpoint_observations(id, observations, supervisor);
+                match deadline {
+                    Some(deadline) => tokio::time::timeout_at(deadline.into(), write)
+                        .await
+                        .context("observation checkpoint budget exhausted; journal retained")?,
+                    None => write.await,
+                }
             }
         }
     }
@@ -212,23 +224,8 @@ impl Storage {
         observations: HarnessObservations,
         deadline: std::time::Instant,
     ) -> Result<RouteRecord> {
-        match self {
-            Self::Jsonl(paths) => {
-                let path = paths.runs.clone();
-                let id = id.to_owned();
-                tokio::task::spawn_blocking(move || {
-                    store::checkpoint_observations_until(
-                        &path,
-                        &id,
-                        observations,
-                        false,
-                        Some(deadline),
-                    )
-                })
-                .await?
-            }
-            Self::Database(db) => db.checkpoint_observations(id, observations, false).await,
-        }
+        self.checkpoint_observations(id, observations, false, Some(deadline))
+            .await
     }
 
     pub async fn recover(&self, id: &str, confirmed_stopped: bool) -> Result<RouteRecord> {

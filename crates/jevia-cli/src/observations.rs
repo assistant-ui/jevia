@@ -249,11 +249,21 @@ impl Capture {
         if self.journal.is_none() {
             return Ok(());
         }
+        // The supervisor may drop this future on timeout or process exit. Its
+        // blocking workers must still stop, including after waiting in the pool,
+        // so a late full-history rewrite cannot starve terminal persistence.
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
         let capture = self.clone();
-        let snapshot = tokio::task::spawn_blocking(move || capture.read_snapshot()).await??;
+        let snapshot = tokio::task::spawn_blocking(move || {
+            if std::time::Instant::now() >= deadline {
+                bail!("observation checkpoint budget exhausted; journal retained");
+            }
+            capture.read_snapshot()
+        })
+        .await??;
         if snapshot != *previous {
             storage
-                .checkpoint_observations(run_id, snapshot.clone(), true)
+                .checkpoint_observations(run_id, snapshot.clone(), true, Some(deadline))
                 .await?;
             *previous = snapshot;
         }
@@ -1261,7 +1271,7 @@ mod tests {
         assert_eq!(storage.recent(100, false).await.unwrap().len(), 1);
         assert!(
             storage
-                .checkpoint_observations(&id, previous, false)
+                .checkpoint_observations(&id, previous, false, None)
                 .await
                 .is_err()
         );

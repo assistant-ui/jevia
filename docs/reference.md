@@ -952,6 +952,14 @@ or recording completion, and the phase deadline and cancellation remain active.
 The main command's exit code is preserved; background commands must report their
 own failures to the main command (or the verifier) if they should affect the outcome.
 
+Unreleased: live recording checkpoints carry a one-second work budget into JSONL
+workers, including queued workers whose async waiter was cancelled. Slow scans or
+rewrites stop between chunks/records without publishing partial history; the
+journal remains the retry source. This prevents an abandoned background rewrite
+from monopolizing the history lock while the supervisor saves terminal state.
+Blocking operating-system I/O and decoding a single record are not preemptible;
+this is a cooperative work bound, not a hard filesystem-latency guarantee.
+
 Without this flag, existing interactive terminal behavior remains unchanged.
 This is not a sandbox: descendants that deliberately escape a process group/job,
 SIGKILL of Jevia, and machine crashes cannot be handled reliably. Use explicit
