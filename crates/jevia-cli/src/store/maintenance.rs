@@ -55,6 +55,11 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
         return Ok(report);
     }
     let _lock = acquire_lock(path, LockMode::Exclusive)?;
+    let pending = if matches!(operation, Maintenance::Archive { .. }) {
+        Some(crate::recordings::PendingRecordings::scan(parent)?)
+    } else {
+        None
+    };
     let Some(mut file) = crate::regular_file::open_optional(path)
         .context("could not open history for maintenance")?
     else {
@@ -136,9 +141,15 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
         });
         offset += bytes.len();
     }
+    let eligible = |record: &RouteRecord| {
+        archivable(record)
+            && pending
+                .as_ref()
+                .is_none_or(|pending| !pending.contains(&record.decision.run_id))
+    };
     let candidates = lines
         .iter()
-        .filter(|line| line.record.as_ref().is_some_and(archivable))
+        .filter(|line| line.record.as_ref().is_some_and(&eligible))
         .count();
     let mut to_archive = match operation {
         Maintenance::Repair => 0,
@@ -147,7 +158,7 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
     let mut retained = Vec::new();
     let mut archived = Vec::new();
     for line in lines {
-        if to_archive > 0 && line.record.as_ref().is_some_and(archivable) {
+        if to_archive > 0 && line.record.as_ref().is_some_and(&eligible) {
             archived.extend_from_slice(line.bytes);
             report.archived_records += 1;
             to_archive -= 1;
@@ -181,6 +192,9 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
                 )
             })?,
         );
+    }
+    if let Some(pending) = pending {
+        pending.recheck(parent)?;
     }
     replace(path, &retained).with_context(|| {
         format!(

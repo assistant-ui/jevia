@@ -15,6 +15,7 @@ use sqlx::{Any, Row, Transaction};
 use tempfile::NamedTempFile;
 
 use super::{Database, db, decode};
+use crate::recordings::PendingRecordings;
 use crate::store::{MaintenanceReport, archivable};
 
 // Three binds per candidate + the project stay below even SQLite's older limit.
@@ -46,8 +47,8 @@ struct Scan {
 }
 
 impl Scan {
-    fn add(&mut self, row: &ArchiveRow) -> Result<bool> {
-        let eligible = row.eligible()?;
+    fn add(&mut self, row: &ArchiveRow, pending: &PendingRecordings) -> Result<bool> {
+        let eligible = row.eligible()? && !pending.contains(&row.id);
         self.total += 1;
         self.eligible += usize::from(eligible);
         let encoded = serde_json::to_vec(row)?;
@@ -70,6 +71,7 @@ impl Database {
         // Even preview takes the same project lock and rolls it back: keyset
         // pagination must not combine multiple concurrently changing snapshots.
         let mut tx = self.write().await?;
+        let pending = PendingRecordings::scan(directory)?;
         let mut before = Scan::default();
         let mut cursor = None;
         loop {
@@ -79,7 +81,7 @@ impl Database {
             }
             for row in rows {
                 cursor = Some(row.ordinal);
-                before.add(&row)?;
+                before.add(&row, &pending)?;
             }
         }
         let count = before.eligible.saturating_sub(keep);
@@ -116,7 +118,7 @@ impl Database {
             }
             for row in rows {
                 cursor = Some(row.ordinal);
-                let eligible = after.add(&row)?;
+                let eligible = after.add(&row, &pending)?;
                 backup.record(&row.raw)?;
                 if eligible && remaining != 0 {
                     archive.record(&row.raw)?;
@@ -150,9 +152,13 @@ impl Database {
                 archive_path.display()
             )
         })?;
-        let result = self
-            .delete_journal(&mut tx, journal.as_file_mut(), count)
-            .await;
+        let result = async {
+            pending.recheck(directory)?;
+            self.delete_journal(&mut tx, journal.as_file_mut(), count)
+                .await?;
+            pending.recheck(directory)
+        }
+        .await;
         if let Err(error) = result {
             let _ = db(tx.rollback()).await;
             return Err(error).with_context(|| format!("archive deletion failed; no commit requested. Inspect history before retrying. Backup: {}; archive: {}", backup_path.display(), archive_path.display()));

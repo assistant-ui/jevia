@@ -1442,6 +1442,17 @@ routed/pending, or legacy-unknown record. SQL also retains any record with an
 execution owner, even if its recorded lifecycle appears terminal. This command
 does not recover runs, stop processes, or infer that old work has finished.
 
+Unreleased: all backends also retain any run with a local pending recording journal
+or loss marker in the invoking project's `.jevia/`, even if that run is terminal.
+These protected rows do not consume the `--keep` allowance. Preview does not replay
+or read recording contents; apply inventories recording names under the history/
+project lock and rechecks before publishing, refusing changes if new owners appear.
+Unreadable inventories fail closed. Corrupt, duplicate, or unsafe recording files
+protect their owner too; archival is not a way to discard them. After a normal
+route/run successfully replays and removes the journal, its terminal row can be
+archived on a later invocation. PostgreSQL cannot inspect journals on other machines;
+finish/recover remote recordings before running retention from a different host.
+
 Older eligible records move to a separate JSONL archive. They no longer appear in
 `runs` or `stats`, accept feedback, or inform routing. Routing fetches current
 evidence before cache lookup, so removing relevant evidence changes the cache key;
