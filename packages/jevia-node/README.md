@@ -162,6 +162,13 @@ external run, but completion is not required merely to reuse `feedback`.
 
 ## API
 
+Unreleased CLI: `run()` sends the selected harness name and its configured
+tier-to-model mapping to Jev alongside the routing task and eligible history.
+Launch arguments, commands, verifier settings, and other harness definitions stay
+local. `route()` remains harness-agnostic; it does not guess a current harness from
+past runs. Feedback and verification remain optional. No SDK option or upgrade is
+needed to use this context with an upgraded CLI.
+
 ### Inspect passive observations
 
 ```ts

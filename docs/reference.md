@@ -1021,6 +1021,21 @@ decision explanation or create a synthetic run.
 
 ## Routing cache
 
+Unreleased: `jevia run <harness>` supplies Jev with `current_harness.name` and
+`current_harness.tier_models`, containing only that harness's configured models for
+the declared tiers. This lets routing distinguish the current candidate models from
+historical models with the same tier labels. Commands, arguments, verifier settings,
+and unrelated harness definitions are not sent. Candidate names are not execution
+evidence, pricing data, or proof of capability; confidence fallback is unchanged.
+Both the provider request and cache fingerprint use this context. Changing a model
+mapping invalidates the matching decision; existing entries safely miss once after
+the cache fingerprint upgrade. No history is removed.
+
+Plain `jevia route` (including SDK `route()`) remains harness-agnostic and does not
+infer a harness from history. SDK `run()` receives the same context as CLI `run`.
+Rust callers can opt in with `JevClient::route_for_harness`; the existing `route`
+method keeps its signature and harness-agnostic behavior.
+
 Jevia caches equivalent routing decisions locally so repeated work does not
 always require another network request. The default policy keeps up to 256
 decisions for 15 minutes:

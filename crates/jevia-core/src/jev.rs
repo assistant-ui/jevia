@@ -54,12 +54,35 @@ impl JevClient {
         config: &Config,
         history: &[RouteRecord],
     ) -> Result<RouteDecision, JevError> {
+        self.route_with_context(task, None, config, history).await
+    }
+
+    /// Route for one configured harness. Only its name and candidate tier/model
+    /// mapping are sent; launch arguments, verifiers and other settings stay local.
+    pub async fn route_for_harness(
+        &self,
+        task: &str,
+        harness_name: &str,
+        config: &Config,
+        history: &[RouteRecord],
+    ) -> Result<RouteDecision, JevError> {
+        self.route_with_context(task, Some(harness_name), config, history)
+            .await
+    }
+
+    async fn route_with_context(
+        &self,
+        task: &str,
+        harness_name: Option<&str>,
+        config: &Config,
+        history: &[RouteRecord],
+    ) -> Result<RouteDecision, JevError> {
         config.validate()?;
         if task.trim().is_empty() {
             return Err(JevError::EmptyTask);
         }
 
-        let request = build_request(task, config, history);
+        let request = build_request(task, config, history, harness_name)?;
         let response = self
             .http
             .post(&self.endpoint)
@@ -112,7 +135,7 @@ pub fn route_cache_key(
         return Err(JevError::EmptyTask);
     }
 
-    let request = build_request(task, config, history);
+    let request = build_request(task, config, history, harness_name)?;
     let harness = harness_name.map(|name| {
         json!({
             "name": name,
@@ -120,7 +143,7 @@ pub fn route_cache_key(
         })
     });
     let material = json!({
-        "cache_schema_version": 1,
+        "cache_schema_version": 2,
         "api_base_url": config.jev.base_url.trim().trim_end_matches('/'),
         "router": &config.router,
         "harness": harness,
@@ -154,7 +177,19 @@ fn build_request<'a>(
     task: &str,
     config: &'a Config,
     history: &[RouteRecord],
-) -> SystemOneRequest<'a> {
+    harness_name: Option<&str>,
+) -> Result<SystemOneRequest<'a>, JevError> {
+    let harness = harness_name
+        .map(|name| {
+            let harness = config.harnesses.get(name).ok_or(JevError::UnknownHarness)?;
+            let tier_models: BTreeMap<_, _> = config
+                .tiers
+                .keys()
+                .map(|tier| (tier, &harness.models[tier]))
+                .collect();
+            Ok::<_, JevError>(json!({"name": name, "tier_models": tier_models}))
+        })
+        .transpose()?;
     let mut completed: Vec<_> = history
         .iter()
         .rev()
@@ -199,7 +234,7 @@ fn build_request<'a>(
         .collect();
     observations.reverse();
 
-    let state = json!({
+    let mut state = json!({
         "current_task": task,
         "recent_completed_outcomes": completed,
         "recent_execution_observations": observations,
@@ -209,6 +244,12 @@ fn build_request<'a>(
             "use_observations": "Execution observations are operational context, not task-success labels. A process exit, duration, or agent-reported completion does not prove correctness. The requested model is not proof of which models actually executed. A model_observed event reports request selection, not a provider completion. tool_completed is neutral and does not establish tool success. Do not infer quality or model capability from missing feedback."
         }
     });
+    if let Some(harness) = harness {
+        state["current_harness"] = harness;
+        state["policy"]["use_current_harness"] = json!(
+            "The tier/model mapping describes configured candidates for this harness, not proof of execution or success. Use the tier descriptions and relevant recorded evidence. Model names alone do not establish quality, cost, or capability; do not transfer outcomes between different models just because their tier labels match."
+        );
+    }
 
     let criteria = config
         .tiers
@@ -226,11 +267,11 @@ fn build_request<'a>(
     .into_iter()
     .collect();
 
-    SystemOneRequest {
+    Ok(SystemOneRequest {
         model: &config.jev.model,
         state,
         questions,
-    }
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -305,6 +346,8 @@ pub enum JevError {
     MissingApiKey,
     #[error("task cannot be empty")]
     EmptyTask,
+    #[error("routing harness is not configured (name redacted)")]
+    UnknownHarness,
     #[error("Jev request failed: {0}")]
     Request(&'static str),
     #[error("Jev returned HTTP status {0}")]
@@ -366,6 +409,85 @@ mod tests {
     use crate::{ExecutionEvidence, Outcome, OutcomeSource, VerificationEvidence};
 
     use super::*;
+
+    fn harness(model: &str) -> crate::HarnessConfig {
+        crate::HarnessConfig {
+            command: "PRIVATE-command".into(),
+            args: vec!["PRIVATE-argument".into(), "{task}".into(), "{model}".into()],
+            models: Config::default()
+                .tiers
+                .keys()
+                .map(|tier| (tier.clone(), model.into()))
+                .collect(),
+            auto_verify: false,
+            observations: Default::default(),
+            verification: Some(crate::VerificationConfig {
+                command: "PRIVATE-verifier".into(),
+                args: vec!["PRIVATE-verifier-argument".into()],
+            }),
+        }
+    }
+
+    #[test]
+    fn current_harness_context_is_allowlisted_and_changes_with_model_mapping() {
+        let mut config = Config::default();
+        config
+            .harnesses
+            .insert("alpha".into(), harness("provider/alpha"));
+        config.harnesses.insert(
+            "PRIVATE-other-harness".into(),
+            harness("PRIVATE-other-model"),
+        );
+        config
+            .harnesses
+            .get_mut("alpha")
+            .unwrap()
+            .models
+            .insert("unused".into(), "PRIVATE-unused-model".into());
+        config.validate().unwrap();
+        let request = build_request("task", &config, &[], Some("alpha")).unwrap();
+        assert_eq!(
+            request.state["current_harness"],
+            json!({
+                "name": "alpha", "tier_models": {
+                    "fast": "provider/alpha", "balanced": "provider/alpha", "strong": "provider/alpha"
+                }
+            })
+        );
+        assert!(!serde_json::to_string(&request).unwrap().contains("PRIVATE"));
+        let key = route_cache_key("task", Some("alpha"), &config, &[]).unwrap();
+        let plain = build_request("task", &config, &[], None).unwrap();
+        assert!(plain.state.get("current_harness").is_none());
+        let plain = serde_json::to_value(plain).unwrap();
+        config
+            .harnesses
+            .get_mut("alpha")
+            .unwrap()
+            .models
+            .insert("fast".into(), "provider/new".into());
+        let changed = build_request("task", &config, &[], Some("alpha")).unwrap();
+        assert_eq!(
+            changed.state["current_harness"]["tier_models"]["fast"],
+            "provider/new"
+        );
+        assert_ne!(
+            key,
+            route_cache_key("task", Some("alpha"), &config, &[]).unwrap()
+        );
+        assert_eq!(
+            plain,
+            serde_json::to_value(build_request("task", &config, &[], None).unwrap()).unwrap()
+        );
+    }
+
+    #[test]
+    fn unknown_routing_harness_is_rejected_without_echoing_its_name() {
+        let config = Config::default();
+        let error = build_request("task", &config, &[], Some("PRIVATE-harness")).unwrap_err();
+        assert!(matches!(error, JevError::UnknownHarness));
+        assert!(!format!("{error} {error:?}").contains("PRIVATE"));
+        assert!(route_cache_key("task", Some("PRIVATE-harness"), &config, &[]).is_err());
+    }
 
     #[test]
     fn rejects_invalid_probabilities_and_blank_models_without_echoing_values() {
@@ -450,7 +572,7 @@ mod tests {
             completed,
         ];
 
-        let request = build_request("current", &config, &history);
+        let request = build_request("current", &config, &history, None).unwrap();
         let outcomes = request.state["recent_completed_outcomes"]
             .as_array()
             .expect("outcomes are an array");
@@ -487,7 +609,7 @@ mod tests {
         let baseline = route_cache_key("task", None, &config, &[]).unwrap();
         let with_history = route_cache_key("task", None, &config, &[observed.clone()]).unwrap();
         assert_ne!(baseline, with_history);
-        let request = build_request("task", &config, &[observed.clone()]);
+        let request = build_request("task", &config, &[observed.clone()], None).unwrap();
         assert_eq!(request.state["recent_completed_outcomes"], json!([]));
         let facts = &request.state["recent_execution_observations"][0];
         assert_eq!(facts["requested_model"], "requested-model");
@@ -502,7 +624,7 @@ mod tests {
         observed.task = None;
         let mut disabled = config;
         disabled.router.history_limit = 0;
-        let request = build_request("task", &disabled, &[observed]);
+        let request = build_request("task", &disabled, &[observed], None).unwrap();
         assert_eq!(request.state["recent_execution_observations"], json!([]));
     }
 
@@ -550,7 +672,13 @@ mod tests {
             baseline,
             route_cache_key("task", None, &config, &[unverified.clone(), legacy.clone()]).unwrap()
         );
-        let request = build_request("task", &config, &[unverified, legacy, verified, manual]);
+        let request = build_request(
+            "task",
+            &config,
+            &[unverified, legacy, verified, manual],
+            None,
+        )
+        .unwrap();
         let outcomes = request.state["recent_completed_outcomes"]
             .as_array()
             .unwrap();
@@ -588,7 +716,13 @@ mod tests {
 
     #[test]
     fn cache_key_changes_only_when_routing_inputs_change() {
-        let config = Config::default();
+        let mut config = Config::default();
+        config
+            .harnesses
+            .insert("agent".into(), harness("agent-model"));
+        config
+            .harnesses
+            .insert("other".into(), harness("other-model"));
         let pending = record("pending", "balanced", Outcome::Unknown);
         let completed = record("completed", "balanced", Outcome::Success);
 

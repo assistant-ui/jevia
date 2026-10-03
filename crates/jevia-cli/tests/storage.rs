@@ -110,6 +110,95 @@ impl Drop for Server {
     }
 }
 
+#[test]
+fn harness_routing_sends_selected_candidates_and_reuses_only_matching_cache() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    command(root).arg("init").assert().success();
+    let server = Server::start();
+    let mut config = Config::default();
+    config.jev.base_url = server.url.clone();
+    // Isolate harness context from the separately tested history fingerprint.
+    config.router.history_limit = 0;
+    for name in ["alpha", "beta"] {
+        config.harnesses.insert(
+            name.into(),
+            HarnessConfig {
+                command: "rustc".into(),
+                args: vec![
+                    "--version".into(),
+                    "--cfg".into(),
+                    "PRIVATE_ARGUMENT".into(),
+                    "--cfg".into(),
+                    "task=\"{task}\"".into(),
+                    "--cfg".into(),
+                    "model=\"{model}\"".into(),
+                ],
+                models: config
+                    .tiers
+                    .keys()
+                    .map(|tier| (tier.clone(), format!("{name}/{tier}")))
+                    .collect(),
+                auto_verify: false,
+                observations: jevia_core::ObservationMode::Off,
+                verification: None,
+            },
+        );
+    }
+    let config_path = root.join(".jevia/config.toml");
+    fs::write(&config_path, config.to_toml().unwrap()).unwrap();
+    for name in ["alpha", "alpha", "beta"] {
+        command(root)
+            .args(["run", name, "same task"])
+            .assert()
+            .success();
+    }
+    {
+        let requests = server.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2, "repeated alpha route must be cached");
+        for (request, name) in requests.iter().zip(["alpha", "beta"]) {
+            assert_eq!(
+                request["state"]["current_harness"],
+                serde_json::json!({
+                    "name": name, "tier_models": {
+                        "fast": format!("{name}/fast"), "balanced": format!("{name}/balanced"), "strong": format!("{name}/strong")
+                    }
+                })
+            );
+            assert!(!request.to_string().contains("PRIVATE_ARGUMENT"));
+            assert!(!request.to_string().contains("rustc"));
+            assert!(!request.to_string().contains(if name == "alpha" {
+                "beta/"
+            } else {
+                "alpha/"
+            }));
+        }
+    }
+    config
+        .harnesses
+        .get_mut("alpha")
+        .unwrap()
+        .models
+        .insert("fast".into(), "alpha/replacement".into());
+    fs::write(&config_path, config.to_toml().unwrap()).unwrap();
+    command(root)
+        .args(["run", "alpha", "same task"])
+        .assert()
+        .success();
+    assert_eq!(server.requests.lock().unwrap().len(), 3);
+    assert_eq!(
+        server.requests.lock().unwrap()[2]["state"]["current_harness"]["tier_models"]["fast"],
+        "alpha/replacement"
+    );
+    let plain = json(root, &["route", "same task", "--json"]);
+    assert_eq!(plain["source"], "live");
+    let cached = json(root, &["route", "same task", "--json"]);
+    assert_eq!(cached["source"], "cache");
+    let requests = server.requests.lock().unwrap();
+    assert_eq!(requests.len(), 4);
+    assert!(requests[3]["state"].get("current_harness").is_none());
+}
+
 fn flow(postgres: bool) {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();

@@ -1036,7 +1036,14 @@ async fn routed_record_in(
     let api_key = env::var("TYPESAFE_API_KEY")
         .context("TYPESAFE_API_KEY is not set; Jevia never stores this key in config")?;
     let client = JevClient::new(api_key, &config.jev)?;
-    let decision = client.route(task, config, &history).await?;
+    let decision = match harness_name {
+        Some(name) => {
+            client
+                .route_for_harness(task, name, config, &history)
+                .await?
+        }
+        None => client.route(task, config, &history).await?,
+    };
     if let Some(key) = cache_key {
         match cache::insert(
             &paths.cache,
