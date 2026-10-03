@@ -70,6 +70,9 @@ jobs:
       - name: Build CLI for SDK integration tests
         working-directory: .
         run: cargo build --locked -p jevia
+      - name: Test OpenCode collector failure reporting
+        working-directory: .
+        run: node --test tests/opencode-plugin.test.mjs
       - name: Test SDK against the real CLI
         run: pnpm test:cli
       - name: Verify package contents

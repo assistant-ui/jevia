@@ -1,5 +1,12 @@
 # Native harness contracts
 
+`cargo build --locked -p jevia && node --test tests/opencode-plugin.test.mjs`
+tests the production OpenCode plugin with fault-injected collectors and the real
+Rust journal/recovery path. It covers spawn errors, nonzero/signal exits, forced
+timeout termination, loss-marker validation, and successful collection. These
+offline tests do not require an installed harness or provider credentials and
+run on Linux, macOS, and Windows in CI. They are not live-provider evidence.
+
 `native-harness.test.mjs` runs actual OpenCode 1.18.33 and Codex
 0.158.0-alpha.2 executables through `jevia run`. CI installs these exact versions
 into its temporary directory. Locally, build the CLI and set

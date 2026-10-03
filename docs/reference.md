@@ -283,6 +283,14 @@ snapshot is saved. If storage also prevents the marker, the hook emits a fixed,
 redacted diagnostic and still exits zero. A killed hook or an event arriving after
 cleanup can remain unobservable; this is not a guarantee of complete capture.
 
+The OpenCode plugin also attempts this marker when its collector cannot start,
+exits unsuccessfully, loses its input pipe, or exceeds its 1.5-second timeout.
+A timed-out collector gets a short termination grace period before forced stop.
+Marker writes validate a bounded, regular OpenCode journal and never store the
+failed payload. If marking fails, the plugin warns once per session with a fixed,
+redacted message and still allows the agent to continue. Abruptly stopping the
+plugin/harness itself can prevent this accounting; capture remains best-effort.
+
 A private journal under `.jevia/jevia-events-<run-id>-*.jsonl` is checkpointed into
 the selected JSONL/SQLite/PostgreSQL run record while the harness runs (at most once
 every two seconds when observations change), and saved again when it stops.
