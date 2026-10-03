@@ -9,6 +9,17 @@ use std::process::ExitCode;
 
 const WINDOW: usize = 100;
 
+fn is_native_source(source: Option<ObservationSource>) -> bool {
+    matches!(
+        source,
+        Some(
+            ObservationSource::ClaudeHooks
+                | ObservationSource::CodexHooks
+                | ObservationSource::OpencodePlugin
+        )
+    )
+}
+
 #[derive(Debug, Serialize)]
 struct Latest {
     run_id: String,
@@ -42,6 +53,7 @@ fn latest(records: &[RouteRecord], name: &str) -> Option<Latest> {
         let execution = record.execution.as_ref().filter(|e| e.harness == name)?;
         let observations = execution.observations.as_ref();
         let status = observations.map(|o| o.status);
+        let source = observations.and_then(|o| o.source);
         let advice = match status {
             None => "Legacy execution has no capture report. A new run can report native recording health.",
             Some(ObservationStatus::Disabled) => "Native capture was explicitly disabled; process recording still applies.",
@@ -49,12 +61,14 @@ fn latest(records: &[RouteRecord], name: &str) -> Option<Latest> {
             Some(ObservationStatus::Unavailable) => "Capture setup was unavailable. Check the tested version, platform, conflicting settings, and writable project directory; the saved status does not identify one exact cause.",
             Some(ObservationStatus::NoEvents) => "No native events were saved. Check harness hook/plugin policy and, for Codex, review /hooks. This does not prove trust was denied or recording is broken; an active run may not have checkpointed yet.",
             Some(ObservationStatus::Partial) => "Capture is incomplete. Inputs were discarded, a hook write failed, or a journal read failed. Discarded inputs include unconfirmed writes, not an exact count of missing events; retain journals and inspect storage access. Do not assume missing events never happened.",
+            Some(ObservationStatus::Recorded) if source == Some(ObservationSource::Application) => "Application events were recorded. They remain available to routing, but do not confirm native harness capture.",
+            Some(ObservationStatus::Recorded) if !is_native_source(source) => "Events were recorded without a native source. They do not confirm native harness capture.",
             Some(ObservationStatus::Recorded) => "Native events were received. This confirms some coverage, not complete coverage or task correctness.",
         };
         Some(Latest {
             run_id: record.decision.run_id.clone(),
             state: record.lifecycle.as_ref().map(|l| l.state),
-            source: observations.and_then(|o| o.source),
+            source,
             status,
             event_count: observations.map_or(0, |o| o.event_count()),
             discarded_inputs: observations.map_or(0, |o| o.counts().discarded_inputs),
@@ -156,7 +170,8 @@ pub async fn run(
         println!("{}", report.limitations);
     }
     let has_events = report.latest.as_ref().is_some_and(|latest| {
-        latest.status == Some(ObservationStatus::Recorded)
+        is_native_source(latest.source)
+            && latest.status == Some(ObservationStatus::Recorded)
             && latest.event_count > 0
             && latest.discarded_inputs == 0
     });
@@ -176,6 +191,19 @@ pub async fn run(
 mod tests {
     use super::*;
     use jevia_core::{DecisionSource, ExecutionEvidence, HarnessObservations, RouteDecision};
+
+    #[test]
+    fn only_explicit_native_sources_confirm_capture() {
+        assert!(!is_native_source(None));
+        assert!(!is_native_source(Some(ObservationSource::Application)));
+        for source in [
+            ObservationSource::ClaudeHooks,
+            ObservationSource::CodexHooks,
+            ObservationSource::OpencodePlugin,
+        ] {
+            assert!(is_native_source(Some(source)));
+        }
+    }
 
     #[test]
     fn health_distinguishes_every_capture_state_without_raw_data() {
