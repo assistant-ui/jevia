@@ -1429,6 +1429,13 @@ an interrupted write, or a valid final record missing its newline. It refuses ma
 lines, complete invalid records, unsupported schemas, and duplicate IDs. It does
 not guess at missing fields or rewrite individual outcomes.
 
+JSONL repair and archival use the same routing-decision validation as normal
+reads: identities, tiers, and model must be nonempty, and confidence/probability
+values must be finite and within 0–1. The 8 MiB physical-line limit also applies,
+including space for a final newline. Invalid complete records are refused even
+when a later tail is repairable. Preview and apply leave the original bytes
+untouched and create no backup/archive on validation failure.
+
 Archival works with JSONL, SQLite, and PostgreSQL. It keeps the most recently
 **appended** `--keep` eligible terminal records (minimum one), plus every active,
 routed/pending, or legacy-unknown record. SQL also retains any record with an

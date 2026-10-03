@@ -68,6 +68,16 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
     let mut ids = HashSet::new();
     let mut offset = 0;
     for (index, bytes) in original.split_inclusive(|byte| *byte == b'\n').enumerate() {
+        // Match normal JSONL reads, including room for a repaired final newline.
+        // Even whitespace and truncated tails must not bypass the input bound.
+        if bytes.len() > crate::jsonl::MAX_LINE_BYTES
+            || (bytes.len() == crate::jsonl::MAX_LINE_BYTES && !bytes.ends_with(b"\n"))
+        {
+            bail!(
+                "JSONL line {} exceeds the 8 MiB limit including its newline (contents redacted); refusing to rewrite history",
+                index + 1
+            );
+        }
         if bytes.iter().all(u8::is_ascii_whitespace) {
             lines.push(Line {
                 bytes,
@@ -104,6 +114,16 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
                 index + 1
             );
         }
+        record
+            .decision
+            .validate()
+            .map_err(anyhow::Error::msg)
+            .with_context(|| {
+                format!(
+                    "invalid routing decision on line {} (contents redacted); refusing to rewrite history",
+                    index + 1
+                )
+            })?;
         if !ids.insert(record.decision.run_id.clone()) {
             bail!(
                 "duplicate run id on line {}; refusing to rewrite history",
