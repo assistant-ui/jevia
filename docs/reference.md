@@ -1413,6 +1413,10 @@ JSON positions where available, and HTTP status codes.
 Both maintenance commands preview by default. Inspect the report before repeating
 with `--apply`; `--json` provides counts and saved paths for automation.
 
+JSONL maintenance and routing-cache reads require regular files. Directories,
+named pipes (including links to them), and other special inputs are rejected
+without reading or replacing them. Missing files retain their empty-store behavior.
+
 ```sh
 jevia runs repair
 jevia runs repair --apply

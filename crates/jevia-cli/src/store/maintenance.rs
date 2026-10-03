@@ -55,11 +55,15 @@ pub fn maintain(path: &Path, operation: Maintenance, apply: bool) -> Result<Repo
         return Ok(report);
     }
     let _lock = acquire_lock(path, LockMode::Exclusive)?;
-    let original = match fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(report),
-        Err(error) => return Err(error).context("could not read history for maintenance"),
+    let Some(mut file) = crate::regular_file::open_optional(path)
+        .context("could not open history for maintenance")?
+    else {
+        return Ok(report);
     };
+    let mut original = Vec::new();
+    file.read_to_end(&mut original)
+        .context("could not read history for maintenance")?;
+    drop(file);
     let mut lines = Vec::new();
     let mut ids = HashSet::new();
     let mut offset = 0;
