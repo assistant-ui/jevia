@@ -73,6 +73,48 @@ fn owner(name: &str, prefix: &str) -> Option<String> {
     Some(id.into())
 }
 
+/// A complete, payload-free inventory for history retention. Even malformed,
+/// duplicate, linked, or special-file replay sources protect their owner's row.
+pub(crate) struct PendingRecordings(BTreeSet<String>);
+
+impl PendingRecordings {
+    pub(crate) fn scan(directory: &Path) -> Result<Self> {
+        let scan = || -> std::io::Result<BTreeSet<String>> {
+            let mut owners = BTreeSet::new();
+            for entry in fs::read_dir(directory)? {
+                let name = entry?.file_name();
+                let Some(name) = name.to_str() else { continue };
+                if (name.ends_with(".jsonl") || name.ends_with(".loss"))
+                    && let Some(id) = owner(name, "jevia-events-")
+                {
+                    owners.insert(id);
+                }
+            }
+            Ok(owners)
+        };
+        scan().map(Self).map_err(|_| {
+            anyhow::anyhow!(
+                "could not inventory pending recordings; archival refused (details redacted)"
+            )
+        })
+    }
+
+    pub(crate) fn contains(&self, id: &str) -> bool {
+        self.0.contains(id)
+    }
+
+    pub(crate) fn recheck(&self, directory: &Path) -> Result<()> {
+        // A journal can disappear after successful replay; that only makes this
+        // plan conservative. New owners require a fresh retention plan.
+        if !Self::scan(directory)?.0.is_subset(&self.0) {
+            bail!(
+                "pending recordings changed during archival; retry after recording activity stops"
+            );
+        }
+        Ok(())
+    }
+}
+
 /// New auxiliary names retain ownership after a crash. Legacy unowned names are kept.
 pub(crate) fn asset_prefix(prefix: &str, journal: &Path) -> String {
     journal

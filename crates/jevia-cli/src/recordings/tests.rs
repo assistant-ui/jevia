@@ -4,6 +4,52 @@ use jevia_core::{
     RunLifecycle, StorageConfig,
 };
 
+#[test]
+fn retention_inventory_rechecks_new_owners_and_redacts_scan_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    let first = uuid::Uuid::new_v4().to_string();
+    let path = dir
+        .path()
+        .join(format!("jevia-events-{first}-fixture.jsonl"));
+    fs::write(&path, "corrupt payload must not be read").unwrap();
+    let pending = PendingRecordings::scan(dir.path()).unwrap();
+    assert!(pending.contains(&first));
+    pending.recheck(dir.path()).unwrap();
+    // A successful replay is safe; newly discovered owners invalidate the plan.
+    fs::remove_file(&path).unwrap();
+    pending.recheck(dir.path()).unwrap();
+    let second = uuid::Uuid::new_v4().to_string();
+    fs::write(
+        dir.path()
+            .join(format!("jevia-events-{second}-fixture.jsonl.loss")),
+        "",
+    )
+    .unwrap();
+    assert!(pending.recheck(dir.path()).is_err());
+    let private = dir.path().join("PRIVATE-path");
+    fs::write(&private, "not a directory").unwrap();
+    let error = PendingRecordings::scan(&private).err().unwrap().to_string();
+    assert!(error.contains("archival refused"));
+    assert!(!error.contains("PRIVATE"));
+}
+
+#[cfg(unix)]
+#[test]
+fn retention_inventory_does_not_open_pipes_or_follow_symlinks() {
+    use nix::{sys::stat::Mode, unistd::mkfifo};
+    let dir = tempfile::tempdir().unwrap();
+    for pipe in [true, false] {
+        let id = uuid::Uuid::new_v4().to_string();
+        let path = dir.path().join(format!("jevia-events-{id}-fixture.jsonl"));
+        if pipe {
+            mkfifo(&path, Mode::S_IRUSR | Mode::S_IWUSR).unwrap();
+        } else {
+            std::os::unix::fs::symlink("missing-target", &path).unwrap();
+        }
+        assert!(PendingRecordings::scan(dir.path()).unwrap().contains(&id));
+    }
+}
+
 struct Fixture {
     _directory: tempfile::TempDir,
     paths: ProjectPaths,
