@@ -81,7 +81,20 @@ impl PendingRecordings {
     pub(crate) fn scan(directory: &Path) -> Result<Self> {
         let scan = || -> std::io::Result<BTreeSet<String>> {
             let mut owners = BTreeSet::new();
-            for entry in fs::read_dir(directory)? {
+            let entries = match fs::read_dir(directory) {
+                Ok(entries) => entries,
+                // Database-only callers need not have any local state yet.
+                // Do not treat dangling symlinks or unreadable paths as empty.
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::NotFound
+                        && fs::symlink_metadata(directory)
+                            .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+                {
+                    return Ok(owners);
+                }
+                Err(error) => return Err(error),
+            };
+            for entry in entries {
                 let name = entry?.file_name();
                 let Some(name) = name.to_str() else { continue };
                 if (name.ends_with(".jsonl") || name.ends_with(".loss"))
