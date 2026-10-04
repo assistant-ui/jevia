@@ -144,16 +144,16 @@ impl Capture {
             )
             .await;
             match supported {
-                Some(true) => {}
-                Some(false) => {
+                Ok(true) => {}
+                Ok(false) => {
                     eprintln!(
                         "jevia: native observations unavailable: harness version outside tested adapter contract; process recording remains active"
                     );
                     return capture;
                 }
-                None => {
+                Err(error) => {
                     eprintln!(
-                        "jevia: native observations unavailable: version probe failed or exceeded its startup deadline; retry or check the harness executable; process recording remains active"
+                        "jevia: native observations unavailable: version probe {error}; check the harness executable; process recording remains active"
                     );
                     return capture;
                 }
@@ -479,7 +479,11 @@ async fn replay_until(
     }
 }
 
-async fn supported_version(program: &str, root: &Path, source: ObservationSource) -> Option<bool> {
+async fn supported_version(
+    program: &str,
+    root: &Path,
+    source: ObservationSource,
+) -> Result<bool, crate::processes::ProbeError> {
     // The npm-distributed OpenCode launcher took ~8s on a real cold macOS run.
     // Keep a hard deadline, without mistaking launcher startup for incompatibility.
     let budget = Duration::from_secs(if source == ObservationSource::OpencodePlugin {
@@ -1319,6 +1323,45 @@ mod tests {
 
     #[tokio::test]
     #[cfg(unix)]
+    async fn auto_capture_recovers_a_transient_probe_failure_but_never_caches_support() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let program = dir.path().join("claude");
+        fs::write(&program, "#!/bin/sh\nprintf x >> \"$0.attempts\"\nif test -f \"$0.warm\"; then printf '2.1.212 (Claude Code)\\n'; else touch \"$0.warm\"; exit 7; fi\n").unwrap();
+        fs::set_permissions(&program, fs::Permissions::from_mode(0o700)).unwrap();
+        let invocation = HarnessInvocation {
+            program: program.to_str().unwrap().into(),
+            args: vec!["--print".into(), "task".into()],
+            model: "requested".into(),
+            verification: None,
+        };
+        let id = uuid::Uuid::new_v4().to_string();
+        let capture = Capture::prepare(ObservationMode::Auto, &invocation, dir.path(), &id).await;
+        assert_eq!(capture.snapshot().status, Status::NoEvents);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("claude.attempts")).unwrap(),
+            "xx"
+        );
+        capture.persisted(&capture.snapshot());
+
+        // Replacing the executable at the same path with an unsupported version
+        // must be re-probed and refused after one successful version response.
+        fs::write(
+            &program,
+            "#!/bin/sh\nprintf x >> \"$0.attempts\"\nprintf '0.0.0\\n'\n",
+        )
+        .unwrap();
+        let capture = Capture::prepare(ObservationMode::Auto, &invocation, dir.path(), &id).await;
+        assert_eq!(capture.snapshot().status, Status::Unavailable);
+        assert_eq!(capture.args, invocation.args);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("claude.attempts")).unwrap(),
+            "xxx"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
     async fn auto_capture_checks_version_and_uses_session_local_exec_hooks() {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
@@ -1331,13 +1374,13 @@ mod tests {
                 ObservationSource::ClaudeHooks
             )
             .await,
-            None
+            Err(crate::processes::ProbeError::NotFound)
         );
         fs::write(&program, "#!/bin/sh\nprintf '2.1.212 (Claude Code)\\n'\n").unwrap();
         fs::set_permissions(&program, fs::Permissions::from_mode(0o700)).unwrap();
         assert_eq!(
             supported_version("./claude", dir.path(), ObservationSource::ClaudeHooks).await,
-            Some(true)
+            Ok(true)
         );
         let invocation = HarnessInvocation {
             program: program.to_str().unwrap().into(),
@@ -1362,7 +1405,7 @@ mod tests {
         fs::write(&program, "#!/bin/sh\nprintf '2.1.100 (Claude Code)\\n'\n").unwrap();
         assert_eq!(
             supported_version("./claude", dir.path(), ObservationSource::ClaudeHooks).await,
-            Some(false)
+            Ok(false)
         );
         let capture = Capture::prepare(ObservationMode::Auto, &invocation, dir.path(), &id).await;
         assert_eq!(capture.args, invocation.args);
