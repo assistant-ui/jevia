@@ -23,6 +23,7 @@ async function fixture(t, harness, trusted = false, scenario = "complete") {
   await mkdir(agentHome, { recursive: true });
   const requests = [];
   let activeRun;
+  let cancellationSent = false;
   const server = createServer(async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
@@ -40,7 +41,11 @@ async function fixture(t, harness, trusted = false, scenario = "complete") {
       // not a synthetic recording event or a timing guess during startup.
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.write(": waiting for a response\n\n");
-      activeRun.kill("SIGINT");
+      // Title and main-model requests may race. Simulate one user interrupt.
+      if (!cancellationSent) {
+        cancellationSent = true;
+        activeRun.kill("SIGINT");
+      }
     } else if (scenario === "provider_error") {
       res.writeHead(401, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: { message: "fixture-provider-rejected", type: "authentication_error", code: "invalid_api_key" } }));
