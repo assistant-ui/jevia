@@ -36,6 +36,15 @@ production descendant-cleanup behavior is unchanged. See the upstream
 [OpenCode dependency initialization](https://github.com/anomalyco/opencode/blob/v1.18.33/packages/opencode/src/config/config.ts)
 and [Codex feature configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
 
+For multiple cases, CI installs that dependency once and sets
+`JEVIA_NATIVE_PLUGIN_DIR` to its npm prefix. The tests copy only the manifest,
+lockfile, and installed modules into each fresh home, validate all three version
+pins, and run npm offline. No native config, authentication, session state, or
+writable dependency directory is shared between cases. You can prepare this
+directory locally with `npm install --prefix /path/to/fixture-deps --ignore-scripts
+--no-audit --no-fund --save-exact @opencode-ai/plugin@1.18.33`. An invalid supplied
+dependency directory fails; it does not silently fall back to the registry.
+
 OpenCode exercises plugin loading, request-model metadata, neutral tool-completion
 events, process recording, privacy, and journal cleanup. Codex exercises real
 configuration parsing and both **untrusted** and **reviewed** hook paths. The
@@ -50,6 +59,33 @@ AppArmor profile following the [native sandbox prerequisites](https://learn.chat
 The test keeps the read-only sandbox and requires a zero-exit tool result with
 the marker at the next provider turn; an attempted tool event alone is not enough.
 It does not disable the system-wide user-namespace restriction.
+
+Every native case also makes a second uncached route and checks the actual Jev
+request: the saved execution appears in passive history, while the known-outcome
+window stays empty. No feedback or verifier is called. The failure cases send a
+401 provider response or interrupt Jevia with SIGINT after the real harness
+reaches the provider. Cancellation must save one `cancelled` run and exit 130;
+neither case may turn into a timeout, a stranded active run, or a claimed task
+success. Provider error text stays out of native observations, and terminal
+journals are removed. A provider rejection is not assumed to produce the same
+CLI exit code in every harness.
+
+### Coverage boundaries
+
+| Workflow | Native contract coverage |
+| --- | --- |
+| Non-interactive tool/turn recording | OpenCode and reviewed Codex hooks |
+| Unapproved hooks | Codex; explicit `no_events`, not a false positive |
+| Cancellation during provider work | OpenCode and reviewed Codex hooks |
+| Provider authentication rejection | OpenCode and reviewed Codex hooks |
+| Automatic history reuse | All of the above, inspected at the next request |
+| Interactive coding, resume, model switches, subagents | Not established by this suite; hook-review UI is not an interactive coding test |
+| Python, Go, Rust, and mixed-language task correctness | Not established; the native fixture only prints a marker |
+| Live-provider quality, cost, accuracy, or Windows native support | Not established by these loopback tests |
+
+These boundaries are intentional: saved operational facts and routing-history
+reuse are testable here; improvement in task-solving accuracy needs a separate,
+held-out benchmark with actual model outputs and independent task checks.
 
 Contracts: [OpenCode providers](https://opencode.ai/docs/providers/),
 [OpenCode plugins](https://opencode.ai/docs/plugins/),

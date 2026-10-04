@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -14,7 +14,7 @@ const jevia = resolve(process.env.JEVIA_TEST_BINARY ?? "target/debug/jevia");
 const tools = process.env.JEVIA_NATIVE_BIN_DIR;
 const pins = { codex: "codex-cli 0.158.0-alpha.2", opencode: "1.18.33" };
 
-async function fixture(t, harness, trusted = false) {
+async function fixture(t, harness, trusted = false, scenario = "complete") {
   const cwd = await mkdtemp(join(tmpdir(), "jevia-native-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
   const home = join(cwd, "isolated-home");
@@ -22,6 +22,7 @@ async function fixture(t, harness, trusted = false) {
   const agentHome = join(home, "agent");
   await mkdir(agentHome, { recursive: true });
   const requests = [];
+  let activeRun;
   const server = createServer(async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
@@ -34,6 +35,15 @@ async function fixture(t, harness, trusted = false) {
         type: "choice", choice: "fast", confidence: 0.99,
         probabilities: { fast: 0.99, balanced: 0.005, strong: 0.005 },
       } } }));
+    } else if (scenario === "cancel") {
+      // Reach the actual provider boundary before interrupting Jevia. This is
+      // not a synthetic recording event or a timing guess during startup.
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(": waiting for a response\n\n");
+      activeRun.kill("SIGINT");
+    } else if (scenario === "provider_error") {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { message: "fixture-provider-rejected", type: "authentication_error", code: "invalid_api_key" } }));
     } else if (req.url === "/v1/chat/completions") {
       res.setHeader("content-type", "text/event-stream");
       const first = input.tools?.some((tool) => tool.function?.name === "bash") &&
@@ -63,8 +73,10 @@ async function fixture(t, harness, trusted = false) {
     } else { res.writeHead(404); res.end(); }
   });
   server.listen(0, "127.0.0.1");
+  // A cancelled test must not keep the Node worker alive solely via a listener.
+  server.unref();
   await once(server, "listening");
-  t.after(() => new Promise((done) => { server.closeAllConnections(); server.close(done); }));
+  t.after(() => new Promise((done) => { server.close(done); server.closeAllConnections(); }));
   const base = `http://127.0.0.1:${server.address().port}/v1`;
   // Allowlist environment: never inherit provider keys, authentication, plugins,
   // hook trust, proxy settings, or the developer's harness configuration.
@@ -109,16 +121,29 @@ async function fixture(t, harness, trusted = false) {
     const dependencyHome = join(configHome, "opencode");
     const setupStarted = performance.now();
     try {
-      await exec("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--save-exact", `@opencode-ai/plugin@${pins.opencode}`], {
-        cwd: dependencyHome,
-        env: { ...env, npm_config_fetch_retries: "0", npm_config_fetch_timeout: "20000" },
-        timeout: 60_000, killSignal: "SIGKILL", maxBuffer: 1024 * 1024,
-      });
+      if (process.env.JEVIA_NATIVE_PLUGIN_DIR) {
+        // Reuse installed SDK files, never a harness profile, authentication,
+        // database, or node_modules shared writable between test cases.
+        const source = resolve(process.env.JEVIA_NATIVE_PLUGIN_DIR);
+        for (const name of ["package.json", "package-lock.json", "node_modules"]) {
+          await cp(join(source, name), join(dependencyHome, name), { recursive: true });
+        }
+      } else {
+        await exec("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--save-exact", `@opencode-ai/plugin@${pins.opencode}`], {
+          cwd: dependencyHome,
+          env: { ...env, npm_config_fetch_retries: "0", npm_config_fetch_timeout: "20000" },
+          timeout: 60_000, killSignal: "SIGKILL", maxBuffer: 1024 * 1024,
+        });
+      }
     } catch (cause) {
       throw new Error("Native fixture dependency setup failed before any task was run", { cause });
     }
     const installed = JSON.parse(await readFile(join(dependencyHome, "node_modules/@opencode-ai/plugin/package.json"), "utf8"));
     assert.equal(installed.version, pins.opencode);
+    const manifest = JSON.parse(await readFile(join(dependencyHome, "package.json"), "utf8"));
+    const lock = JSON.parse(await readFile(join(dependencyHome, "package-lock.json"), "utf8"));
+    assert.equal(manifest.dependencies["@opencode-ai/plugin"], pins.opencode);
+    assert.equal(lock.packages[""].dependencies["@opencode-ai/plugin"], pins.opencode);
     t.diagnostic(`OpenCode dependency setup: ${Math.round(performance.now() - setupStarted)} ms (not harness execution)`);
     // Any missed dependency must fail without fetching during the contract run.
     env.npm_config_offline = "true";
@@ -131,11 +156,33 @@ async function fixture(t, harness, trusted = false) {
   }
   const task = "- Print the fixture-tool marker and reply with fixture response.";
   const extra = harness === "codex" ? ["--", "--skip-git-repo-check", "--sandbox", "read-only"] : [];
-  const result = await exec(jevia, ["run", harness, `--task=${task}`, "--non-interactive", "--timeout-seconds", "45", ...extra], { cwd, env, timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+  const pending = exec(jevia, ["run", harness, `--task=${task}`, "--non-interactive", "--timeout-seconds", "45", ...extra], { cwd, env, timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+  activeRun = pending.child;
+  const result = await pending.catch((error) => {
+    if (scenario === "complete" || error.signal || typeof error.code !== "number") throw error;
+    return { stdout: error.stdout, stderr: error.stderr, code: error.code };
+  });
   const records = JSON.parse((await exec(jevia, ["runs", "--json"], { cwd, env })).stdout);
+  assert.equal(records.length, 1, "One execution must produce exactly one saved run");
   t.diagnostic(`${harness} execution: ${records[0].execution.duration_ms} ms; capture=${records[0].execution.observations.status}; events=${records[0].execution.observations.events.length}`);
   assert.equal(records[0].task, task);
   assert.ok(requests.some((r) => r.path !== "/v1/systemone" && JSON.stringify(r.input).includes(task)), "native provider receives the literal leading-dash task");
+  // Read the next real routing request, not just the saved file or explain text.
+  // No feedback/verification call is made between execution and this decision.
+  const followup = await exec(jevia, ["route", "Check the fixture marker again", "--no-cache", "--explain", "--json"], { cwd, env, timeout: 15_000 });
+  assert.match(followup.stderr, /known_outcomes=0 passive_observations=1/);
+  const routes = requests.filter((request) => request.path === "/v1/systemone");
+  assert.equal(routes.length, 2);
+  assert.deepEqual(routes[0].input.state.recent_execution_observations, []);
+  assert.deepEqual(routes[1].input.state.recent_completed_outcomes, []);
+  const [history] = routes[1].input.state.recent_execution_observations;
+  assert.equal(routes[1].input.state.recent_execution_observations.length, 1);
+  assert.equal(history.state, records[0].lifecycle.state);
+  assert.equal(history.requested_model, model);
+  assert.equal(history.process_exit_code, records[0].execution.exit_code ?? null);
+  assert.equal(history.harness_observations.source, records[0].execution.observations.source);
+  assert.equal(history.harness_observations.status, records[0].execution.observations.status);
+  assert.equal(history.harness_observations.sampled_events, records[0].execution.observations.events.length);
   return { cwd, requests, result, record: records[0] };
 }
 
@@ -192,3 +239,24 @@ test("real Codex accepts injected hooks but preserves normal trust review", { sk
   // This is a negative coverage test, not proof that trusted hooks dispatch.
   // scripts/live-harness-smoke.mjs requires real tool and turn events to pass.
 });
+
+for (const harness of ["opencode", "codex"]) {
+  for (const scenario of ["cancel", "provider_error"]) {
+    test(`real ${harness} ${scenario} preserves unknown outcome and automatic history`, { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 180_000 }, async (t) => {
+      const { cwd, result, record } = await fixture(t, harness, harness === "codex", scenario);
+      assert.equal(record.outcome, "unknown");
+      assert.equal(record.execution.verification, undefined);
+      assert.equal(record.execution.observations.source, harness === "codex" ? "codex_hooks" : "opencode_plugin");
+      assert.ok(!["running", "timed_out", "interrupted"].includes(record.lifecycle.state));
+      if (scenario === "cancel") {
+        assert.equal(record.lifecycle.state, "cancelled");
+        assert.equal(result.code, 130);
+      } else {
+        assert.match(result.stdout + result.stderr, /fixture-provider-rejected/);
+        assert.notEqual(record.lifecycle.state, "cancelled");
+      }
+      assert.ok(!JSON.stringify(record.execution.observations).includes("fixture-provider-rejected"), "Native facts must not retain provider error text");
+      assert.ok(!(await readdir(join(cwd, ".jevia"))).some((name) => name.startsWith("jevia-events-")), "Terminal runs clean up their native journals");
+    });
+  }
+}
