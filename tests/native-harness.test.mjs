@@ -139,9 +139,10 @@ test("real trusted hooks record a tool call and turn without inferring success",
   assert.equal(observations.status, "recorded");
   assert.ok(observations.events.some((e) => e.kind === "tool_completed" && e.tool_name === "Bash"));
   assert.ok(observations.events.some((e) => e.kind === "turn_completed"));
-  assert.ok(requests.some((r) => r.path === "/v1/responses" && r.input.input?.some((item) =>
-    item.type === "function_call_output" && JSON.stringify(item.output).includes("fixture-tool"))),
-  "Real tool result reaches the next provider turn");
+  const toolOutputs = requests.filter((r) => r.path === "/v1/responses")
+    .flatMap((r) => r.input.input ?? []).filter((item) => item.type === "function_call_output");
+  assert.ok(toolOutputs.some((item) => JSON.stringify(item.output).includes("fixture-tool")),
+    `Real tool result reaches the next provider turn: ${JSON.stringify(toolOutputs).slice(0, 4096)}`);
   assert.ok(!JSON.stringify(observations).includes("fixture-tool"));
 });
 
