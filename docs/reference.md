@@ -523,6 +523,12 @@ jevia runs --json
 
 Run `jevia <command> --help` for command-specific options.
 
+The human-readable `runs` listing reports `verification=pass` only for a launched
+verifier with exit code 0, and `fail` only for a launched verifier with a nonzero
+exit code. Missing exit status (including timeout, cancellation, or a signal) and
+launch failures remain `unknown`; no configured verification is `none`. This
+display does not change saved outcomes, lifecycle state, or JSON output.
+
 ## Routing insights
 
 ```sh

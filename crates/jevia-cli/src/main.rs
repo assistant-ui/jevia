@@ -1161,7 +1161,11 @@ async fn runs(limit: usize, print_json: bool) -> Result<()> {
         );
         if let Some(execution) = &record.execution {
             let verification = match &execution.verification {
-                Some(verification) if !verification.launched => "unknown",
+                Some(verification)
+                    if !verification.launched || verification.exit_code.is_none() =>
+                {
+                    "unknown"
+                }
                 Some(verification) if verification.exit_code == Some(0) => "pass",
                 Some(_) => "fail",
                 None => "none",
