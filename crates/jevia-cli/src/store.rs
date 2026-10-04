@@ -289,6 +289,33 @@ pub(super) fn apply_external_completion(
     outcome: Outcome,
     reason: Option<&str>,
 ) -> Result<()> {
+    let reason = reason.map(str::trim).filter(|value| !value.is_empty());
+    if reason.is_some_and(|value| value.len() > 4096) {
+        bail!("feedback reason must be at most 4096 bytes");
+    }
+    // An exact retry returns the saved completion, not another feedback event.
+    // Match provenance and the final event, not just the current outcome: a
+    // correction or supervised lifecycle must never be silently overwritten.
+    if record.execution.is_none()
+        && record.lifecycle.as_ref().is_some_and(|life| {
+            life.state == RunState::Completed
+                && life.started_at_ms.is_none()
+                && life.finished_at_ms.is_some()
+        })
+        && record.outcome == outcome
+        && record.outcome_evidence.as_ref().is_some_and(|evidence| {
+            evidence.source == OutcomeSource::Manual
+                && record.lifecycle.as_ref().unwrap().finished_at_ms
+                    == Some(evidence.recorded_at_ms)
+                && record.feedback.last().is_some_and(|event| {
+                    event.outcome == outcome
+                        && event.reason.as_deref() == reason
+                        && event.recorded_at_ms == evidence.recorded_at_ms
+                })
+        })
+    {
+        return Ok(());
+    }
     if record.execution.is_some()
         || record.lifecycle.as_ref().is_some_and(|life| {
             life.state != RunState::Routed
@@ -310,7 +337,10 @@ pub(super) fn apply_external_completion(
     record.lifecycle = Some(RunLifecycle {
         state: RunState::Completed,
         started_at_ms: None,
-        finished_at_ms: Some(now_ms()),
+        finished_at_ms: record
+            .outcome_evidence
+            .as_ref()
+            .map(|evidence| evidence.recorded_at_ms),
     });
     Ok(())
 }

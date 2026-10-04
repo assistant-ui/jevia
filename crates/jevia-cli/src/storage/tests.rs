@@ -572,6 +572,28 @@ async fn external_completion_contract(config: Config) {
     );
     assert!(done.is_learning_evidence());
     assert_eq!(done.feedback.len(), 2);
+    let retry = storage
+        .complete_external(
+            "a",
+            Outcome::Success,
+            Some("  external tests passed  "),
+            true,
+        )
+        .await
+        .unwrap();
+    assert_eq!(retry, done);
+    assert!(
+        storage
+            .complete_external("a", Outcome::Failure, Some("external tests passed"), true)
+            .await
+            .is_err()
+    );
+    assert!(
+        storage
+            .complete_external("a", Outcome::Success, Some(&"x".repeat(4097)), true)
+            .await
+            .is_err()
+    );
     assert!(
         storage
             .complete_external("a", Outcome::Success, None, true)
@@ -621,8 +643,30 @@ async fn external_completion_contract(config: Config) {
         storage.complete_external("racing", Outcome::Success, None, true),
         storage.complete_external("racing", Outcome::Success, None, true),
     );
-    assert_ne!(one.is_ok(), two.is_ok(), "exactly one completion wins");
+    // A simultaneous request can hit the supervisor lease. Once it is released,
+    // retrying must return exactly the winner rather than duplicate its feedback.
+    assert!(one.is_ok() || two.is_ok());
+    let winner = one.or(two).unwrap();
+    assert_eq!(
+        storage
+            .complete_external("racing", Outcome::Success, Some("  "), true)
+            .await
+            .unwrap(),
+        winner
+    );
     assert_eq!(storage.get("racing").await.unwrap().feedback.len(), 1);
+    storage
+        .outcome("racing", Outcome::Failure, Some("corrected result"))
+        .await
+        .unwrap();
+    let corrected = storage.get("racing").await.unwrap();
+    assert!(
+        storage
+            .complete_external("racing", Outcome::Success, None, true)
+            .await
+            .is_err()
+    );
+    assert_eq!(storage.get("racing").await.unwrap(), corrected);
 }
 
 #[tokio::test]
