@@ -963,9 +963,12 @@ when work stopped but the result is inconclusive; it does not become learning ev
 
 Only pending external records qualify. Active/terminal runs, supervised evidence,
 held execution leases, and SQL supervisor ownership are refused. This command
-does not stop processes, verify work, retry tasks, or bypass recovery. Repeated
-completion is refused; after an uncertain response, inspect `runs show` before
-retrying. Completed records become eligible for normal preview-first archival;
+does not stop processes, verify work, retry tasks, or bypass recovery. In the next
+CLI release, identical completion retries (same outcome and trimmed reason) return
+the saved external completion with its original timestamp and no duplicate
+feedback. Conflicting retries and subsequent corrections are refused. A request
+that races an active lease may need a later retry. Older CLIs require inspecting
+`runs show` after an uncertain response. Completed records become eligible for normal preview-first archival;
 other pending and active records remain protected.
 
 ### Bounded non-interactive execution

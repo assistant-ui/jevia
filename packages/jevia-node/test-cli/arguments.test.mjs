@@ -222,6 +222,13 @@ test("real CLI completes external work and makes it eligible for archival", asyn
     assert.equal(done.execution, undefined);
     assert.equal(done.outcome_evidence.source, "manual");
     assert.equal(done.feedback.at(-1).reason, "--tests passed");
+    assert.deepEqual(await client.complete(record.run_id, "success", {
+      confirmStopped: true, reason: "  --tests passed  ",
+    }), done);
+    assert.deepEqual(await client.show(record.run_id), done);
+    await assert.rejects(client.complete(record.run_id, "failure", {
+      confirmStopped: true, reason: "conflicting result",
+    }));
     await assert.rejects(client.complete(record.run_id, "success", { confirmStopped: true }));
   }
   const { stdout } = await execute(binary, ["runs", "archive", "--keep", "1", "--json"], { cwd });

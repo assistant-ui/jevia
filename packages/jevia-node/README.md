@@ -290,9 +290,12 @@ This atomically records manual feedback and `lifecycle.state = "completed"`,
 making the record eligible for explicit archival. It never manufactures a start
 time, process exit, or verifier evidence. Pass `unknown` if work stopped without
 a conclusive result. Changing a known outcome requires a reason. Pending legacy
-records without execution evidence are supported; active, terminal, or supervised
-runs are refused. It does not stop external processes. Repeated completion is
-refused; after a timeout or lost response, inspect `show(runId)` before retrying.
+records without execution evidence are supported; active or supervised runs are
+refused. It does not stop external processes. With the next CLI release, an exact
+retry (same outcome and trimmed reason) returns the saved external completion
+without adding feedback or changing its timestamp. Conflicting retries, subsequent
+corrections, and other terminal records are refused. On older CLIs, inspect
+`show(runId)` after a timeout or lost response before retrying.
 Ordinary `feedback` keeps its existing behavior and does not close a run.
 
 ## Development tests
