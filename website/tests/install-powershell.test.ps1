@@ -41,6 +41,43 @@ try {
     throw "installed binary does not match the verified fixture"
   }
 
+  # Replacement still works and leaves no temporary executable behind.
+  [IO.File]::WriteAllText($InstalledBinary, "old fixture")
+  & $Installer
+  if ((Get-FileHash -LiteralPath $InstalledBinary -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Digest) {
+    throw "installer did not replace the existing regular file"
+  }
+  if (Get-ChildItem -LiteralPath $InstallDirectory -Force | Where-Object Name -Like ".jevia.install.*") {
+    throw "installer left a temporary executable behind"
+  }
+
+  # A directory/junction destination must never receive a nested executable.
+  foreach ($Kind in @("directory", "junction")) {
+    $CollisionDirectory = Join-Path $TestRoot $Kind
+    New-Item -ItemType Directory -Path $CollisionDirectory | Out-Null
+    $Collision = Join-Path $CollisionDirectory "jevia.exe"
+    if ($Kind -eq "junction") {
+      $Target = Join-Path $CollisionDirectory "target"
+      New-Item -ItemType Directory -Path $Target | Out-Null
+      New-Item -ItemType Junction -Path $Collision -Target $Target | Out-Null
+    } else {
+      New-Item -ItemType Directory -Path $Collision | Out-Null
+    }
+    [IO.File]::WriteAllText((Join-Path $Collision "keep"), "preserve me")
+    $env:JEVIA_INSTALL_DIR = $CollisionDirectory
+    $Rejected = $false
+    try { & $Installer } catch {
+      if ($_.Exception.Message -match "install destination is not a regular file") { $Rejected = $true }
+      else { throw }
+    }
+    if (-not $Rejected) { throw "installer accepted a $Kind destination" }
+    $Children = @(Get-ChildItem -LiteralPath $Collision -Force)
+    if ($Children.Count -ne 1 -or $Children[0].Name -ne "keep") {
+      throw "installer changed the collision destination"
+    }
+  }
+  $env:JEVIA_INSTALL_DIR = $InstallDirectory
+
   [IO.File]::WriteAllText("$AssetPath.sha256", "$('0' * 64)  $AssetName`n")
   $Rejected = $false
   try {
@@ -54,6 +91,9 @@ try {
   }
   if (-not $Rejected) {
     throw "installer accepted a release binary with the wrong checksum"
+  }
+  if ((Get-FileHash -LiteralPath $InstalledBinary -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Digest) {
+    throw "failed upgrade modified the existing binary"
   }
 } finally {
   Remove-Item Env:JEVIA_VERSION -ErrorAction SilentlyContinue

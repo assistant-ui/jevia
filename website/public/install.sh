@@ -27,6 +27,16 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "Jevia installation requires $1"
 }
 
+check_destination() {
+  destination="${JEVIA_INSTALL_DIR}/jevia"
+  # mv treats a directory (including a symlink to one) as a container, not
+  # the intended binary path. Never report that as a successful installation.
+  [ ! -L "$destination" ] || fail 'install destination is a symlink; choose another install directory'
+  if [ -e "$destination" ] && [ ! -f "$destination" ]; then
+    fail 'install destination is not a regular file; choose another install directory'
+  fi
+}
+
 detect_target() {
   operating_system=$(uname -s)
   architecture=$(uname -m)
@@ -71,6 +81,7 @@ main() {
   require_command mv
 
   target=$(detect_target)
+  check_destination
   asset_name="jevia-v${JEVIA_VERSION}-${target}"
   download_url="${JEVIA_DOWNLOAD_BASE_URL}/${asset_name}"
 
@@ -86,10 +97,14 @@ main() {
   mkdir -p "$JEVIA_INSTALL_DIR"
   [ -w "$JEVIA_INSTALL_DIR" ] || fail "install directory is not writable: $JEVIA_INSTALL_DIR"
 
-  temporary_destination="${JEVIA_INSTALL_DIR}/.jevia.install.$$"
+  check_destination
+  temporary_destination=$(mktemp "${JEVIA_INSTALL_DIR}/.jevia.install.XXXXXX")
   cp "$asset_path" "$temporary_destination"
   chmod 755 "$temporary_destination"
+  check_destination
   mv "$temporary_destination" "${JEVIA_INSTALL_DIR}/jevia"
+  check_destination
+  [ -f "${JEVIA_INSTALL_DIR}/jevia" ] && [ -x "${JEVIA_INSTALL_DIR}/jevia" ] || fail 'installed binary could not be confirmed'
   temporary_destination=''
 
   printf 'Installed Jevia %s to %s/jevia\n' "$JEVIA_VERSION" "$JEVIA_INSTALL_DIR"

@@ -23,6 +23,19 @@ function Stop-Install([string]$Message) {
   throw "Jevia installation failed: $Message"
 }
 
+function Confirm-JeviaDestination([string]$Path) {
+  # Inspect the entry itself so directories, junctions, and dangling links are
+  # never mistaken for a replaceable executable.
+  $entry = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+  if ($null -ne $entry -and (
+    $entry.PSIsContainer -or
+    ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+    $entry -isnot [IO.FileInfo]
+  )) {
+    Stop-Install "install destination is not a regular file; choose another install directory"
+  }
+}
+
 function Get-JeviaTarget {
   if (-not [Environment]::Is64BitOperatingSystem) {
     Stop-Install "32-bit Windows is not supported"
@@ -54,9 +67,12 @@ function Confirm-JeviaChecksum([string]$AssetPath, [string]$ChecksumPath) {
 }
 
 $TemporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) "jevia-install-$([Guid]::NewGuid().ToString('N'))"
+$temporaryDestination = $null
+$installedBinary = Join-Path $InstallDirectory "jevia.exe"
 
 try {
   $target = Get-JeviaTarget
+  Confirm-JeviaDestination $installedBinary
   $assetName = "jevia-v$JeviaVersion-$target.exe"
   $downloadUrl = "$DownloadBaseUrl/$assetName"
   $assetPath = Join-Path $TemporaryDirectory $assetName
@@ -69,10 +85,19 @@ try {
   Confirm-JeviaChecksum $assetPath $checksumPath
 
   New-Item -ItemType Directory -Path $InstallDirectory -Force | Out-Null
-  $temporaryDestination = Join-Path $InstallDirectory ".jevia.install.$PID.exe"
-  $installedBinary = Join-Path $InstallDirectory "jevia.exe"
-  Copy-Item -LiteralPath $assetPath -Destination $temporaryDestination -Force
-  Move-Item -LiteralPath $temporaryDestination -Destination $installedBinary -Force
+  $temporaryDestination = Join-Path $InstallDirectory ".jevia.install.$([Guid]::NewGuid().ToString('N')).exe"
+  [IO.File]::Copy($assetPath, $temporaryDestination, $false)
+  Confirm-JeviaDestination $installedBinary
+  # File APIs reject a directory destination instead of copying inside it.
+  if ([IO.File]::Exists($installedBinary)) {
+    # PowerShell coerces $null to an empty string for this .NET parameter.
+    [IO.File]::Replace($temporaryDestination, $installedBinary, [NullString]::Value)
+  } else {
+    [IO.File]::Move($temporaryDestination, $installedBinary)
+  }
+  $temporaryDestination = $null
+  Confirm-JeviaDestination $installedBinary
+  if (-not [IO.File]::Exists($installedBinary)) { Stop-Install "installed binary could not be confirmed" }
 
   Write-Host "Installed Jevia $JeviaVersion to $installedBinary"
   $pathEntries = ($env:PATH -split [IO.Path]::PathSeparator).TrimEnd("\")
@@ -82,6 +107,9 @@ try {
     Write-Host "Run ``jevia init`` to get started."
   }
 } finally {
+  if ($temporaryDestination -and [IO.File]::Exists($temporaryDestination)) {
+    Remove-Item -LiteralPath $temporaryDestination -Force
+  }
   if (Test-Path -LiteralPath $TemporaryDirectory) {
     Remove-Item -LiteralPath $TemporaryDirectory -Recurse -Force
   }
