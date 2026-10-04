@@ -23,6 +23,19 @@ directories are isolated, and model endpoints are local HTTP fixtures. No real
 provider credentials or paid generations are needed. The only generated tool
 call prints a fixed marker; no model-generated code is executed.
 
+The native contracts run on Linux and macOS. They need npm and registry access
+for **setup**: the OpenCode fixture installs the real, version-matched
+`@opencode-ai/plugin` dependency in its isolated config directory, with lifecycle
+scripts disabled and a separate 60-second deadline. Missing dependencies fail
+setup before any model task. Execution then sets npm offline mode and retains a
+45-second Jevia deadline; setup and execution timings are reported separately.
+This avoids treating a fresh-profile download as a recording timeout. Codex's
+fixture disables unrelated marketplace plugins and startup update checks, not
+Jevia hooks or their native trust review. No user profile is modified and Jevia's
+production descendant-cleanup behavior is unchanged. See the upstream
+[OpenCode dependency initialization](https://github.com/anomalyco/opencode/blob/v1.18.33/packages/opencode/src/config/config.ts)
+and [Codex feature configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
+
 OpenCode exercises plugin loading, request-model metadata, neutral tool-completion
 events, process recording, privacy, and journal cleanup. Codex exercises real
 configuration parsing and both **untrusted** and **reviewed** hook paths. The

@@ -77,6 +77,11 @@ async function fixture(t, harness, trusted = false) {
     OPENCODE_DISABLE_DEFAULT_PLUGINS: "true", OPENCODE_DISABLE_MODELS_FETCH: "true",
     OPENCODE_DISABLE_AUTOUPDATE: "true", NO_COLOR: "1",
   };
+  // Keep npm setup isolated too: no developer registry credentials or config.
+  for (const key of ["npm_config_userconfig", "npm_config_globalconfig"]) {
+    env[key] = join(home, key);
+    await writeFile(env[key], "");
+  }
   const binary = join(resolve(tools), harness);
   assert.equal((await exec(binary, ["--version"], { cwd, env, timeout: 30_000 })).stdout.trim(), pins[harness]);
   await exec(jevia, ["init"], { cwd, env });
@@ -89,13 +94,36 @@ async function fixture(t, harness, trusted = false) {
   source += `\n[harnesses.${harness}]\ncommand = ${JSON.stringify(binary)}\nargs = ${JSON.stringify(args)}\n[harnesses.${harness}.models]\nfast = "${model}"\nbalanced = "${model}"\nstrong = "${model}"\n`;
   await writeFile(config, source);
   if (harness === "codex") {
-    await writeFile(join(agentHome, "config.toml"), `model = "fixture-model"\nmodel_provider = "fixture"\ncheck_for_update_on_startup = false\nweb_search = "disabled"\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "${base}"\nwire_api = "responses"\nrequires_openai_auth = false\nrequest_max_retries = 0\nstream_max_retries = 0\n`);
+    // Keep unrelated marketplace initialization out of this loopback test.
+    // Disable plugins only in this disposable contract-test profile;
+    // inline Jevia hooks still require the ordinary native trust review below.
+    await writeFile(join(agentHome, "config.toml"), `model = "fixture-model"\nmodel_provider = "fixture"\nfeatures.plugins = false\ncheck_for_update_on_startup = false\nweb_search = "disabled"\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "${base}"\nwire_api = "responses"\nrequires_openai_auth = false\nrequest_max_retries = 0\nstream_max_retries = 0\n`);
   } else {
     await mkdir(join(configHome, "opencode"), { recursive: true });
     await writeFile(join(configHome, "opencode", "opencode.json"), JSON.stringify({
       enabled_providers: ["fixture"], autoupdate: false, snapshot: false,
       provider: { fixture: { npm: "@ai-sdk/openai-compatible", name: "Loopback fixture", options: { baseURL: base, apiKey: "loopback-only" }, models: { "fixture-model": { name: "Fixture", limit: { context: 10000, output: 100 } } } } },
     }));
+    // OpenCode installs this SDK even with default plugins disabled. Resolve it
+    // before the measured harness launch, not inside its recording deadline.
+    const dependencyHome = join(configHome, "opencode");
+    const setupStarted = performance.now();
+    try {
+      await exec("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--save-exact", `@opencode-ai/plugin@${pins.opencode}`], {
+        cwd: dependencyHome,
+        env: { ...env, npm_config_fetch_retries: "0", npm_config_fetch_timeout: "20000" },
+        timeout: 60_000, killSignal: "SIGKILL", maxBuffer: 1024 * 1024,
+      });
+    } catch (cause) {
+      throw new Error("Native fixture dependency setup failed before any task was run", { cause });
+    }
+    const installed = JSON.parse(await readFile(join(dependencyHome, "node_modules/@opencode-ai/plugin/package.json"), "utf8"));
+    assert.equal(installed.version, pins.opencode);
+    t.diagnostic(`OpenCode dependency setup: ${Math.round(performance.now() - setupStarted)} ms (not harness execution)`);
+    // Any missed dependency must fail without fetching during the contract run.
+    env.npm_config_offline = "true";
+    env.npm_config_audit = "false";
+    assert.equal(requests.length, 0, "Dependency setup must not route or submit a model task");
   }
   if (trusted) {
     await exec("python3", [resolve("tests/helpers/review-native-hooks.py"), jevia], { cwd, env, timeout: 50_000 });
@@ -103,8 +131,9 @@ async function fixture(t, harness, trusted = false) {
   }
   const task = "- Print the fixture-tool marker and reply with fixture response.";
   const extra = harness === "codex" ? ["--", "--skip-git-repo-check", "--sandbox", "read-only"] : [];
-  const result = await exec(jevia, ["run", harness, `--task=${task}`, "--non-interactive", "--timeout-seconds", "90", ...extra], { cwd, env, timeout: 105_000, maxBuffer: 2 * 1024 * 1024 });
+  const result = await exec(jevia, ["run", harness, `--task=${task}`, "--non-interactive", "--timeout-seconds", "45", ...extra], { cwd, env, timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
   const records = JSON.parse((await exec(jevia, ["runs", "--json"], { cwd, env })).stdout);
+  t.diagnostic(`${harness} execution: ${records[0].execution.duration_ms} ms; capture=${records[0].execution.observations.status}; events=${records[0].execution.observations.events.length}`);
   assert.equal(records[0].task, task);
   assert.ok(requests.some((r) => r.path !== "/v1/systemone" && JSON.stringify(r.input).includes(task)), "native provider receives the literal leading-dash task");
   return { cwd, requests, result, record: records[0] };

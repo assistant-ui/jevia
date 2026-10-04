@@ -15,8 +15,12 @@ concurrency:
 
 jobs:
   native-harnesses:
-    name: Native harness contracts
-    runs-on: ubuntu-24.04
+    name: Native harness contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -31,6 +35,7 @@ jobs:
       - name: Install pinned native harnesses
         run: npm install --prefix "$RUNNER_TEMP/native-tools" --no-audit --no-fund --save-exact opencode-ai@1.18.33 @openai/codex@0.158.0-alpha.2
       - name: Install native Linux sandbox prerequisites
+        if: runner.os == 'Linux'
         # Ubuntu 24.04 restricts unprivileged user namespaces. Use the packaged
         # helper and its scoped AppArmor profile, not a global sysctl bypass.
         run: |
