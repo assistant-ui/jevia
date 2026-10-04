@@ -59,6 +59,19 @@ impl Storage {
         }
     }
 
+    /// Aggregate a consistent append-ordered window without retaining its full
+    /// payloads. Returns whether the same snapshot contains older records.
+    pub async fn visit_recent(
+        &self,
+        limit: usize,
+        visit: impl FnMut(&RouteRecord) -> Result<()>,
+    ) -> Result<bool> {
+        match self {
+            Self::Jsonl(paths) => store::visit_recent(&paths.runs, limit, visit),
+            Self::Database(db) => db.visit_recent(limit, visit).await,
+        }
+    }
+
     pub async fn get(&self, id: &str) -> Result<RouteRecord> {
         match self {
             Self::Jsonl(paths) => store::get(&paths.runs, id),

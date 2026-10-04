@@ -14,6 +14,8 @@ use tempfile::NamedTempFile;
 
 mod check;
 mod history;
+mod recent;
+pub use recent::visit_recent;
 mod maintenance;
 pub use check::{check_deep, count};
 pub use history::routing_history;

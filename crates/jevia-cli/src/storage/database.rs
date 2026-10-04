@@ -21,6 +21,7 @@ mod export;
 mod import_tests;
 mod observations;
 mod readiness;
+mod recent;
 pub use readiness::ObservationIndexStatus;
 
 const SCHEMA_VERSION: i64 = 1;
