@@ -255,6 +255,76 @@ async fn failures(postgres: bool) {
 async fn sqlite_export_bounded_contract() {
     contract(false).await;
 }
+
+async fn recovery_size_limit(postgres: bool) {
+    let f = Fixture::new(postgres).await;
+    let mut boundary = record(0);
+    boundary.task = Some(String::new());
+    let overhead = crate::jsonl::encode(&boundary).unwrap().len();
+    boundary.task = Some("x".repeat(crate::jsonl::MAX_LINE_BYTES - overhead));
+    assert_eq!(
+        crate::jsonl::encode(&boundary).unwrap().len(),
+        crate::jsonl::MAX_LINE_BYTES
+    );
+    f.storage.append(&boundary).await.unwrap();
+    let output = f.dir.path().join("boundary.jsonl");
+    f.storage.export(&output).await.unwrap();
+    let lines = crate::jsonl::lines(io::BufReader::new(fs::File::open(output).unwrap()));
+    assert_eq!(lines.map(Result::unwrap).count(), 1);
+
+    // Feedback cannot silently create a row whose next backup is unrestorable.
+    assert!(
+        f.db()
+            .outcome("export-0", Outcome::Failure, Some("new feedback"))
+            .await
+            .is_err()
+    );
+    assert_eq!(f.storage.get("export-0").await.unwrap(), boundary);
+    let mut oversized = boundary.clone();
+    oversized.task.as_mut().unwrap().push('x');
+    let mut tx = f.db().write().await.unwrap();
+    assert!(f.db().insert(&mut tx, &oversized).await.is_err());
+    let counter: i64 = sqlx::query_scalar("SELECT next_seq FROM jevia_projects WHERE project = $1")
+        .bind(&f.db().project)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert_eq!(counter, 1);
+    tx.rollback().await.unwrap();
+
+    // Simulate an oversized row written by an older client. Reads still work,
+    // but export and both archive modes fail without publishing or deleting.
+    sqlx::query("UPDATE jevia_runs SET record = $2 WHERE project = $1 AND run_id = 'export-0'")
+        .bind(&f.db().project)
+        .bind(serde_json::to_string(&oversized).unwrap())
+        .execute(&f.db().pool)
+        .await
+        .unwrap();
+    f.storage.append(&record(1)).await.unwrap();
+    let output = f.dir.path().join("oversized.jsonl");
+    assert!(f.storage.export(&output).await.is_err());
+    assert!(!output.exists());
+    for apply in [false, true] {
+        let error = f.db().archive(f.dir.path(), 1, apply).await.unwrap_err();
+        assert!(error.to_string().contains("8 MiB"));
+        assert!(!error.to_string().contains("private-"));
+        assert_eq!(f.storage.get("export-0").await.unwrap(), oversized);
+        assert!(f.storage.get("export-1").await.is_ok());
+        assert!(!f.dir.path().join("history-backups").exists());
+        assert!(!f.dir.path().join("history-archives").exists());
+    }
+}
+
+#[tokio::test]
+async fn sqlite_recovery_size_limit() {
+    recovery_size_limit(false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated PostgreSQL database in JEVIA_TEST_POSTGRES_URL"]
+async fn postgres_recovery_size_limit() {
+    recovery_size_limit(true).await;
+}
 #[tokio::test]
 async fn sqlite_export_consistent_snapshot_allows_writers() {
     consistent_snapshot(false).await;

@@ -21,8 +21,7 @@ impl Database {
                 break;
             }
             for (ordinal, record) in rows {
-                serde_json::to_writer(&mut output, &record)?;
-                output.write_all(b"\n")?;
+                output.write_all(&crate::jsonl::encode(&record)?)?;
                 count += 1;
                 cursor = Some(ordinal);
             }

@@ -5,6 +5,20 @@ use serde_json::{Value, json};
 
 const TERMINAL: usize = PAGE_SIZE * 2 + 5;
 
+#[test]
+fn snapshot_bound_counts_physical_bytes_and_preserves_raw_json() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut snapshot = Snapshot::new(dir.path()).unwrap();
+    let raw = "{\r\n\"unknown\": 1e+10, \"text\": \"你好\\n\"\r\n}";
+    snapshot.record(raw).unwrap();
+    assert_eq!(
+        fs::read_to_string(snapshot.finish().unwrap()).unwrap(),
+        "{\"unknown\": 1e+10, \"text\": \"你好\\n\"}\n"
+    );
+    assert!(snapshot_size(&"x".repeat(crate::jsonl::MAX_LINE_BYTES - 1)).is_ok());
+    assert!(snapshot_size(&"x".repeat(crate::jsonl::MAX_LINE_BYTES)).is_err());
+}
+
 struct Fixture {
     _dir: tempfile::TempDir,
     paths: ProjectPaths,
