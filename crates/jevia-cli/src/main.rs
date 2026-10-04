@@ -25,7 +25,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use jevia_core::{
     Config, ExecutionEvidence, HarnessInvocation, JevClient, Outcome, RouteRecord, RunState,
-    VerificationEvidence, route_cache_key,
+    VerificationEvidence, route_cache_key_with_history,
 };
 
 use crate::explain::{CacheStatus, CacheWrite, Coordination, Routed, Trace};
@@ -930,11 +930,11 @@ async fn routed_record_in(
     // while holding a global history/cache lock. Reload evidence after the wait,
     // not on every coordination poll; feedback remains fresh before use.
     let (history, cache_key, _request_lease) = loop {
-        let history = storage.routing_history(config.router.history_limit).await?;
+        let history = storage.routing_context(config.router.history_limit).await?;
         if !config.cache.enabled || no_cache {
             break (history, None, None);
         }
-        let key = match route_cache_key(task, harness_name, config, &history) {
+        let key = match route_cache_key_with_history(task, harness_name, config, &history) {
             Ok(key) => key,
             Err(error) => {
                 eprintln!(
@@ -988,8 +988,8 @@ async fn routed_record_in(
                 } else if !matches!(trace.coordination, Coordination::Waited) {
                     trace.coordination = Coordination::Acquired;
                 }
-                let latest = storage.routing_history(config.router.history_limit).await?;
-                let latest_key = route_cache_key(task, harness_name, config, &latest)?;
+                let latest = storage.routing_context(config.router.history_limit).await?;
+                let latest_key = route_cache_key_with_history(task, harness_name, config, &latest)?;
                 if latest_key != key {
                     continue;
                 }
@@ -1033,8 +1033,8 @@ async fn routed_record_in(
                     terminal::diagnostic(format_args!("{error:#}"))
                 );
                 trace.coordination = Coordination::Unavailable;
-                let latest = storage.routing_history(config.router.history_limit).await?;
-                let latest_key = route_cache_key(task, harness_name, config, &latest)?;
+                let latest = storage.routing_context(config.router.history_limit).await?;
+                let latest_key = route_cache_key_with_history(task, harness_name, config, &latest)?;
                 break (latest, Some(latest_key), None);
             }
         }
@@ -1043,14 +1043,9 @@ async fn routed_record_in(
     let api_key = env::var("TYPESAFE_API_KEY")
         .context("TYPESAFE_API_KEY is not set; Jevia never stores this key in config")?;
     let client = JevClient::new(api_key, &config.jev)?;
-    let decision = match harness_name {
-        Some(name) => {
-            client
-                .route_for_harness(task, name, config, &history)
-                .await?
-        }
-        None => client.route(task, config, &history).await?,
-    };
+    let decision = client
+        .route_with_history(task, harness_name, config, &history)
+        .await?;
     if let Some(key) = cache_key {
         match cache::insert(
             &paths.cache,
@@ -1480,7 +1475,8 @@ mod tests {
         fs::create_dir_all(&paths.directory).expect("Jevia directory is created");
         let config = Config::default();
         let cached = sample_record().decision;
-        let key = route_cache_key("test task", None, &config, &[]).expect("cache key is created");
+        let key = jevia_core::route_cache_key("test task", None, &config, &[])
+            .expect("cache key is created");
         cache::insert(
             &paths.cache,
             key,

@@ -112,6 +112,7 @@ impl Storage {
 
     /// Separate windows prevent passive activity from displacing known outcomes.
     /// Each window retains append order; the provider consumes them separately.
+    #[cfg(test)]
     pub async fn routing_history(&self, limit: usize) -> Result<Vec<RouteRecord>> {
         let (mut history, observations) = match self {
             Self::Jsonl(paths) => store::routing_history(&paths.runs, limit)?,
@@ -128,6 +129,21 @@ impl Storage {
             }
         }
         Ok(history)
+    }
+
+    pub async fn routing_context(&self, limit: usize) -> Result<jevia_core::RoutingHistory> {
+        let (known, observed) = match self {
+            Self::Jsonl(paths) => {
+                store::routing_history_with(&paths.runs, limit, jevia_core::RoutingCandidate::new)?
+            }
+            Self::Database(db) => {
+                db.routing_history_with(limit, jevia_core::RoutingCandidate::new)
+                    .await?
+            }
+        };
+        Ok(jevia_core::RoutingHistory::from_windows(
+            known, observed, limit,
+        ))
     }
 
     pub async fn append(&self, record: &RouteRecord) -> Result<()> {
