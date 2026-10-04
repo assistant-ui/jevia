@@ -252,13 +252,15 @@ for (const harness of ["opencode", "codex"]) {
       assert.equal(record.outcome, "unknown");
       assert.equal(record.execution.verification, undefined);
       assert.equal(record.execution.observations.source, harness === "codex" ? "codex_hooks" : "opencode_plugin");
-      assert.ok(!["running", "timed_out", "interrupted"].includes(record.lifecycle.state));
+      assert.equal(record.execution.observations.status, "recorded");
+      assert.ok(record.execution.observations.events.length > 0, "Keep the native facts received before cancellation or rejection");
       if (scenario === "cancel") {
         assert.equal(record.lifecycle.state, "cancelled");
         assert.equal(result.code, 130);
       } else {
         assert.match(result.stdout + result.stderr, /fixture-provider-rejected/);
-        assert.notEqual(record.lifecycle.state, "cancelled");
+        assert.equal(record.lifecycle.state, "completed");
+        assert.ok(Number.isInteger(record.execution.exit_code));
       }
       assert.ok(!JSON.stringify(record.execution.observations).includes("fixture-provider-rejected"), "Native facts must not retain provider error text");
       assert.ok(!(await readdir(join(cwd, ".jevia"))).some((name) => name.startsWith("jevia-events-")), "Terminal runs clean up their native journals");
