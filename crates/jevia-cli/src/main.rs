@@ -95,8 +95,12 @@ enum Command {
         /// Independent deadline for post-run verification.
         #[arg(long, requires = "non_interactive", value_parser = clap::value_parser!(u64).range(1..=86400))]
         verification_timeout_seconds: Option<u64>,
-        /// Task passed to the harness argument template.
-        task: String,
+        /// Task passed to the harness argument template. For leading hyphens, use --task="...".
+        #[arg(required_unless_present = "task_text", conflicts_with = "task_text")]
+        task: Option<String>,
+        /// Explicit task text, including leading hyphens; requires the = form.
+        #[arg(long = "task", value_name = "TASK", require_equals = true)]
+        task_text: Option<String>,
         /// Bypass the local routing-decision cache.
         #[arg(long)]
         no_cache: bool,
@@ -312,10 +316,12 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             timeout_seconds,
             verification_timeout_seconds,
             task,
+            task_text,
             args,
             no_cache,
             explain,
         } => {
+            let task = task.or(task_text).expect("clap requires exactly one task");
             run_harness(
                 &harness,
                 &task,
@@ -512,6 +518,7 @@ async fn run_harness(
         &record.decision.run_id,
         extra_args,
     )?;
+    harness::preserve_literal_task(harness, &mut invocation, task);
     options.observation_mode = harness.observations;
     if invocation.verification.is_none() && harness.auto_verify {
         match verification::detect(&paths.root) {
@@ -1398,6 +1405,69 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn explicit_task_accepts_hyphens_without_consuming_options_or_forwarded_args() {
+        for task in ["- Fix the parser", "--help", "--", "-", "- first\n- second"] {
+            let parsed = Cli::try_parse_from([
+                "jevia",
+                "run",
+                "claude",
+                "--non-interactive",
+                "--no-cache",
+                &format!("--task={task}"),
+                "--timeout-seconds",
+                "7",
+                "--",
+                "--verbose",
+            ])
+            .unwrap();
+            let Command::Run {
+                task: positional,
+                task_text,
+                args,
+                non_interactive,
+                no_cache,
+                timeout_seconds,
+                ..
+            } = parsed.command
+            else {
+                panic!("run");
+            };
+            assert!(positional.is_none());
+            assert_eq!(task_text.as_deref(), Some(task));
+            assert_eq!(args, ["--verbose"]);
+            assert!(non_interactive && no_cache);
+            assert_eq!(timeout_seconds, Some(7));
+        }
+        let parsed = Cli::try_parse_from([
+            "jevia",
+            "run",
+            "agent",
+            "ordinary task",
+            "--no-cache",
+            "--",
+            "--verbose",
+        ])
+        .unwrap();
+        assert!(matches!(
+            parsed.command,
+            Command::Run {
+                task: Some(_),
+                task_text: None,
+                no_cache: true,
+                ..
+            }
+        ));
+        for args in [
+            vec!["jevia", "run", "agent"],
+            vec!["jevia", "run", "agent", "positional", "--task=other"],
+            vec!["jevia", "run", "agent", "--task", "--no-cache"],
+            vec!["jevia", "run", "agent", "--task=one", "--task=two"],
+        ] {
+            assert!(Cli::try_parse_from(args).is_err());
+        }
+    }
 
     #[tokio::test]
     async fn routing_cache_hit_needs_no_live_request() {

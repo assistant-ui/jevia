@@ -36,6 +36,67 @@ fn fixture() -> (tempfile::TempDir, ProjectPaths) {
 }
 
 #[test]
+fn literal_tasks_are_protected_in_native_presets_without_rewriting_custom_templates() {
+    for preset in Preset::value_variants() {
+        let harness = HarnessConfig {
+            command: format!("/tools/{}", preset.command()),
+            args: preset.args().iter().map(|arg| (*arg).into()).collect(),
+            models: [("fast".into(), "requested".into())].into(),
+            verification: None,
+            auto_verify: false,
+            observations: Default::default(),
+        };
+        for task in [
+            "--help",
+            "- Fix the parser",
+            "- first\n- second",
+            "ordinary task",
+        ] {
+            let mut invocation = harness
+                .invocation("agent", "fast", task, "run", &["--verbose".into()])
+                .unwrap();
+            let original = invocation.args.clone();
+            preserve_literal_task(&harness, &mut invocation, task);
+            if !task.starts_with('-') {
+                assert_eq!(invocation.args, original);
+            } else if *preset == Preset::Gemini {
+                assert_eq!(
+                    invocation.args,
+                    [
+                        "--model",
+                        "requested",
+                        &format!("--prompt={task}"),
+                        "--verbose"
+                    ]
+                );
+            } else {
+                assert_eq!(
+                    &invocation.args[invocation.args.len() - 3..],
+                    ["--verbose", "--", task]
+                );
+            }
+        }
+        for custom in [
+            HarnessConfig {
+                command: "custom-wrapper".into(),
+                ..harness.clone()
+            },
+            HarnessConfig {
+                args: [harness.args.clone(), vec!["--custom".into()]].concat(),
+                ..harness.clone()
+            },
+        ] {
+            let mut invocation = custom
+                .invocation("agent", "fast", "--help", "run", &[])
+                .unwrap();
+            let original = invocation.clone();
+            preserve_literal_task(&custom, &mut invocation, "--help");
+            assert_eq!(invocation, original);
+        }
+    }
+}
+
+#[test]
 fn harness_edits_preserve_ordinary_inline_dotted_tables_and_unrelated_policy() {
     let other = "command = 'other', args = ['{model}', '{task}'], models = {fast='a', balanced='b', strong='c'}";
     for prefix in [

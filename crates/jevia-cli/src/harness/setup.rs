@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, ValueEnum};
-use jevia_core::{HarnessConfig, VerificationConfig};
+use jevia_core::{HarnessConfig, HarnessInvocation, VerificationConfig};
 use toml_edit::{Array, DocumentMut, Item, Table, Value, value};
 
 use crate::{
@@ -48,6 +48,40 @@ impl Preset {
             Self::Opencode => "opencode",
             Self::Gemini => "gemini",
         }
+    }
+}
+
+/// Escape leading-dash prompts only for the exact built-in native templates.
+/// Custom wrappers/templates keep their argv contract; never guess their parser.
+pub fn preserve_literal_task(
+    harness: &HarnessConfig,
+    invocation: &mut HarnessInvocation,
+    task: &str,
+) {
+    if !task.starts_with('-') {
+        return;
+    }
+    let name = std::path::Path::new(&harness.command)
+        .file_name()
+        .and_then(|name| name.to_str());
+    let Some(preset) = Preset::value_variants().iter().find(|preset| {
+        name.is_some_and(|name| {
+            name == preset.command() || name == format!("{}.exe", preset.command())
+        }) && harness.args == preset.args()
+    }) else {
+        return;
+    };
+    let task_index = harness.args.len() - 1;
+    invocation.args.remove(task_index);
+    if *preset == Preset::Gemini {
+        invocation.args[task_index - 1] = format!("--prompt={task}");
+    } else {
+        // Extra native options still precede the task delimiter. Injected
+        // recording options will also be inserted before this delimiter.
+        if !invocation.args.iter().any(|arg| arg == "--") {
+            invocation.args.push("--".into());
+        }
+        invocation.args.push(task.into());
     }
 }
 

@@ -3,6 +3,7 @@ mod check;
 mod health;
 mod review;
 mod setup;
+pub use setup::preserve_literal_task;
 
 use crate::paths::ProjectPaths;
 use anyhow::Result;

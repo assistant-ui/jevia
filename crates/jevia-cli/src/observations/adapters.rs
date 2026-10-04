@@ -31,6 +31,11 @@ pub(super) fn events(source: ObservationSource) -> &'static [&'static str] {
 }
 
 pub(super) fn conflicts(source: ObservationSource, args: &[String]) -> bool {
+    // Prompt text after the native option delimiter is not a configuration flag.
+    let args = &args[..args
+        .iter()
+        .position(|arg| arg == "--")
+        .unwrap_or(args.len())];
     match source {
         ObservationSource::Application => true,
         ObservationSource::ClaudeHooks => args.iter().any(|a| {
@@ -218,6 +223,21 @@ fn inline_config(existing: Option<&str>) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn literal_tasks_do_not_disable_native_capture() {
+        for (source, option) in [
+            (ObservationSource::ClaudeHooks, "--settings=custom"),
+            (ObservationSource::CodexHooks, "--config=custom"),
+            (ObservationSource::OpencodePlugin, "--pure"),
+        ] {
+            assert!(conflicts(source, &[option.into()]));
+            assert_eq!(
+                conflicts(source, &["--".into(), option.into()]),
+                source == ObservationSource::CodexHooks && cfg!(windows)
+            );
+        }
+    }
 
     #[tokio::test]
     #[cfg(unix)]

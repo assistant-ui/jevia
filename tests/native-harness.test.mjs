@@ -80,7 +80,7 @@ async function fixture(t, harness) {
   const config = join(cwd, ".jevia/config.toml");
   let source = (await readFile(config, "utf8")).replace(/base_url = "[^"]+"/, `base_url = "${base.slice(0, -3)}"`);
   const args = harness === "codex"
-    ? ["exec", "--skip-git-repo-check", "--sandbox", "read-only", "--model", "{model}", "{task}"]
+    ? ["exec", "--model", "{model}", "{task}"]
     : ["run", "--model", "{model}", "{task}"];
   const model = harness === "codex" ? "fixture-model" : "fixture/fixture-model";
   source += `\n[harnesses.${harness}]\ncommand = ${JSON.stringify(binary)}\nargs = ${JSON.stringify(args)}\n[harnesses.${harness}.models]\nfast = "${model}"\nbalanced = "${model}"\nstrong = "${model}"\n`;
@@ -94,8 +94,12 @@ async function fixture(t, harness) {
       provider: { fixture: { npm: "@ai-sdk/openai-compatible", name: "Loopback fixture", options: { baseURL: base, apiKey: "loopback-only" }, models: { "fixture-model": { name: "Fixture", limit: { context: 10000, output: 100 } } } } },
     }));
   }
-  const result = await exec(jevia, ["run", harness, "Print the fixture-tool marker and reply with fixture response.", "--non-interactive", "--timeout-seconds", "45"], { cwd, env, timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+  const task = "- Print the fixture-tool marker and reply with fixture response.";
+  const extra = harness === "codex" ? ["--", "--skip-git-repo-check", "--sandbox", "read-only"] : [];
+  const result = await exec(jevia, ["run", harness, `--task=${task}`, "--non-interactive", "--timeout-seconds", "45", ...extra], { cwd, env, timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
   const records = JSON.parse((await exec(jevia, ["runs", "--json"], { cwd, env })).stdout);
+  assert.equal(records[0].task, task);
+  assert.ok(requests.some((r) => r.path !== "/v1/systemone" && JSON.stringify(r.input).includes(task)), "native provider receives the literal leading-dash task");
   return { cwd, requests, result, record: records[0] };
 }
 
