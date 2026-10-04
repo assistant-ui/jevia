@@ -1628,6 +1628,11 @@ pnpm install
 pnpm dev
 ```
 
+Installers replace existing regular Jevia binaries, but refuse directories,
+symlinks, Windows junctions, and other non-regular entries at the binary path.
+Choose a different `JEVIA_INSTALL_DIR` or inspect the conflicting entry yourself;
+the installer does not delete it. Failed checksum checks preserve the old binary.
+
 The site serves `/install.sh` and uses the current page's origin in its copyable
 install command: localhost during development and the deployed domain in
 production. The script downloads the pinned GitHub release binary, verifies its

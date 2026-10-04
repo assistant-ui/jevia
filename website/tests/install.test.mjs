@@ -8,6 +8,8 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
+  readdirSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -93,6 +95,8 @@ cp "$JEVIA_FIXTURE_DIR/\${url##*/}" "$output"
   }
 
   const path = options.path ?? `${commands}:${systemPath}`;
+  mkdirSync(installDirectory);
+  options.beforeInstall?.(installDirectory);
   const result = spawnSync("/bin/sh", [installer], {
     encoding: "utf8",
     env: {
@@ -161,3 +165,37 @@ test("rejects unsupported architectures before downloading", (t) => {
   assert.match(result.stderr, /unsupported architecture: riscv64/);
   assert.doesNotMatch(result.stdout, /Downloading Jevia/);
 });
+
+test("updates an existing regular binary and removes staging files", (t) => {
+  const { installDirectory, result } = runInstaller(t, {
+    beforeInstall: (directory) => writeFileSync(join(directory, "jevia"), "old binary"),
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(readdirSync(installDirectory), ["jevia"]);
+  assert.match(readFileSync(join(installDirectory, "jevia"), "utf8"), /#!\/bin\/sh/);
+});
+
+for (const kind of ["directory", "directory-link", "file-link", "dangling-link", "fifo"]) {
+  test(`rejects a ${kind} binary destination before downloading, preserving its contents`, (t) => {
+    const { installDirectory, result } = runInstaller(t, {
+      beforeInstall: (directory) => {
+        const destination = join(directory, "jevia");
+        const target = join(directory, "target");
+        if (kind === "directory") mkdirSync(destination);
+        if (kind === "directory-link") { mkdirSync(target); symlinkSync(target, destination); }
+        if (kind === "file-link") { writeFileSync(target, "keep"); symlinkSync(target, destination); }
+        if (kind === "dangling-link") symlinkSync(target, destination);
+        if (kind === "fifo") assert.equal(spawnSync("mkfifo", [destination]).status, 0);
+        if (kind === "directory" || kind === "directory-link") writeFileSync(join(destination, "keep"), "keep");
+      },
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /install destination/);
+    assert.doesNotMatch(result.stdout, /Downloading|Installed Jevia/);
+    assert.ok(!readdirSync(installDirectory).some((name) => name.startsWith(".jevia.install.")));
+    if (kind === "directory" || kind === "directory-link") {
+      assert.deepEqual(readdirSync(join(installDirectory, "jevia")), ["keep"]);
+    }
+    if (kind === "file-link") assert.equal(readFileSync(join(installDirectory, "target"), "utf8"), "keep");
+  });
+}

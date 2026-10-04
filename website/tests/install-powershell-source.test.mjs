@@ -10,7 +10,10 @@ test("the Windows installer downloads and verifies the native release asset", ()
   assert.match(source, /Invoke-WebRequest/);
   assert.match(source, /Get-FileHash[^\n]+SHA256/);
   assert.match(source, /checksum verification failed/);
-  assert.match(source, /Move-Item/);
+  assert.match(source, /\[IO\.File\]::Move\(/);
+  assert.match(source, /\[IO\.File\]::Replace\(/);
+  assert.match(source, /Confirm-JeviaDestination/);
+  assert.match(source, /ReparsePoint/);
 });
 
 test("the Windows installer keeps its destination and release endpoint configurable", () => {
