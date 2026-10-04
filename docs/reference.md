@@ -358,8 +358,23 @@ Finished `jevia run` executions automatically inform subsequent routing even wit
 feedback or a verifier. Jev receives two separate, bounded windows: known outcomes
 and passive execution observations (requested model, harness, elapsed time, process
 exit, and lifecycle state). Each uses `router.history_limit`; pending and active
-runs do not crowd out either window. New observations also invalidate stale routing
-cache entries. Stored task text follows the existing privacy setting.
+runs do not crowd out either window. Observations that change the supplied context
+invalidate stale routing cache entries. Stored task text follows the existing privacy setting.
+
+Unreleased: routing also limits each history window to **64 KiB of serialized
+JSON** (128 KiB combined, including array punctuation). Historical task text is a
+UTF-8-safe prefix of at most **2,048 bytes**, explicitly marked `task_truncated`
+when shortened. Within each count window, newer records get priority; a record
+that cannot fit is omitted, and smaller older candidates can still fit. No
+records beyond `router.history_limit` are fetched to backfill omissions. Jev
+receives `history_budget` counts and instructions not to treat missing context
+as a failure. Both known outcomes and passive observations remain automatic.
+
+This affects only outbound historical context, not saved history, the current
+task, or the prompt passed to a harness. It is not a cap on the entire request
+(current task/configuration are separate), storage record size, or memory needed
+to read stored records. The shared core projection applies to the CLI, Node SDK
+with the updated CLI, and Rust client.
 
 In CLI 0.1.7, both windows come from one consistent history snapshot.
 Concurrent feedback cannot move an attempt between categories midway through
@@ -1026,17 +1041,20 @@ their existing format. No explanation is printed unless requested.
 
 ```text
 jevia: explain cache=miss:not_found coordination=acquired write=stored
-jevia: explain known_outcomes=2 passive_observations=8 history_limit_per_kind=20
+jevia: explain known_outcomes=2 passive_observations=8 history_limit_per_kind=20 history_stage=candidates_before_byte_budget
 jevia: explain source=live confidence=0.94 floor=0.65 fallback=not_applied elapsed_ms=120
 ```
 
-`known_outcomes` counts the bounded, eligible outcome records supplied to the
-router. `passive_observations` counts the separate window of finished executions
-without eligible outcome evidence, including process-only, unknown, and partial
+`known_outcomes` counts the eligible outcome candidates within the count window,
+before the byte budget. `passive_observations` counts the separate window of
+finished executions without eligible outcome evidence, including process-only, unknown, and partial
 capture. A run is not counted in both windows. Active/routed-only executions are
 not passive history. Feedback and additional verification remain optional, and
 recorded history is included automatically. On cache hits these are the inputs
-used to match the cached decision, not a new provider request.
+considered when building the cache fingerprint, not a new provider request.
+These are candidate counts, not a claim that every record was transmitted:
+byte limits can omit records or shorten historical task text. The projection's
+`history_budget` in the provider request reports included/omitted counts.
 
 Cache status distinguishes `hit`, `miss:not_found`, `miss:expired`, `disabled`,
 `bypassed`, `unavailable`, and `key_unavailable`. Coordination reports
@@ -1083,9 +1101,13 @@ max_entries = 256
 A cache key is a SHA-256 fingerprint over the exact task, Jev endpoint and
 model, routing policy, tier definitions, selected harness mapping, and the
 recent outcomes and passive observations actually sent to Jev. A new observation,
-success, failure, verification result, policy change, model change, or harness change therefore
-produces a miss automatically. Pending outcomes do not invalidate an otherwise
-equivalent decision.
+success, failure, verification result, policy change, model change, or harness change
+produces a miss when it changes these inputs. The fingerprint uses the same
+bounded history projection and budget metadata as live routing. Changes confined
+to omitted content or a truncated task's discarded suffix do not invalidate an
+otherwise equivalent decision. Pending outcomes also do not invalidate it.
+The byte-budget update advances the cache fingerprint version; existing entries
+safely miss once without deleting history.
 
 Cache files contain the fingerprint and decision signal, not task text. Every
 hit receives a fresh run ID and timestamp, and run records expose

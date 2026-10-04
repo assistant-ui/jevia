@@ -130,6 +130,13 @@ CLI 0.1.6+ and SDK 0.1.2+; upgrade all readers/writers before using schema 6.
 
 ### Recorded outcomes inform the next route automatically
 
+Unreleased CLI update: outbound history is also capped at 64 KiB of JSON per
+window. Past tasks use explicitly marked UTF-8-safe excerpts of up to 2,048
+bytes; newer candidates take priority, with omissions disclosed to the router.
+This applies automatically through the Node SDK when using the updated CLI.
+It does not truncate the current task or stored records, require feedback or
+verification, or turn history into an opt-in feature.
+
 The SDK does not require Jevia's built-in verifier. Your application can use
 tests, an acceptance check, or a user-approved result, then record `success` or
 `failure` with `feedback`. The source is labeled `manual` (application-reported),

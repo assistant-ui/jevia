@@ -102,6 +102,9 @@ impl Routed {
                 config.privacy.store_task_text.then(|| task.to_owned()),
             ),
             trace,
+            // Candidate counts precede the shared core byte-budget projection.
+            // Label that stage explicitly without serializing history again just
+            // to produce opt-in diagnostics on the routing hot path.
             known_outcomes: history
                 .iter()
                 .rev()
@@ -134,7 +137,7 @@ impl fmt::Display for Routed {
         )?;
         writeln!(
             f,
-            "jevia: explain known_outcomes={} passive_observations={} history_limit_per_kind={}",
+            "jevia: explain known_outcomes={} passive_observations={} history_limit_per_kind={} history_stage=candidates_before_byte_budget",
             self.known_outcomes, self.passive_observations, self.history_limit
         )?;
         write!(

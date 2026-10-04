@@ -13,6 +13,8 @@ use uuid::Uuid;
 
 use crate::{Config, DecisionSource, JevConfig, RouteDecision, RouteRecord};
 
+mod history;
+
 // Routing responses are small classification results, not generated content.
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
@@ -143,7 +145,7 @@ pub fn route_cache_key(
         })
     });
     let material = json!({
-        "cache_schema_version": 2,
+        "cache_schema_version": 3,
         "api_base_url": config.jev.base_url.trim().trim_end_matches('/'),
         "router": &config.router,
         "harness": harness,
@@ -190,57 +192,17 @@ fn build_request<'a>(
             Ok::<_, JevError>(json!({"name": name, "tier_models": tier_models}))
         })
         .transpose()?;
-    let mut completed: Vec<_> = history
-        .iter()
-        .rev()
-        .filter(|record| record.is_learning_evidence())
-        .take(config.router.history_limit)
-        .map(|record| {
-            json!({
-                "task": record.task,
-                "tier": record.decision.tier,
-                "confidence": record.decision.confidence,
-                "outcome": record.outcome,
-                "outcome_source": record.outcome_evidence.as_ref().map(|evidence| evidence.source),
-                "execution": record.execution.as_ref().map(|execution| json!({
-                    "harness": execution.harness, "model": execution.model,
-                    "duration_ms": execution.duration_ms, "exit_code": execution.exit_code,
-                    "verification": execution.verification,
-                    "harness_observations": execution.observations.as_ref().map(|o| o.routing_summary()),
-                })),
-            })
-        })
-        .collect();
-    completed.reverse();
-
-    let mut observations: Vec<_> = history
-        .iter()
-        .rev()
-        .filter(|record| record.is_execution_observation() && !record.is_learning_evidence())
-        .take(config.router.history_limit)
-        .map(|record| {
-            let execution = record.execution.as_ref().expect("observed execution");
-            json!({
-                "task": record.task,
-                "tier": record.decision.tier,
-                "state": record.lifecycle.as_ref().map(|life| life.state),
-                "harness": execution.harness,
-                "requested_model": execution.model,
-                "duration_ms": execution.duration_ms,
-                "process_exit_code": execution.exit_code,
-                "harness_observations": execution.observations.as_ref().map(|o| o.routing_summary()),
-            })
-        })
-        .collect();
-    observations.reverse();
+    let history = history::project(history, config.router.history_limit);
 
     let mut state = json!({
         "current_task": task,
-        "recent_completed_outcomes": completed,
-        "recent_execution_observations": observations,
+        "recent_completed_outcomes": history.outcomes,
+        "recent_execution_observations": history.observations,
+        "history_budget": history.budget,
         "policy": {
             "goal": "Select the least expensive capability tier likely to complete the task successfully.",
             "use_outcomes": "Treat relevant successes and failures as evidence, not absolute rules. Prefer the safer tier when evidence conflicts.",
+            "use_history_budget": "Historical tasks marked task_truncated are prefix excerpts, not complete tasks. History windows prioritize newer candidates within byte limits; omitted records and missing text are not evidence of failure or absence of past work.",
             "use_observations": "Execution observations are operational context, not task-success labels. A process exit, duration, or agent-reported completion does not prove correctness. The requested model is not proof of which models actually executed. A model_observed event reports request selection, not a provider completion. tool_completed is neutral and does not establish tool success. Do not infer quality or model capability from missing feedback."
         }
     });
@@ -759,7 +721,7 @@ mod tests {
         assert_ne!(baseline, changed);
     }
 
-    fn record(task: &str, tier: &str, outcome: Outcome) -> RouteRecord {
+    pub(super) fn record(task: &str, tier: &str, outcome: Outcome) -> RouteRecord {
         RouteRecord {
             schema_version: 1,
             decision: RouteDecision {
