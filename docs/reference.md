@@ -539,9 +539,14 @@ This command requires v0.1.2 or newer.
 
 The default window is the **latest 1,000 records in append order**, not a date
 range or an all-time total. `--limit` accepts 1–100,000. The report says when older
-records were excluded; archived records are not included. SQL reads are bounded
-and project-scoped. JSONL still scans and validates the full file under its shared
-history lock, but retains only the requested tail in memory.
+records were excluded; archived records are not included. Stats aggregate each
+record without retaining the window's full task, feedback, and event payloads.
+SQL reads are project-scoped and paged in batches of at most 200 records within
+one consistent snapshot. JSONL counts nonblank lines, then scans and validates
+the full file under the same shared history lock and file handle, decoding each
+record once. Working memory depends on an input line/database page and the
+aggregate groups, not the combined payload size of the requested window. Tier
+groups remain complete; reported model groups retain their existing 128 limit.
 
 Totals and per-tier groups use the **selected tier recorded at routing time**,
 including tiers since removed from configuration. Tiers are not concrete model

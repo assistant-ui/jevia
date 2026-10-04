@@ -264,40 +264,61 @@ pub struct Report {
 }
 
 pub async fn collect(storage: &Storage, limit: usize) -> Result<Report> {
-    // One extra row detects truncation without a separate count query racing a
-    // concurrent append. SQL reads only this project's bounded snapshot.
-    let records = storage.recent(limit + 1, false).await?;
-    Ok(Report::new(storage.name(), limit, &records))
+    let mut aggregate = Aggregate::default();
+    let has_older_records = storage
+        .visit_recent(limit, |record| {
+            aggregate.add(record);
+            Ok(())
+        })
+        .await?;
+    Ok(aggregate.finish(storage.name(), limit, has_older_records))
 }
 
-impl Report {
-    fn new(storage: &'static str, limit: usize, records: &[RouteRecord]) -> Self {
-        let mut totals = Counts::default();
-        let mut tiers = BTreeMap::<String, Counts>::new();
-        let mut observations = Observations::default();
-        for record in &records[records.len().saturating_sub(limit)..] {
-            totals.add(record);
-            observations.add(record);
-            tiers
-                .entry(record.decision.tier.clone())
-                .or_default()
-                .add(record);
-        }
-        Self {
+#[derive(Default)]
+struct Aggregate {
+    totals: Counts,
+    tiers: BTreeMap<String, Counts>,
+    observations: Observations,
+}
+
+impl Aggregate {
+    fn add(&mut self, record: &RouteRecord) {
+        self.totals.add(record);
+        self.observations.add(record);
+        self.tiers
+            .entry(record.decision.tier.clone())
+            .or_default()
+            .add(record);
+    }
+
+    fn finish(self, storage: &'static str, limit: usize, has_older_records: bool) -> Report {
+        Report {
             schema_version: 1,
             storage,
             window: Window {
                 limit,
                 order: "append",
-                has_older_records: records.len() > limit,
+                has_older_records,
             },
-            totals: totals.summarize(),
-            observations,
-            tiers: tiers
+            totals: self.totals.summarize(),
+            observations: self.observations,
+            tiers: self
+                .tiers
                 .into_iter()
                 .map(|(tier, counts)| (tier, counts.summarize()))
                 .collect(),
         }
+    }
+}
+
+impl Report {
+    #[cfg(test)]
+    fn new(storage: &'static str, limit: usize, records: &[RouteRecord]) -> Self {
+        let mut aggregate = Aggregate::default();
+        for record in &records[records.len().saturating_sub(limit)..] {
+            aggregate.add(record);
+        }
+        aggregate.finish(storage, limit, records.len() > limit)
     }
 
     pub fn render(&self) -> String {
@@ -544,5 +565,95 @@ mod tests {
         let output = report.render();
         assert!(output.contains("tier\\n\\u{1b}[2J"));
         assert!(!output.contains('\u{1b}'));
+    }
+
+    async fn streamed_report_matches_materialized_window(
+        storage_config: jevia_core::StorageConfig,
+    ) {
+        use crate::paths::ProjectPaths;
+        use jevia_core::Config;
+        let dir = tempfile::tempdir().unwrap();
+        let paths = ProjectPaths::at(dir.path().into());
+        let config = Config {
+            storage: storage_config,
+            ..Config::default()
+        };
+        let storage = Storage::open(&config, &paths, true).await.unwrap();
+        let empty = collect(&storage, 1000).await.unwrap();
+        assert_eq!(empty.totals.counts.records, 0);
+        assert!(!empty.window.has_older_records);
+        let mut records = Vec::new();
+        for index in 0..405 {
+            let mut entry = record(
+                if index % 2 == 0 {
+                    Outcome::Success
+                } else {
+                    Outcome::Failure
+                },
+                Some(if index % 3 == 0 {
+                    OutcomeSource::Manual
+                } else {
+                    OutcomeSource::Verification
+                }),
+            );
+            entry.decision.run_id = format!("private-run-{index}");
+            entry.decision.created_at_ms = 500 - index;
+            entry.decision.tier = format!("tier-{}", index % 3);
+            entry.decision.source = if index % 2 == 0 {
+                DecisionSource::Cache
+            } else {
+                DecisionSource::Live
+            };
+            entry.task = Some("private-task".repeat(1000));
+            entry.lifecycle.as_mut().unwrap().state = if index % 5 == 0 {
+                RunState::Running
+            } else {
+                RunState::Completed
+            };
+            entry.execution = Some(serde_json::from_value(serde_json::json!({
+                "harness":"private-harness", "model":"private-requested", "duration_ms":42, "exit_code":null,
+                "observations": {"source":"claude_hooks", "status":"recorded", "events":[
+                    {"kind":"tool_failed", "recorded_at_ms":1, "model":format!("model-{}", index % 130)}
+                ]}
+            })).unwrap());
+            storage.append(&entry).await.unwrap();
+            records.push(entry);
+        }
+        // Span pages and the 128-model cap, preserving which models are admitted
+        // first; grouping newest-first and reversing later would change results.
+        for limit in [0, 1, 129, 199, 200, 201, 405, 406, 100_000] {
+            let actual = collect(&storage, limit).await.unwrap();
+            let expected = Report::new(storage.name(), limit, &records);
+            assert_eq!(
+                serde_json::to_value(&actual).unwrap(),
+                serde_json::to_value(&expected).unwrap(),
+                "limit {limit}"
+            );
+            assert_eq!(actual.render(), expected.render());
+        }
+    }
+
+    #[tokio::test]
+    async fn jsonl_streamed_report_matches_materialized_window() {
+        streamed_report_matches_materialized_window(jevia_core::StorageConfig::Jsonl).await;
+    }
+
+    #[tokio::test]
+    async fn sqlite_streamed_report_matches_materialized_window() {
+        streamed_report_matches_materialized_window(jevia_core::StorageConfig::Sqlite {
+            url: "sqlite://.jevia/stats.db".into(),
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires JEVIA_TEST_POSTGRES_URL"]
+    async fn postgres_streamed_report_matches_materialized_window() {
+        streamed_report_matches_materialized_window(jevia_core::StorageConfig::Postgres {
+            url_env: "JEVIA_TEST_POSTGRES_URL".into(),
+            project: format!("stats-{}", uuid::Uuid::new_v4()),
+            allow_insecure_localhost: true,
+        })
+        .await;
     }
 }
