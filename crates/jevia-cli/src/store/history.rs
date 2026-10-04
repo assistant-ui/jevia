@@ -2,7 +2,16 @@ use super::*;
 
 /// Read/validate once, keeping independent bounded windows under one shared lock.
 /// A feedback writer cannot move a run between categories during this snapshot.
+#[cfg(test)]
 pub fn routing_history(path: &Path, limit: usize) -> Result<(Vec<RouteRecord>, Vec<RouteRecord>)> {
+    routing_history_with(path, limit, Clone::clone)
+}
+
+pub fn routing_history_with<T>(
+    path: &Path,
+    limit: usize,
+    project: impl Fn(&RouteRecord) -> T,
+) -> Result<(Vec<T>, Vec<T>)> {
     let parent = path
         .parent()
         .context("run history path has no parent directory")?;
@@ -24,7 +33,7 @@ pub fn routing_history(path: &Path, limit: usize) -> Result<(Vec<RouteRecord>, V
             if window.len() == limit {
                 window.pop_front();
             }
-            window.push_back(record);
+            window.push_back(project(&record));
         }
         Ok(())
     })?;

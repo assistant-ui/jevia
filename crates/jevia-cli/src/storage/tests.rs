@@ -481,6 +481,13 @@ async fn observation_history_contract(config: Config) {
             .unwrap();
     }
     let history = storage.routing_history(1).await.unwrap();
+    let mut routing_config = config.clone();
+    routing_config.router.history_limit = 1;
+    let prepared = storage.routing_context(1).await.unwrap();
+    assert_eq!(
+        jevia_core::route_cache_key("task", None, &routing_config, &history).unwrap(),
+        jevia_core::route_cache_key_with_history("task", None, &routing_config, &prepared).unwrap()
+    );
     assert_eq!(
         history
             .iter()

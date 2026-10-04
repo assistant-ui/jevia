@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::{Config, DecisionSource, JevConfig, RouteDecision, RouteRecord};
 
 mod history;
+pub use history::{RoutingCandidate, RoutingHistory};
 
 // Routing responses are small classification results, not generated content.
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
@@ -85,6 +86,27 @@ impl JevClient {
         }
 
         let request = build_request(task, config, history, harness_name)?;
+        self.send_request(request, config).await
+    }
+
+    /// Route with a bounded history snapshot prepared while reading storage.
+    pub async fn route_with_history(
+        &self,
+        task: &str,
+        harness_name: Option<&str>,
+        config: &Config,
+        history: &RoutingHistory,
+    ) -> Result<RouteDecision, JevError> {
+        validate_history(task, config, history)?;
+        let request = build_projected_request(task, config, history.context.clone(), harness_name)?;
+        self.send_request(request, config).await
+    }
+
+    async fn send_request(
+        &self,
+        request: SystemOneRequest<'_>,
+        config: &Config,
+    ) -> Result<RouteDecision, JevError> {
         let response = self
             .http
             .post(&self.endpoint)
@@ -138,6 +160,42 @@ pub fn route_cache_key(
     }
 
     let request = build_request(task, config, history, harness_name)?;
+    cache_key(config, harness_name, request)
+}
+
+/// The prepared-history equivalent of `route_cache_key`; request bytes match.
+pub fn route_cache_key_with_history(
+    task: &str,
+    harness_name: Option<&str>,
+    config: &Config,
+    history: &RoutingHistory,
+) -> Result<String, JevError> {
+    validate_history(task, config, history)?;
+    cache_key(
+        config,
+        harness_name,
+        build_projected_request(task, config, history.context.clone(), harness_name)?,
+    )
+}
+
+fn validate_history(task: &str, config: &Config, history: &RoutingHistory) -> Result<(), JevError> {
+    config.validate()?;
+    if task.trim().is_empty() {
+        return Err(JevError::EmptyTask);
+    }
+    if history.limit != config.router.history_limit {
+        return Err(JevError::Request(
+            "routing history limit does not match policy",
+        ));
+    }
+    Ok(())
+}
+
+fn cache_key(
+    config: &Config,
+    harness_name: Option<&str>,
+    request: SystemOneRequest<'_>,
+) -> Result<String, JevError> {
     let harness = harness_name.map(|name| {
         json!({
             "name": name,
@@ -181,6 +239,20 @@ fn build_request<'a>(
     history: &[RouteRecord],
     harness_name: Option<&str>,
 ) -> Result<SystemOneRequest<'a>, JevError> {
+    build_projected_request(
+        task,
+        config,
+        history::project(history, config.router.history_limit),
+        harness_name,
+    )
+}
+
+fn build_projected_request<'a>(
+    task: &str,
+    config: &'a Config,
+    history: history::HistoryContext,
+    harness_name: Option<&str>,
+) -> Result<SystemOneRequest<'a>, JevError> {
     let harness = harness_name
         .map(|name| {
             let harness = config.harnesses.get(name).ok_or(JevError::UnknownHarness)?;
@@ -192,7 +264,6 @@ fn build_request<'a>(
             Ok::<_, JevError>(json!({"name": name, "tier_models": tier_models}))
         })
         .transpose()?;
-    let history = history::project(history, config.router.history_limit);
 
     let mut state = json!({
         "current_task": task,

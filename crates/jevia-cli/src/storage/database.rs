@@ -1,6 +1,7 @@
 use std::{fs, future::Future, path::PathBuf, str::FromStr, time::Duration};
 
 use anyhow::{Context, Result, anyhow, bail};
+use futures_util::TryStreamExt;
 use jevia_core::{
     ExecutionEvidence, HarnessObservations, Outcome, RECORD_SCHEMA_VERSION, RouteRecord, RunState,
     StorageConfig,
@@ -294,13 +295,30 @@ impl Database {
         rows.iter().rev().map(|row| decode(row)).collect()
     }
 
+    #[cfg(test)]
     pub async fn routing_history(
         &self,
         limit: usize,
     ) -> Result<(Vec<RouteRecord>, Vec<RouteRecord>)> {
+        self.routing_history_with(limit, Clone::clone).await
+    }
+
+    pub async fn routing_history_with<T>(
+        &self,
+        limit: usize,
+        project: impl Fn(&RouteRecord) -> T,
+    ) -> Result<(Vec<T>, Vec<T>)> {
         let mut tx = self.read_snapshot().await?;
-        let known = self.recent_with(&mut *tx, limit, true).await?;
-        let observed = self.observations_in(&mut tx, limit).await?;
+        let mut known = Vec::new();
+        {
+            let mut rows = sqlx::query_scalar::<_, String>("SELECT record FROM jevia_runs WHERE project = $1 AND learning = 1 ORDER BY ordinal DESC LIMIT $2")
+                .bind(&self.project).bind(i64::try_from(limit).unwrap_or(i64::MAX)).fetch(&mut *tx);
+            while let Some(raw) = db(rows.try_next()).await? {
+                known.push(project(&decode(&raw)?));
+            }
+        }
+        known.reverse();
+        let observed = self.observations_with(&mut tx, limit, &project).await?;
         db(tx.commit()).await?;
         Ok((known, observed))
     }
@@ -316,15 +334,25 @@ impl Database {
         decode(&row.context("run id was not found in this project's history")?)
     }
 
+    #[cfg(test)]
     async fn observations_in(
         &self,
         tx: &mut Transaction<'_, Any>,
         limit: usize,
     ) -> Result<Vec<RouteRecord>> {
+        self.observations_with(tx, limit, &Clone::clone).await
+    }
+
+    async fn observations_with<T>(
+        &self,
+        tx: &mut Transaction<'_, Any>,
+        limit: usize,
+        project: &impl Fn(&RouteRecord) -> T,
+    ) -> Result<Vec<T>> {
         if self.supports_observation_index {
-            return self.indexed_recent_observations(tx, limit).await;
+            return self.indexed_observations_with(tx, limit, project).await;
         }
-        self.legacy_observations_in(tx, limit).await
+        self.legacy_observations_with(tx, limit, project).await
     }
 
     #[cfg(test)]
@@ -341,34 +369,44 @@ impl Database {
     }
 
     // Compatibility fallback for PostgreSQL servers without IS JSON support.
+    #[cfg(test)]
     async fn legacy_observations_in(
         &self,
         tx: &mut Transaction<'_, Any>,
         limit: usize,
     ) -> Result<Vec<RouteRecord>> {
+        self.legacy_observations_with(tx, limit, &Clone::clone)
+            .await
+    }
+
+    async fn legacy_observations_with<T>(
+        &self,
+        tx: &mut Transaction<'_, Any>,
+        limit: usize,
+        project: &impl Fn(&RouteRecord) -> T,
+    ) -> Result<Vec<T>> {
         let mut records = Vec::new();
         if limit == 0 {
             return Ok(records);
         }
         let mut before = i64::MAX;
         loop {
-            let rows: Vec<(i64, String)> = db(sqlx::query_as(
+            let mut rows = sqlx::query_as::<_, (i64, String)>(
                 "SELECT ordinal, record FROM jevia_runs WHERE project = $1 AND ordinal < $2 ORDER BY ordinal DESC LIMIT 128",
-            ).bind(&self.project).bind(before).fetch_all(&mut **tx)).await?;
-            if rows.is_empty() {
-                break;
-            }
-            for (ordinal, encoded) in rows {
+            ).bind(&self.project).bind(before).fetch(&mut **tx);
+            let mut read = 0;
+            while let Some((ordinal, encoded)) = db(rows.try_next()).await? {
+                read += 1;
                 before = ordinal;
                 let record = decode(&encoded)?;
                 if record.is_execution_observation() && !record.is_learning_evidence() {
-                    records.push(record);
+                    records.push(project(&record));
                     if records.len() == limit {
                         break;
                     }
                 }
             }
-            if records.len() == limit {
+            if read == 0 || records.len() == limit {
                 break;
             }
         }

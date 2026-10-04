@@ -3,7 +3,7 @@
 
 use std::{fmt, time::Instant};
 
-use jevia_core::{Config, RouteDecision, RouteRecord};
+use jevia_core::{Config, RouteDecision, RouteRecord, RoutingHistory};
 
 use crate::cache::MissReason;
 
@@ -92,7 +92,7 @@ impl Routed {
         decision: RouteDecision,
         task: &str,
         config: &Config,
-        history: &[RouteRecord],
+        history: &RoutingHistory,
         started: Instant,
         trace: Trace,
     ) -> Self {
@@ -105,18 +105,8 @@ impl Routed {
             // Candidate counts precede the shared core byte-budget projection.
             // Label that stage explicitly without serializing history again just
             // to produce opt-in diagnostics on the routing hot path.
-            known_outcomes: history
-                .iter()
-                .rev()
-                .filter(|r| r.is_learning_evidence())
-                .take(config.router.history_limit)
-                .count(),
-            passive_observations: history
-                .iter()
-                .rev()
-                .filter(|r| r.is_execution_observation() && !r.is_learning_evidence())
-                .take(config.router.history_limit)
-                .count(),
+            known_outcomes: history.candidate_counts().0,
+            passive_observations: history.candidate_counts().1,
             history_limit: config.router.history_limit,
             confidence_floor: config.router.confidence_floor,
             elapsed_ms: started.elapsed().as_millis(),
@@ -182,7 +172,7 @@ mod tests {
             decision,
             private,
             &config,
-            &[],
+            &RoutingHistory::from_windows(vec![], vec![], config.router.history_limit),
             Instant::now(),
             Trace {
                 cache: CacheStatus::KeyUnavailable,

@@ -18,7 +18,9 @@ mod recent;
 pub use recent::visit_recent;
 mod maintenance;
 pub use check::{check_deep, count};
+#[cfg(test)]
 pub use history::routing_history;
+pub use history::routing_history_with;
 pub(crate) use maintenance::archivable;
 pub use maintenance::{Maintenance, Report as MaintenanceReport, maintain};
 

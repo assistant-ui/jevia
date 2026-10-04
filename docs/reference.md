@@ -370,6 +370,15 @@ records beyond `router.history_limit` are fetched to backfill omissions. Jev
 receives `history_budget` counts and instructions not to treat missing context
 as a failure. Both known outcomes and passive observations remain automatic.
 
+The CLI now projects each candidate as it reads storage, then reuses the bounded
+snapshot for routing, cache keys, and diagnostics. JSONL still validates the full
+stream under one lock; SQL streams rows from one consistent snapshot. Full task
+text and feedback history are not retained in the routing windows. The existing
+Rust slice-based APIs remain available, alongside `RoutingCandidate`,
+`RoutingHistory`, `route_with_history`, and `route_cache_key_with_history` for
+streaming integrations. See `scripts/benchmark-routing-history.mjs` for a
+repeatable synthetic before/after memory check; it makes no live model calls.
+
 This affects only outbound historical context, not saved history, the current
 task, or the prompt passed to a harness. It is not a cap on the entire request
 (current task/configuration are separate), storage record size, or memory needed

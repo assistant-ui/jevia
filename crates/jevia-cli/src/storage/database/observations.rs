@@ -62,31 +62,32 @@ impl Database {
         )
     }
 
-    pub(super) async fn indexed_recent_observations(
+    pub(super) async fn indexed_observations_with<T>(
         &self,
         tx: &mut Transaction<'_, Any>,
         limit: usize,
-    ) -> Result<Vec<RouteRecord>> {
+        project: &impl Fn(&RouteRecord) -> T,
+    ) -> Result<Vec<T>> {
         if limit == 0 {
             return Ok(Vec::new());
         }
-        let rows: Vec<String> = db(sqlx::query_scalar(&self.observation_query())
+        let query = self.observation_query();
+        let mut rows = sqlx::query_scalar::<_, String>(&query)
             .bind(&self.project)
             .bind(i64::try_from(limit).unwrap_or(i64::MAX))
-            .fetch_all(&mut **tx))
-        .await?;
+            .fetch(&mut **tx);
         // One statement supplies a consistent snapshot. Only the selected window
         // crosses the SQL boundary; deep check remains the full-store validator.
-        rows.iter()
-            .rev()
-            .map(|raw| {
-                let record = decode(raw)?;
-                if !record.is_execution_observation() || record.is_learning_evidence() {
-                    bail!("observation index/policy mismatch; history was not silently omitted");
-                }
-                Ok(record)
-            })
-            .collect()
+        let mut records = Vec::new();
+        while let Some(raw) = db(rows.try_next()).await? {
+            let record = decode(&raw)?;
+            if !record.is_execution_observation() || record.is_learning_evidence() {
+                bail!("observation index/policy mismatch; history was not silently omitted");
+            }
+            records.push(project(&record));
+        }
+        records.reverse();
+        Ok(records)
     }
 }
 

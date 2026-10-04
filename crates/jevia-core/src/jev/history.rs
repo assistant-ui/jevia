@@ -3,6 +3,7 @@ use std::io::{self, Write};
 
 use serde::Serialize;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::{
     ExecutionEvidence, Outcome, OutcomeSource, RouteRecord, RunState, VerificationEvidence,
@@ -11,10 +12,165 @@ use crate::{
 const MAX_WINDOW_BYTES: usize = 64 * 1024;
 const MAX_TASK_BYTES: usize = 2048;
 
+#[derive(Clone, Debug)]
 pub(super) struct HistoryContext {
     pub outcomes: Vec<Value>,
     pub observations: Vec<Value>,
     pub budget: Value,
+}
+
+/// A bounded, routing-only representation. The original record is never changed.
+#[derive(Debug)]
+pub struct RoutingCandidate {
+    identity: [u8; 32],
+    kind: Option<bool>, // true = known outcome; false = passive observation
+    encoded: Option<Vec<u8>>,
+    truncated: bool,
+}
+
+impl RoutingCandidate {
+    pub fn new(record: &RouteRecord) -> Self {
+        fn encode(value: impl Serialize) -> Option<Vec<u8>> {
+            let mut counter = ByteBudget {
+                bytes: 0,
+                limit: MAX_WINDOW_BYTES - 2,
+            };
+            serde_json::to_writer(&mut counter, &value).ok()?;
+            serde_json::to_vec(&value).ok()
+        }
+        let kind = if record.is_learning_evidence() {
+            Some(true)
+        } else if record.is_execution_observation() {
+            Some(false)
+        } else {
+            None
+        };
+        let encoded = match kind {
+            Some(true) => encode(Completed {
+                task: TaskExcerpt::new(record.task.as_deref()),
+                tier: &record.decision.tier,
+                confidence: record.decision.confidence,
+                outcome: record.outcome,
+                outcome_source: record.outcome_evidence.as_ref().map(|e| e.source),
+                execution: record.execution.as_ref().map(Execution::new),
+            }),
+            Some(false) => {
+                let execution = record.execution.as_ref().expect("observed execution");
+                encode(Observation {
+                    task: TaskExcerpt::new(record.task.as_deref()),
+                    tier: &record.decision.tier,
+                    state: record.lifecycle.as_ref().map(|life| life.state),
+                    harness: &execution.harness,
+                    requested_model: &execution.model,
+                    duration_ms: execution.duration_ms,
+                    process_exit_code: execution.exit_code,
+                    harness_observations: execution
+                        .observations
+                        .as_ref()
+                        .map(|o| o.routing_summary()),
+                })
+            }
+            None => None,
+        };
+        Self {
+            identity: Sha256::digest(record.decision.run_id.as_bytes()).into(),
+            kind,
+            encoded,
+            truncated: record
+                .task
+                .as_ref()
+                .is_some_and(|s| s.len() > MAX_TASK_BYTES),
+        }
+    }
+}
+
+/// Prepared history shared by cache-key construction, provider requests and
+/// diagnostics. Its two serialized windows are each capped at 64 KiB.
+#[derive(Clone, Debug)]
+pub struct RoutingHistory {
+    pub(super) context: HistoryContext,
+    pub(super) limit: usize,
+    counts: (usize, usize),
+}
+
+impl RoutingHistory {
+    /// Windows must be oldest-to-newest from a single storage snapshot. Preserve
+    /// legacy cross-window identity de-duplication without retaining large IDs.
+    pub fn from_windows(
+        known: Vec<RoutingCandidate>,
+        observed: Vec<RoutingCandidate>,
+        limit: usize,
+    ) -> Self {
+        let identities: std::collections::HashSet<_> = known.iter().map(|r| r.identity).collect();
+        Self::prepare(
+            known
+                .into_iter()
+                .chain(
+                    observed
+                        .into_iter()
+                        .filter(|r| !identities.contains(&r.identity)),
+                )
+                .collect(),
+            limit,
+        )
+    }
+
+    pub fn candidate_counts(&self) -> (usize, usize) {
+        self.counts
+    }
+
+    fn prepare(records: Vec<RoutingCandidate>, limit: usize) -> Self {
+        fn select<'a>(
+            candidates: impl Iterator<Item = &'a RoutingCandidate>,
+        ) -> (Vec<Value>, Usage) {
+            let mut records = Vec::new();
+            let mut usage = Usage {
+                serialized_bytes: 2,
+                ..Usage::default()
+            };
+            for candidate in candidates {
+                usage.candidates += 1;
+                let separator = usize::from(!records.is_empty());
+                let remaining = MAX_WINDOW_BYTES.saturating_sub(usage.serialized_bytes + separator);
+                let Some(bytes) = candidate.encoded.as_ref().filter(|b| b.len() <= remaining)
+                else {
+                    usage.omitted += 1;
+                    continue;
+                };
+                records.push(serde_json::from_slice(bytes).expect("encoded routing projection"));
+                usage.included += 1;
+                usage.serialized_bytes += bytes.len() + separator;
+                usage.truncated_tasks += usize::from(candidate.truncated);
+            }
+            records.reverse();
+            (records, usage)
+        }
+        let (outcomes, outcome_usage) = select(
+            records
+                .iter()
+                .rev()
+                .filter(|r| r.kind == Some(true))
+                .take(limit),
+        );
+        let (observations, observation_usage) = select(
+            records
+                .iter()
+                .rev()
+                .filter(|r| r.kind == Some(false))
+                .take(limit),
+        );
+        let counts = (outcome_usage.candidates, observation_usage.candidates);
+        Self {
+            limit,
+            counts,
+            context: HistoryContext {
+                outcomes,
+                observations,
+                budget: json!({ "max_bytes_per_kind": MAX_WINDOW_BYTES, "max_task_bytes": MAX_TASK_BYTES,
+                "known_outcomes": outcome_usage, "passive_observations": observation_usage }),
+            },
+        }
+    }
 }
 
 pub(super) fn project(history: &[RouteRecord], limit: usize) -> HistoryContext {
@@ -237,6 +393,71 @@ mod tests {
         assert_eq!(usage["candidates"], candidates);
         assert_eq!(usage["included"], rows.len());
         assert_eq!(usage["omitted"], candidates - rows.len());
+    }
+
+    #[test]
+    fn prepared_windows_match_original_requests_and_cache_keys() {
+        let mut records = Vec::new();
+        for i in 0..110 {
+            let task = format!("{i}:{}", "\0🦀".repeat(1000));
+            let mut known = record(&task, "fast", Outcome::Success);
+            let mut passive = observed(&task);
+            known.decision.run_id = format!("known-{i}");
+            passive.decision.run_id = format!("passive-{i}");
+            if i == 109 {
+                known.decision.tier = "x".repeat(MAX_WINDOW_BYTES);
+            }
+            records.extend([known, passive]);
+        }
+        for limit in [0, 1, 20, 100] {
+            let mut config = Config::default();
+            config.router.history_limit = limit;
+            let prepared = RoutingHistory::from_windows(
+                records
+                    .iter()
+                    .filter(|r| r.is_learning_evidence())
+                    .map(RoutingCandidate::new)
+                    .collect(),
+                records
+                    .iter()
+                    .filter(|r| !r.is_learning_evidence())
+                    .map(RoutingCandidate::new)
+                    .collect(),
+                limit,
+            );
+            let old = project(&records, limit);
+            assert_eq!(prepared.context.outcomes, old.outcomes);
+            assert_eq!(prepared.context.observations, old.observations);
+            assert_eq!(prepared.context.budget, old.budget);
+            assert_eq!(
+                route_cache_key("task", None, &config, &records).unwrap(),
+                super::super::route_cache_key_with_history("task", None, &config, &prepared)
+                    .unwrap()
+            );
+            config.router.history_limit = if limit == 0 { 1 } else { 0 };
+            assert!(
+                super::super::route_cache_key_with_history("task", None, &config, &prepared)
+                    .is_err()
+            );
+        }
+        let huge = record(&"x".repeat(1024 * 1024), "fast", Outcome::Success);
+        let candidate = RoutingCandidate::new(&huge);
+        assert!(candidate.encoded.unwrap().len() < 4096);
+        assert_eq!(huge.task.unwrap().len(), 1024 * 1024);
+    }
+
+    #[test]
+    fn prepared_windows_preserve_legacy_identity_deduplication() {
+        let mut known = record("known", "fast", Outcome::Success);
+        known.decision.run_id = "duplicate".into();
+        let mut passive = observed("passive");
+        passive.decision.run_id = "duplicate".into();
+        let prepared = RoutingHistory::from_windows(
+            vec![RoutingCandidate::new(&known)],
+            vec![RoutingCandidate::new(&passive)],
+            20,
+        );
+        assert_eq!(prepared.candidate_counts(), (1, 0));
     }
 
     #[test]
