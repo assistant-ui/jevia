@@ -90,7 +90,8 @@ try {
   Confirm-JeviaDestination $installedBinary
   # File APIs reject a directory destination instead of copying inside it.
   if ([IO.File]::Exists($installedBinary)) {
-    [IO.File]::Replace($temporaryDestination, $installedBinary, $null)
+    # PowerShell coerces $null to an empty string for this .NET parameter.
+    [IO.File]::Replace($temporaryDestination, $installedBinary, [NullString]::Value)
   } else {
     [IO.File]::Move($temporaryDestination, $installedBinary)
   }
