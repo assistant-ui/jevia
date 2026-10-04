@@ -175,7 +175,7 @@ existing authenticated harness CLIs and `TYPESAFE_API_KEY` in the environment:
 
 ```bash
 JEVIA_LIVE_TEST=1 node scripts/live-harness-smoke.mjs claude
-JEVIA_LIVE_TEST=1 JEVIA_LIVE_CODEX_MODEL=your-model node scripts/live-harness-smoke.mjs codex
+JEVIA_LIVE_TEST=1 JEVIA_LIVE_CODEX_PROFILE=/path/to/isolated-profile JEVIA_LIVE_CODEX_MODEL=your-model node scripts/live-harness-smoke.mjs codex
 JEVIA_LIVE_TEST=1 JEVIA_LIVE_OPENCODE_MODEL=provider/model node scripts/live-harness-smoke.mjs opencode
 ```
 
@@ -183,11 +183,21 @@ This makes potentially paid API calls, uses a disposable synthetic project,
 and prints the path to its actual `runs.jsonl`. It never injects synthetic
 events or bypasses hook trust. A successful process with zero native events
 **fails** the check. It requires both a tool event and turn completion, and
-leaves the project and recording available for inspection. All tiers use the
+leaves the project and recording available for inspection. It checks harness
+health and makes a second live classification to verify automatic history reuse
+without feedback or extra verification. All tiers use the
 same selected harness model to isolate capture behavior; this is not a model
 quality benchmark. The Claude call has a $0.50 budget; all have a 90-second
 harness deadline. The separate CI native-contract tests use loopback model
 responses and are not evidence of a successful live-provider run.
+
+For Codex, authenticate the isolated profile with your authorized credentials,
+run the smoke script with `--prepare`, then open `jevia harness review codex
+--launch` in the printed project with `CODEX_HOME` pointing to that profile. Use
+the same Jevia executable when reviewing and testing. Review the capture-event
+commands, approve only those you accept, exit, and rerun without `--prepare`.
+Do not use `--ignore-user-config` for this test: it also discards saved hook trust.
+Neither the smoke script nor Jevia bypasses trust or approves hooks automatically.
 
 OpenCode error tool parts produce `tool_failed` facts; repeated updates for the
 same part are counted once. The adapter retains at most 1,024 opaque failed-part

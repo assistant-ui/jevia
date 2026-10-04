@@ -14,7 +14,7 @@ const jevia = resolve(process.env.JEVIA_TEST_BINARY ?? "target/debug/jevia");
 const tools = process.env.JEVIA_NATIVE_BIN_DIR;
 const pins = { codex: "codex-cli 0.158.0-alpha.2", opencode: "1.18.33" };
 
-async function fixture(t, harness) {
+async function fixture(t, harness, trusted = false) {
   const cwd = await mkdtemp(join(tmpdir(), "jevia-native-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
   const home = join(cwd, "isolated-home");
@@ -47,11 +47,14 @@ async function fixture(t, harness) {
       res.end("data: [DONE]\n\n");
     } else if (req.url === "/v1/responses") {
       res.setHeader("content-type", "text/event-stream");
-      const item = { type: "message", id: "msg_fixture", status: "completed", role: "assistant", content: [{ type: "output_text", text: "fixture response", annotations: [] }] };
+      const first = trusted && requests.filter((r) => r.path === "/v1/responses").length === 1;
+      const item = first
+        ? { type: "function_call", id: "fc_fixture", call_id: "call_fixture", name: "exec_command", arguments: JSON.stringify({ cmd: "printf fixture-tool", max_output_tokens: 20 }), status: "completed" }
+        : { type: "message", id: "msg_fixture", status: "completed", role: "assistant", content: [{ type: "output_text", text: "fixture response", annotations: [] }] };
       const events = [
         { type: "response.created", response: { id: "resp_fixture", status: "in_progress", output: [] } },
         { type: "response.output_item.added", output_index: 0, item: { ...item, status: "in_progress", content: [] } },
-        { type: "response.output_text.delta", item_id: item.id, output_index: 0, content_index: 0, delta: "fixture response" },
+        ...(first ? [] : [{ type: "response.output_text.delta", item_id: item.id, output_index: 0, content_index: 0, delta: "fixture response" }]),
         { type: "response.output_item.done", output_index: 0, item },
         { type: "response.completed", response: { id: "resp_fixture", status: "completed", output: [item], usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 } } },
       ];
@@ -86,7 +89,7 @@ async function fixture(t, harness) {
   source += `\n[harnesses.${harness}]\ncommand = ${JSON.stringify(binary)}\nargs = ${JSON.stringify(args)}\n[harnesses.${harness}.models]\nfast = "${model}"\nbalanced = "${model}"\nstrong = "${model}"\n`;
   await writeFile(config, source);
   if (harness === "codex") {
-    await writeFile(join(agentHome, "config.toml"), `model_provider = "fixture"\nweb_search = "disabled"\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "${base}"\nwire_api = "responses"\nrequires_openai_auth = false\nrequest_max_retries = 0\nstream_max_retries = 0\n`);
+    await writeFile(join(agentHome, "config.toml"), `model = "fixture-model"\nmodel_provider = "fixture"\ncheck_for_update_on_startup = false\nweb_search = "disabled"\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "${base}"\nwire_api = "responses"\nrequires_openai_auth = false\nrequest_max_retries = 0\nstream_max_retries = 0\n`);
   } else {
     await mkdir(join(configHome, "opencode"), { recursive: true });
     await writeFile(join(configHome, "opencode", "opencode.json"), JSON.stringify({
@@ -94,16 +97,20 @@ async function fixture(t, harness) {
       provider: { fixture: { npm: "@ai-sdk/openai-compatible", name: "Loopback fixture", options: { baseURL: base, apiKey: "loopback-only" }, models: { "fixture-model": { name: "Fixture", limit: { context: 10000, output: 100 } } } } },
     }));
   }
+  if (trusted) {
+    await exec("python3", [resolve("tests/helpers/review-native-hooks.py"), jevia], { cwd, env, timeout: 50_000 });
+    assert.equal(requests.length, 0, "Trust review must not route or submit a model task");
+  }
   const task = "- Print the fixture-tool marker and reply with fixture response.";
   const extra = harness === "codex" ? ["--", "--skip-git-repo-check", "--sandbox", "read-only"] : [];
-  const result = await exec(jevia, ["run", harness, `--task=${task}`, "--non-interactive", "--timeout-seconds", "45", ...extra], { cwd, env, timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+  const result = await exec(jevia, ["run", harness, `--task=${task}`, "--non-interactive", "--timeout-seconds", "90", ...extra], { cwd, env, timeout: 105_000, maxBuffer: 2 * 1024 * 1024 });
   const records = JSON.parse((await exec(jevia, ["runs", "--json"], { cwd, env })).stdout);
   assert.equal(records[0].task, task);
   assert.ok(requests.some((r) => r.path !== "/v1/systemone" && JSON.stringify(r.input).includes(task)), "native provider receives the literal leading-dash task");
   return { cwd, requests, result, record: records[0] };
 }
 
-test("real OpenCode loads the injected plugin and records passive model facts", { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 90_000 }, async (t) => {
+test("real OpenCode loads the injected plugin and records passive model facts", { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 150_000 }, async (t) => {
   const { cwd, requests, result, record } = await fixture(t, "opencode");
   assert.match(result.stdout + result.stderr, /fixture response/);
   assert.ok(requests.some((r) => r.path === "/v1/chat/completions"));
@@ -121,7 +128,24 @@ test("real OpenCode loads the injected plugin and records passive model facts", 
   assert.ok(!(await readdir(join(cwd, ".jevia"))).some((name) => name.startsWith("jevia-events-")));
 });
 
-test("real Codex accepts injected hooks but preserves normal trust review", { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 90_000 }, async (t) => {
+test("real trusted hooks record a tool call and turn without inferring success", { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 180_000 }, async (t) => {
+  const { requests, record } = await fixture(t, "codex", true);
+  assert.equal(record.execution.exit_code, 0);
+  assert.equal(record.lifecycle.state, "completed");
+  assert.equal(record.outcome, "unknown");
+  assert.equal(record.execution.verification, undefined);
+  const observations = record.execution.observations;
+  assert.equal(observations.source, "codex_hooks");
+  assert.equal(observations.status, "recorded");
+  assert.ok(observations.events.some((e) => e.kind === "tool_completed" && e.tool_name === "Bash"));
+  assert.ok(observations.events.some((e) => e.kind === "turn_completed"));
+  assert.ok(requests.some((r) => r.path === "/v1/responses" && r.input.input?.some((item) =>
+    item.type === "function_call_output" && JSON.stringify(item.output).includes("fixture-tool"))),
+  "Real tool result reaches the next provider turn");
+  assert.ok(!JSON.stringify(observations).includes("fixture-tool"));
+});
+
+test("real Codex accepts injected hooks but preserves normal trust review", { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 150_000 }, async (t) => {
   const { requests, result, record } = await fixture(t, "codex");
   assert.ok(requests.some((r) => r.path === "/v1/responses"));
   assert.match(result.stdout + result.stderr, /fixture response/);
