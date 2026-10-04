@@ -32,6 +32,11 @@ fixture home, approving only the eight Jevia hooks. It then executes a real tool
 call and checks saved tool/turn events while the outcome remains `unknown`.
 The test never seeds trust hashes, edits trust state, or bypasses review. A changed
 UI or unexpected hook count fails closed. Python 3 and a Unix PTY are required.
+On Ubuntu 24.04, CI installs the distribution `bubblewrap` helper and its scoped
+AppArmor profile following the [native sandbox prerequisites](https://learn.chatgpt.com/docs/sandboxing).
+The test keeps the read-only sandbox and requires a zero-exit tool result with
+the marker at the next provider turn; an attempted tool event alone is not enough.
+It does not disable the system-wide user-namespace restriction.
 
 Contracts: [OpenCode providers](https://opencode.ai/docs/providers/),
 [OpenCode plugins](https://opencode.ai/docs/plugins/),

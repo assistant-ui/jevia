@@ -30,6 +30,14 @@ jobs:
       - run: cargo build --locked -p jevia
       - name: Install pinned native harnesses
         run: npm install --prefix "$RUNNER_TEMP/native-tools" --no-audit --no-fund --save-exact opencode-ai@1.18.33 @openai/codex@0.158.0-alpha.2
+      - name: Install native Linux sandbox prerequisites
+        # Ubuntu 24.04 restricts unprivileged user namespaces. Use the packaged
+        # helper and its scoped AppArmor profile, not a global sysctl bypass.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap apparmor-profiles apparmor-utils
+          sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
       - name: Exercise real harnesses against loopback providers
         env:
           JEVIA_NATIVE_BIN_DIR: ${{ runner.temp }}/native-tools/node_modules/.bin
