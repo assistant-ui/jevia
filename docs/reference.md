@@ -122,6 +122,16 @@ second for cleanup and never expose captured output. No user/project config is
 rewritten. Set `observations = "off"` to disable native capture; process recording
 stays on. Other harnesses, including Gemini, retain process facts only.
 
+Unreleased: transient probe exit/read/wait/deadline failures are retried once,
+only after the first process group/job is confirmed stopped. Each attempt keeps
+the deadline above and up to one second for cleanup (at most 12 seconds for
+Claude/Codex or 32 for OpenCode). Missing or inaccessible executables, oversized
+or non-UTF-8 output, unsupported versions, and unconfirmed cleanup do not retry.
+Diagnostics identify the failure category without printing subprocess output.
+There is no persistent support cache: replacing an executable triggers a fresh
+check on the next run. A failed probe still preserves process recording, reports
+native capture as unavailable, and never invents events or a success outcome.
+
 | Harness | Auto-detection contract | Capture and limits |
 | --- | --- | --- |
 | Claude Code | 2.x >= 2.1.212 | Silent exec-form hooks; preserves custom `--settings`, `--bare`, and `--safe-mode` by skipping injection. Managed settings may disable hooks. Version 2.1.212 was verified with a real file-read task and session/tool/turn events. |

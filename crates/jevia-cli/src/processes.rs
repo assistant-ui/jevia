@@ -9,7 +9,7 @@ use std::{
 };
 
 mod probe;
-pub use probe::version_output;
+pub use probe::{ProbeError, version_output};
 
 fn set_working_directory(command: &mut tokio::process::Command, root: &Path) {
     // Keep native launchers using PWD aligned with the actual child directory.
