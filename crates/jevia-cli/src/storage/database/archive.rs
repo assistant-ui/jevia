@@ -49,6 +49,7 @@ struct Scan {
 impl Scan {
     fn add(&mut self, row: &ArchiveRow, pending: &PendingRecordings) -> Result<bool> {
         let eligible = row.eligible()? && !pending.contains(&row.id);
+        snapshot_size(&row.raw)?;
         self.total += 1;
         self.eligible += usize::from(eligible);
         let encoded = serde_json::to_vec(row)?;
@@ -294,6 +295,7 @@ impl Snapshot {
     }
 
     fn record(&mut self, raw: &str) -> Result<()> {
+        snapshot_size(raw)?;
         // Valid JSON can't contain physical CR/LF inside strings. Removing only
         // that whitespace yields JSONL while preserving unknown/additive fields,
         // number representations and escaped string content from the stored JSON.
@@ -328,6 +330,16 @@ impl Snapshot {
             })?;
         Ok(path)
     }
+}
+
+fn snapshot_size(raw: &str) -> Result<()> {
+    let length: usize = raw.split(['\n', '\r']).map(str::len).sum();
+    if length >= crate::jsonl::MAX_LINE_BYTES {
+        bail!(
+            "SQL snapshot record exceeds the 8 MiB JSONL recovery limit (contents redacted); no deletion attempted"
+        );
+    }
+    Ok(())
 }
 
 fn sync_directory(path: &Path) -> Result<()> {

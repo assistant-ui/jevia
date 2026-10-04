@@ -70,6 +70,12 @@ jevia stats
 request. `jevia check` performs one live routing round trip without saving a
 synthetic run.
 
+New SQL records and updates use the same 8 MiB per-record limit (including the
+newline) as JSONL recovery files. Export and archive refuse oversized legacy
+records without publishing a partial snapshot or deleting history. Those records
+remain readable; use a database-native backup before repairing them, never
+truncate the source to force an archive.
+
 ## Run any harness
 
 Jevia returns a capability tier. Your adapter maps that tier to a concrete model

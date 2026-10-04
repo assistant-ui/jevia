@@ -378,11 +378,12 @@ impl Database {
 
     async fn insert(&self, tx: &mut Transaction<'_, Any>, record: &RouteRecord) -> Result<()> {
         validate_record(record)?;
+        let encoded = encode_record(record)?;
         let ordinal: i64 = db(sqlx::query_scalar("UPDATE jevia_projects SET next_seq = next_seq + 1 WHERE project = $1 RETURNING next_seq")
             .bind(&self.project).fetch_one(&mut **tx)).await?;
         db(sqlx::query("INSERT INTO jevia_runs (project, run_id, ordinal, learning, record) VALUES ($1, $2, $3, $4, $5)")
             .bind(&self.project).bind(&record.decision.run_id).bind(ordinal)
-            .bind(i64::from(record.is_learning_evidence())).bind(serde_json::to_string(record)?)
+            .bind(i64::from(record.is_learning_evidence())).bind(encoded)
             .execute(&mut **tx)).await?;
         Ok(())
     }
@@ -496,13 +497,14 @@ impl Database {
         }
         mutation(&mut record)?;
         record.schema_version = RECORD_SCHEMA_VERSION;
+        let encoded = encode_record(&record)?;
         let owner = match state {
             Some(next) if next.is_active() => self.owner.as_str(),
             Some(_) => "",
             None => owner.as_str(),
         };
         db(sqlx::query("UPDATE jevia_runs SET record = $3, learning = $4, owner = $5 WHERE project = $1 AND run_id = $2")
-            .bind(&self.project).bind(id).bind(serde_json::to_string(&record)?)
+            .bind(&self.project).bind(id).bind(encoded)
             .bind(i64::from(record.is_learning_evidence())).bind(owner).execute(&mut *tx)).await?;
         db(tx.commit()).await?;
         Ok(record)
@@ -605,6 +607,14 @@ impl Database {
         }
         Ok((imported, skipped))
     }
+}
+
+// All new SQL writes must remain portable through the JSONL recovery format.
+// Do not impose this on reads: legacy oversized rows must remain accessible.
+fn encode_record(record: &RouteRecord) -> Result<String> {
+    let mut bytes = crate::jsonl::encode(record)?;
+    bytes.pop(); // The encoder reserved the recovery file's trailing newline.
+    Ok(String::from_utf8(bytes).expect("JSON serialization is UTF-8"))
 }
 
 fn decode(raw: &str) -> Result<RouteRecord> {
