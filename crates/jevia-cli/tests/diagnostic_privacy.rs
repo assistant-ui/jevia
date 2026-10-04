@@ -54,6 +54,8 @@ fn configuration_errors_redact_parse_values_and_validation_payloads() {
         vec!["route", "test", "--json"],
         vec!["runs", "--json"],
         vec!["storage", "check"],
+        vec!["harness", "review", "codex"],
+        vec!["harness", "review", "codex", "--launch"],
     ] {
         let diagnostic = fails_privately(&dir, &args);
         assert!(diagnostic.contains("line "));
@@ -65,13 +67,26 @@ fn configuration_errors_redact_parse_values_and_validation_payloads() {
     );
     assert_ne!(original, invalid);
     fs::write(&path, &invalid).unwrap();
-    assert!(fails_privately(&dir, &["doctor"]).contains("fallback"));
+    for args in [
+        vec!["doctor"],
+        vec!["harness", "review", "codex"],
+        vec!["harness", "review", "codex", "--launch"],
+    ] {
+        assert!(fails_privately(&dir, &args).contains("fallback"));
+    }
     let invalid = format!(
         "{original}\n[harnesses.test]\ncommand = 'agent'\nargs = ['{{task}}', '{{model}}', '{PRIVATE}-{{unsupported}}']\n[harnesses.test.models]\nfast = 'a'\nbalanced = 'b'\nstrong = 'c'\n"
     );
     fs::write(&path, &invalid).unwrap();
-    assert!(fails_privately(&dir, &["doctor"]).contains("placeholder"));
+    for args in [
+        vec!["doctor"],
+        vec!["harness", "review", "codex"],
+        vec!["harness", "review", "codex", "--launch"],
+    ] {
+        assert!(fails_privately(&dir, &args).contains("placeholder"));
+    }
     assert_eq!(fs::read_to_string(&path).unwrap(), invalid);
+    assert!(!dir.path().join(".jevia/runs.jsonl").exists());
 }
 
 fn record() -> serde_json::Value {

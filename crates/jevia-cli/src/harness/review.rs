@@ -31,7 +31,7 @@ fn invocation(config: &Config, name: &str) -> Result<HarnessInvocation> {
 }
 
 pub async fn run(paths: &ProjectPaths, name: &str, launch: bool) -> Result<ExitCode> {
-    let config = Config::from_toml(&std::fs::read_to_string(&paths.config)?)?;
+    let config = crate::load_config(paths)?;
     let invocation = invocation(&config, name)?;
     println!(
         "Codex hook review: opens a local, read-only interactive session with Jevia's recording hooks."
