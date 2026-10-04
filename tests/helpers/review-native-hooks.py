@@ -3,6 +3,7 @@
 Only for the isolated, credential-free native-harness test fixture. No prompts
 are submitted to a model. Fail closed if the pinned UI or hook count changes.
 """
+import errno
 import fcntl
 import os
 import pathlib
@@ -48,7 +49,16 @@ try:
     while time.monotonic() < deadline and process.poll() is None:
         if not select.select([master], [], [], 0.1)[0]:
             continue
-        chunk = os.read(master, 65536)
+        try:
+            chunk = os.read(master, 65536)
+        except OSError as error:
+            # Linux reports a closed PTY slave as EIO, macOS as EOF. Neither is
+            # proof of success: stage, process status and saved trust follow.
+            if error.errno != errno.EIO:
+                raise
+            break
+        if not chunk:
+            break
         transcript = (transcript + chunk.decode("utf-8", errors="replace"))[-30000:]
         if b"\x1b[6n" in chunk:
             os.write(master, b"\x1b[1;1R")
@@ -75,7 +85,7 @@ try:
             key(b"\x03")
             stage = "done"
     assert stage == "done", f"Hook review did not finish at stage {stage}: {ansi.sub('', transcript)[-5000:]}"
-    assert process.poll() is not None, f"Review did not exit: {ansi.sub('', transcript)[-3000:]}"
+    process.wait(timeout=5)
     assert process.returncode == 0, f"Review process failed ({process.returncode}): {ansi.sub('', transcript)[-3000:]}"
     # Check that the native UI persisted all eight decisions. Never manufacture
     # hashes or patch its config/trust database to make the test pass.
