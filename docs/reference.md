@@ -592,11 +592,18 @@ range or an all-time total. `--limit` accepts 1–100,000. The report says when 
 records were excluded; archived records are not included. Stats aggregate each
 record without retaining the window's full task, feedback, and event payloads.
 SQL reads are project-scoped and paged in batches of at most 200 records within
-one consistent snapshot. JSONL counts nonblank lines, then scans and validates
+one consistent snapshot. Unreleased SQL stats decode and discard each row as it
+arrives instead of materializing a whole page; bounded driver prefetch still
+contributes to memory usage. JSONL counts nonblank lines, then scans and validates
 the full file under the same shared history lock and file handle, decoding each
-record once. Working memory depends on an input line/database page and the
+record once. Working memory depends on an input line/driver buffer and the
 aggregate groups, not the combined payload size of the requested window. Tier
 groups remain complete; reported model groups retain their existing 128 limit.
+
+Run `node scripts/benchmark-stats-memory.mjs BEFORE_BINARY AFTER_BINARY` on Linux
+or macOS for a synthetic, credential-free comparison. It measures peak RSS and
+checks identical stats for JSONL and SQLite with 200 records containing 512 KiB
+task strings. Results are local measurements, not a fixed memory guarantee.
 
 Totals and per-tier groups use the **selected tier recorded at routing time**,
 including tiers since removed from configuration. Tiers are not concrete model
