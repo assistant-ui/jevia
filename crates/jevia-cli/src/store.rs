@@ -152,45 +152,64 @@ fn read_records_from(
 }
 
 fn read_records_from_until(
-    mut reader: impl BufRead,
+    reader: impl BufRead,
     path: &Path,
     deadline: Option<std::time::Instant>,
     mut visit: impl FnMut(RouteRecord) -> Result<()>,
 ) -> Result<()> {
+    read_records_with_positions(reader, path, deadline, |record, _| visit(record))
+}
+
+#[derive(Clone, Copy)]
+struct RecordPosition {
+    offset: u64,
+    line: usize,
+}
+
+/// Positions refer to this open snapshot, never to a subsequently reopened path.
+fn read_records_with_positions(
+    mut reader: impl BufRead,
+    path: &Path,
+    deadline: Option<std::time::Instant>,
+    mut visit: impl FnMut(RouteRecord, RecordPosition) -> Result<()>,
+) -> Result<()> {
     let mut bytes = Vec::new();
-    let mut index = 0;
+    let mut position = RecordPosition { offset: 0, line: 1 };
     while read_line_until(&mut reader, &mut bytes, deadline)? {
-        index += 1;
-        let line = std::str::from_utf8(&bytes)
-            .with_context(|| format!("could not read history line {index} (contents redacted)"))?;
-        if line.trim().is_empty() {
-            continue;
-        }
-        let record: RouteRecord = serde_json::from_str(line)
-            .map_err(|error| crate::diagnostics::json_line("run record", index, &error))?;
+        let record = decode_record_line(&bytes, position.line, path)?;
         check_deadline(deadline)?;
-        if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
-            bail!(
-                "unsupported run record schema {} on line {} of {}",
-                record.schema_version,
-                index,
-                path.display()
-            );
+        if let Some(record) = record {
+            visit(record, position)?;
         }
-        record
-            .decision
-            .validate()
-            .map_err(anyhow::Error::msg)
-            .with_context(|| {
-                format!(
-                    "invalid routing decision on line {} (contents redacted)",
-                    index
-                )
-            })?;
-        visit(record)?;
         check_deadline(deadline)?;
+        position.offset += bytes.len() as u64;
+        position.line += 1;
     }
     Ok(())
+}
+
+fn decode_record_line(bytes: &[u8], index: usize, path: &Path) -> Result<Option<RouteRecord>> {
+    let line = std::str::from_utf8(bytes)
+        .with_context(|| format!("could not read history line {index} (contents redacted)"))?;
+    if line.trim().is_empty() {
+        return Ok(None);
+    }
+    let record: RouteRecord = serde_json::from_str(line)
+        .map_err(|error| crate::diagnostics::json_line("run record", index, &error))?;
+    if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
+        bail!(
+            "unsupported run record schema {} on line {} of {}",
+            record.schema_version,
+            index,
+            path.display()
+        );
+    }
+    record
+        .decision
+        .validate()
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("invalid routing decision on line {index} (contents redacted)"))?;
+    Ok(Some(record))
 }
 
 pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
