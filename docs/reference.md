@@ -805,10 +805,11 @@ executable directly, and mirrors its exit code. A non-zero harness exit skips
 verification. Without a verifier or explicit feedback, both zero and non-zero
 exits leave task outcome `unknown`, while retaining useful execution observations.
 
-Jevia runs the configured or detected verifier only after the harness succeeds
-and uses its exit status as the final outcome. A verifier that
-cannot start leaves the outcome unknown, preventing an environment problem
-from incorrectly training the router. Verification arguments support the same
+Jevia runs the configured or detected verifier only after the harness succeeds.
+A normal verifier exit of zero records success; a normal non-zero exit records
+failure. A verifier that cannot start, times out, or terminates by signal leaves
+the outcome unknown, preventing an inconclusive check from incorrectly training
+the router. Existing records are not rewritten. Verification arguments support the same
 placeholders and are also launched directly without shell interpretation.
 
 Completed harness runs record the requested model, harness name, duration,

@@ -830,10 +830,12 @@ async fn execute_observed_harness(
         duration_ms: verification_duration_ms,
         exit_code: verification_status.code(),
     });
-    let outcome = if verification_status.success() {
-        Outcome::Success
-    } else {
-        Outcome::Failure
+    // A signal is an inconclusive check, not a negative task-quality label.
+    // Keep this consistent with verification=unknown in the run listing.
+    let outcome = match verification_status.code() {
+        Some(0) => Outcome::Success,
+        Some(_) => Outcome::Failure,
+        None => Outcome::Unknown,
     };
     storage
         .state(

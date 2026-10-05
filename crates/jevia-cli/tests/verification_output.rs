@@ -115,13 +115,23 @@ fn postgres_verification_labels_require_a_real_exit_status() {
 }
 
 #[cfg(unix)]
-#[test]
-fn real_verifier_timeout_is_unknown_in_both_saved_record_and_listing() {
+fn real_verifier(
+    storage: StorageConfig,
+    script: &str,
+    expected_code: i32,
+    outcome: &str,
+    state: &str,
+    label: &str,
+    verification_code: Option<i32>,
+) {
     use jevia_core::{HarnessConfig, ObservationMode, VerificationConfig};
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     cli(root).arg("init").assert().success();
-    let mut config = Config::default();
+    let mut config = Config {
+        storage,
+        ..Config::default()
+    };
     config.harnesses.insert(
         "fixture".into(),
         HarnessConfig {
@@ -138,11 +148,14 @@ fn real_verifier_timeout_is_unknown_in_both_saved_record_and_listing() {
             auto_verify: false,
             verification: Some(VerificationConfig {
                 command: "/bin/sh".into(),
-                args: vec!["-c".into(), "sleep 5".into()],
+                args: vec!["-c".into(), script.into()],
             }),
         },
     );
     fs::write(root.join(".jevia/config.toml"), config.to_toml().unwrap()).unwrap();
+    if !config.storage.is_jsonl() {
+        cli(root).args(["storage", "init"]).assert().success();
+    }
     let key = jevia_core::route_cache_key("fixture task", Some("fixture"), &config, &[]).unwrap();
     fs::write(root.join(".jevia/cache.jsonl"), format!("{}\n", json!({
         "schema_version":1, "key":key, "created_at_ms":1, "expires_at_ms":u64::MAX,
@@ -160,13 +173,50 @@ fn real_verifier_timeout_is_unknown_in_both_saved_record_and_listing() {
         ])
         .timeout(std::time::Duration::from_secs(15))
         .assert()
-        .code(124);
-    let bytes = fs::read(root.join(".jevia/runs.jsonl")).unwrap();
-    let saved: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(saved["outcome"], "unknown");
-    assert_eq!(saved["lifecycle"]["state"], "timed_out");
+        .code(expected_code);
+    let records = cli(root)
+        .args(["runs", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let saved = &serde_json::from_slice::<Vec<Value>>(&records).unwrap()[0];
+    assert_eq!(saved["outcome"], outcome);
+    assert_eq!(saved["lifecycle"]["state"], state);
     assert_eq!(saved["execution"]["verification"]["launched"], true);
-    assert!(saved["execution"]["verification"]["exit_code"].is_null());
+    assert_eq!(
+        saved["execution"]["verification"]["exit_code"],
+        json!(verification_code)
+    );
+    let record: jevia_core::RouteRecord = serde_json::from_value(saved.clone()).unwrap();
+    assert_eq!(record.is_learning_evidence(), verification_code.is_some());
+    assert_eq!(
+        saved["outcome_evidence"]["source"],
+        if verification_code.is_some() {
+            json!("verification")
+        } else if state == "completed" {
+            json!("process_exit")
+        } else {
+            Value::Null
+        }
+    );
+    let stats = cli(root)
+        .args(["stats", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let stats: Value = serde_json::from_slice(&stats).unwrap();
+    assert_eq!(
+        stats["totals"]["unknown"],
+        usize::from(verification_code.is_none())
+    );
+    assert_eq!(
+        stats["totals"]["learning_evidence"],
+        usize::from(verification_code.is_some())
+    );
     let output = cli(root)
         .arg("runs")
         .assert()
@@ -177,7 +227,52 @@ fn real_verifier_timeout_is_unknown_in_both_saved_record_and_listing() {
     assert!(
         String::from_utf8(output)
             .unwrap()
-            .contains("verification=unknown")
+            .contains(&format!("verification={label}"))
     );
-    assert_eq!(fs::read(root.join(".jevia/runs.jsonl")).unwrap(), bytes);
+    assert_eq!(
+        cli(root)
+            .args(["runs", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+        records
+    );
+}
+
+#[cfg(unix)]
+fn real_verifier_contract(storage: StorageConfig) {
+    for (script, code, outcome, state, label, verifier_code) in [
+        ("exit 0", 0, "success", "completed", "pass", Some(0)),
+        ("exit 7", 7, "failure", "completed", "fail", Some(7)),
+        ("kill -TERM $$", 1, "unknown", "completed", "unknown", None),
+        ("kill -KILL $$", 1, "unknown", "completed", "unknown", None),
+        ("sleep 5", 124, "unknown", "timed_out", "unknown", None),
+    ] {
+        let mut storage = storage.clone();
+        if let StorageConfig::Postgres { project, .. } = &mut storage {
+            *project = format!("verification-result-{}", uuid::Uuid::new_v4());
+        }
+        real_verifier(storage, script, code, outcome, state, label, verifier_code);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn real_verifiers_keep_inconclusive_outcomes_unknown_in_jsonl_and_sqlite() {
+    real_verifier_contract(StorageConfig::Jsonl);
+    real_verifier_contract(StorageConfig::Sqlite {
+        url: "sqlite://.jevia/runs.db".into(),
+    });
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "requires JEVIA_TEST_POSTGRES_URL"]
+fn postgres_real_verifiers_keep_inconclusive_outcomes_unknown() {
+    real_verifier_contract(StorageConfig::Postgres {
+        url_env: "JEVIA_TEST_POSTGRES_URL".into(),
+        project: format!("verification-result-{}", uuid::Uuid::new_v4()),
+        allow_insecure_localhost: true,
+    });
 }
