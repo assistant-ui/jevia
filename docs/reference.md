@@ -409,14 +409,21 @@ records beyond `router.history_limit` are fetched to backfill omissions. Jev
 receives `history_budget` counts and instructions not to treat missing context
 as a failure. Both known outcomes and passive observations remain automatic.
 
-The CLI now projects each candidate as it reads storage, then reuses the bounded
-snapshot for routing, cache keys, and diagnostics. JSONL still validates the full
-stream under one lock; SQL streams rows from one consistent snapshot. Full task
+The CLI reuses one bounded projection snapshot for routing, cache keys, and
+diagnostics. JSONL still validates the full stream under one shared lock. Small
+histories are projected in one pass; after a count window fills, only byte offsets
+are retained for later candidates. Selected records are reread from the same open
+file under the same lock. Projection work is capped at twice `history_limit`
+per window, rather than scaling with all eligible records; validation remains
+linear in retained history size. SQL streams selected rows from one consistent snapshot. Full task
 text and feedback history are not retained in the routing windows. The existing
 Rust slice-based APIs remain available, alongside `RoutingCandidate`,
 `RoutingHistory`, `route_with_history`, and `route_cache_key_with_history` for
 streaming integrations. See `scripts/benchmark-routing-history.mjs` for a
 repeatable synthetic before/after memory check; it makes no live model calls.
+`scripts/benchmark-jsonl-projections.mjs` compares release binaries on small and
+large JSONL histories, alternates timed runs, and asserts identical provider
+request bytes. It uses only a synthetic loopback provider.
 
 This affects only outbound historical context, not saved history, the current
 task, or the prompt passed to a harness. It is not a cap on the entire request
@@ -426,7 +433,7 @@ with the updated CLI, and Rust client.
 
 In CLI 0.1.7, both windows come from one consistent history snapshot.
 Concurrent feedback cannot move an attempt between categories midway through
-the read. JSONL validates once under a shared lock and retains only the two
+the read. JSONL validates the full file under a shared lock and retains only the two
 bounded windows; SQL uses a read snapshot without holding a project write lock.
 
 A process exiting zero or nonzero leaves task `outcome` as `unknown`; its exit code
