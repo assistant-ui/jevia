@@ -4,7 +4,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$DefaultJeviaVersion = "0.1.8"
+$DefaultJeviaVersion = "0.1.9"
 $JeviaVersion = if ($env:JEVIA_VERSION) { $env:JEVIA_VERSION } else { $DefaultJeviaVersion }
 $JeviaRepository = "assistant-ui/jevia"
 $LocalAppData = [Environment]::GetFolderPath("LocalApplicationData")
