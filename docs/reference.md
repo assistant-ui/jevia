@@ -299,10 +299,15 @@ accounting, or proof of which model solved a task. `recorded` means some events
 arrived, not that all activity was captured. `unsupported`, `disabled`,
 `unavailable`, `no_events`, and `partial` expose other coverage states.
 
-Hook inputs are capped at 64 KiB. Only bounded identifiers, event kinds, and
-ingestion timestamps are retained. Prompts, assistant messages, tool arguments,
+Hook envelopes are capped at 8 MiB, including trailing whitespace. Large tool
+bodies no longer discard otherwise valid metadata merely for exceeding 64 KiB.
+The decoder borrows raw field spans instead of allocating JSON trees for tool
+content; only allowlisted identifiers of at most 256 ASCII bytes, event kinds, and
+ingestion timestamps are retained. The envelope buffer is transient and bounded.
+Prompts, assistant messages, tool arguments,
 tool output, transcript paths/files, and error bodies are not stored. Malformed or
-oversized inputs are discarded and counted; detected gaps mark capture partial.
+oversized envelopes (including duplicate metadata keys) are discarded and counted;
+detected gaps mark capture partial. Invalid optional identifiers are omitted.
 The raw event sample rolling over does not stop aggregation. Routing receives the
 whole-session counts and bounded model identifiers, with `summary_truncated` when
 the raw sample or model details were bounded. Journals are atomically replaced

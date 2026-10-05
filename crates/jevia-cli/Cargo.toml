@@ -22,7 +22,7 @@ process-wrap = { version = "10.0.1", features = ["tokio1"] }
 clap.workspace = true
 jevia-core = { version = "0.1.9", path = "../jevia-core" }
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
