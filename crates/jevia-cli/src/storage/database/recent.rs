@@ -15,17 +15,14 @@ impl Database {
         let has_older_records = cursor.is_some();
         let mut remaining = limit;
         while remaining > 0 {
-            let rows = self
-                .recent_page(&mut tx, cursor, remaining.min(PAGE_SIZE))
+            let (last, count) = self
+                .visit_recent_page(&mut tx, cursor, remaining.min(PAGE_SIZE), &mut visit)
                 .await?;
-            if rows.is_empty() {
+            if count == 0 {
                 break;
             }
-            for (ordinal, raw) in rows {
-                visit(&decode(&raw)?)?;
-                cursor = Some(ordinal);
-                remaining -= 1;
-            }
+            cursor = last;
+            remaining -= count;
         }
         db(tx.rollback()).await?;
         Ok(has_older_records)
@@ -47,19 +44,31 @@ impl Database {
             .transpose()
     }
 
-    async fn recent_page(
+    async fn visit_recent_page(
         &self,
         tx: &mut Transaction<'_, Any>,
         cursor: Option<i64>,
         limit: usize,
-    ) -> Result<Vec<(i64, String)>> {
+        visit: &mut impl FnMut(&RouteRecord) -> Result<()>,
+    ) -> Result<(Option<i64>, usize)> {
         let limit = i64::try_from(limit.min(PAGE_SIZE)).unwrap();
-        match cursor {
-            None => db(sqlx::query_as("SELECT ordinal, record FROM jevia_runs WHERE project = $1 ORDER BY ordinal ASC LIMIT $2")
-                .bind(&self.project).bind(limit).fetch_all(&mut **tx)).await,
-            Some(cursor) => db(sqlx::query_as("SELECT ordinal, record FROM jevia_runs WHERE project = $1 AND ordinal > $2 ORDER BY ordinal ASC LIMIT $3")
-                .bind(&self.project).bind(cursor).bind(limit).fetch_all(&mut **tx)).await,
+        let query = match cursor {
+            None => sqlx::query_as::<_, (i64, String)>("SELECT ordinal, record FROM jevia_runs WHERE project = $1 ORDER BY ordinal ASC LIMIT $2")
+                .bind(&self.project).bind(limit),
+            Some(cursor) => sqlx::query_as::<_, (i64, String)>("SELECT ordinal, record FROM jevia_runs WHERE project = $1 AND ordinal > $2 ORDER BY ordinal ASC LIMIT $3")
+                .bind(&self.project).bind(cursor).bind(limit),
+        };
+        // Keep keyset pages for bounded queries, but never retain an entire page
+        // of potentially large record strings. Driver prefetch remains bounded.
+        let mut rows = query.fetch(&mut **tx);
+        let mut last = None;
+        let mut count = 0;
+        while let Some((ordinal, raw)) = db(rows.try_next()).await? {
+            visit(&decode(&raw)?)?;
+            last = Some(ordinal);
+            count += 1;
         }
+        Ok((last, count))
     }
 }
 

@@ -175,19 +175,19 @@ async fn consistent_snapshot(postgres: bool) {
     writer.commit().await.unwrap();
     let mut seen = Vec::new();
     loop {
-        let page = f
+        let (last, count) = f
             .db()
-            .recent_page(&mut tx, cursor, PAGE_SIZE)
+            .visit_recent_page(&mut tx, cursor, PAGE_SIZE, &mut |record| {
+                seen.push(record.clone());
+                Ok(())
+            })
             .await
             .unwrap();
-        assert!(page.len() <= PAGE_SIZE);
-        if page.is_empty() {
+        assert!(count <= PAGE_SIZE);
+        if count == 0 {
             break;
         }
-        for (ordinal, raw) in page {
-            seen.push(decode(&raw).unwrap());
-            cursor = Some(ordinal);
-        }
+        cursor = last;
     }
     tx.rollback().await.unwrap();
     assert_eq!(
@@ -196,6 +196,64 @@ async fn consistent_snapshot(postgres: bool) {
     );
     assert_eq!(f.storage.get("stats-300").await.unwrap(), changed);
     assert!(f.storage.get("stats-203").await.is_err());
+}
+
+async fn large_records(postgres: bool) {
+    let f = Fixture::new(postgres).await;
+    // Cross a page boundary with wide records without retaining them in the
+    // visitor. A visitor failure mid-page must also release the stream/tx.
+    let task = "x".repeat(64 * 1024);
+    let mut tx = f.db().write().await.unwrap();
+    for index in 0..RECORDS {
+        let mut entry = record(index);
+        entry.task = Some(task.clone());
+        sqlx::query("UPDATE jevia_runs SET record = $2 WHERE project = $1 AND run_id = $3")
+            .bind(&f.db().project)
+            .bind(serde_json::to_string(&entry).unwrap())
+            .bind(&entry.decision.run_id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
+    tx.commit().await.unwrap();
+    let mut calls = 0;
+    assert!(
+        f.storage
+            .visit_recent(RECORDS, |_| {
+                calls += 1;
+                if calls == PAGE_SIZE + 1 {
+                    bail!("stop mid-stream")
+                }
+                Ok(())
+            })
+            .await
+            .is_err()
+    );
+    assert_eq!(calls, PAGE_SIZE + 1);
+    let mut index = 0;
+    assert!(
+        !f.storage
+            .visit_recent(RECORDS, |entry| {
+                assert_eq!(entry.decision.run_id, format!("stats-{index}"));
+                assert_eq!(entry.task.as_deref(), Some(task.as_str()));
+                index += 1;
+                Ok(())
+            })
+            .await
+            .unwrap()
+    );
+    assert_eq!(index, RECORDS);
+}
+
+#[tokio::test]
+async fn sqlite_recent_window_large_records() {
+    large_records(false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires JEVIA_TEST_POSTGRES_URL"]
+async fn postgres_recent_window_large_records() {
+    large_records(true).await;
 }
 
 #[tokio::test]
