@@ -1,6 +1,6 @@
 use super::*;
 
-/// Read/validate once, keeping independent bounded windows under one shared lock.
+/// Validate the full stream, keeping independent bounded windows under one shared lock.
 /// A feedback writer cannot move a run between categories during this snapshot.
 #[cfg(test)]
 pub fn routing_history(path: &Path, limit: usize) -> Result<(Vec<RouteRecord>, Vec<RouteRecord>)> {
@@ -19,9 +19,13 @@ pub fn routing_history_with<T>(
         return Ok((Vec::new(), Vec::new()));
     }
     let _lock = acquire_lock(path, LockMode::Shared)?;
+    let Some(file) = crate::regular_file::open_optional(path)? else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let mut reader = BufReader::new(file);
     let mut known = VecDeque::new();
     let mut observed = VecDeque::new();
-    read_records(path, |record| {
+    read_records_with_positions(&mut reader, path, None, |record, position| {
         let window = if record.is_learning_evidence() {
             &mut known
         } else if record.is_execution_observation() {
@@ -32,12 +36,52 @@ pub fn routing_history_with<T>(
         if limit != 0 {
             if window.len() == limit {
                 window.pop_front();
+                window.push_back(Candidate::Deferred(position));
+            } else {
+                // Small histories stay one-pass. Once a window fills, record
+                // offsets instead of repeatedly projecting soon-evicted rows.
+                window.push_back(Candidate::Ready(project(&record)));
             }
-            window.push_back(project(&record));
         }
         Ok(())
     })?;
-    Ok((known.into(), observed.into()))
+    // Same file handle and lock: no writer can move rows between windows or
+    // change offsets. Only selected deferred records are reread, not the file.
+    Ok((
+        finish_window(&mut reader, path, known, &project)?,
+        finish_window(&mut reader, path, observed, &project)?,
+    ))
+}
+
+enum Candidate<T> {
+    Ready(T),
+    Deferred(RecordPosition),
+}
+
+fn finish_window<T>(
+    reader: &mut BufReader<File>,
+    path: &Path,
+    candidates: VecDeque<Candidate<T>>,
+    project: &impl Fn(&RouteRecord) -> T,
+) -> Result<Vec<T>> {
+    let mut bytes = Vec::new();
+    candidates
+        .into_iter()
+        .map(|candidate| match candidate {
+            Candidate::Ready(value) => Ok(value),
+            Candidate::Deferred(position) => {
+                reader
+                    .seek(SeekFrom::Start(position.offset))
+                    .context("could not seek selected history record")?;
+                if !read_line_until(reader, &mut bytes, None)? {
+                    bail!("selected history record disappeared; no partial history returned");
+                }
+                let record = decode_record_line(&bytes, position.line, path)?
+                    .context("selected history record is empty; no partial history returned")?;
+                Ok(project(&record))
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -93,5 +137,89 @@ mod tests {
                 assert!(!format!("{error:#}").contains("private-invalid"));
             }
         }
+    }
+
+    #[test]
+    fn projection_work_is_bounded_without_retaining_full_history_payloads() {
+        use std::cell::Cell;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("runs.jsonl");
+        let mut records = Vec::new();
+        let mut raw = "\n\u{2003}\n".to_owned();
+        for id in 0..500 {
+            let mut row = record(id % 10);
+            row.decision.run_id = format!("run-{id}");
+            row.task = Some(format!("Unicode 🦀 {id}: {}", "x".repeat(4096)));
+            if id % 2 == 0 {
+                row.outcome = Outcome::Success;
+                row.outcome_evidence = Some(OutcomeEvidence {
+                    source: OutcomeSource::Manual,
+                    recorded_at_ms: 1,
+                });
+            }
+            raw.push_str(&serde_json::to_string(&row).unwrap());
+            if id != 499 {
+                raw.push_str("\r\n \t\n");
+            }
+            records.push(row);
+        }
+        fs::write(&path, &raw).unwrap(); // A valid unterminated final record.
+        for limit in [0, 1, 20, 300] {
+            let calls = Cell::new(0);
+            let (known, observed) = routing_history_with(&path, limit, |record| {
+                calls.set(calls.get() + 1);
+                (record.decision.run_id.clone(), record.task.clone())
+            })
+            .unwrap();
+            assert!(
+                calls.get() <= 4 * limit,
+                "projected {} records for limit {limit}",
+                calls.get()
+            );
+            if limit >= 250 {
+                assert_eq!(
+                    calls.get(),
+                    records.len(),
+                    "small histories need no second projection"
+                );
+            }
+            for (actual, learning) in [(known, true), (observed, false)] {
+                let eligible: Vec<_> = records
+                    .iter()
+                    .filter(|r| r.is_learning_evidence() == learning)
+                    .collect();
+                let expected: Vec<_> = eligible[eligible.len().saturating_sub(limit)..]
+                    .iter()
+                    .map(|r| (r.decision.run_id.clone(), r.task.clone()))
+                    .collect();
+                assert_eq!(actual, expected);
+            }
+        }
+        assert_eq!(fs::read_to_string(path).unwrap(), raw);
+    }
+
+    #[test]
+    fn deferred_projections_keep_the_snapshot_lock_and_release_it_on_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("runs.jsonl");
+        for id in 0..6 {
+            append(&path, &record(id)).unwrap();
+        }
+        routing_history_with(&path, 1, |_| {
+            let writer = private_lock_options()
+                .open(path.with_extension("lock"))
+                .unwrap();
+            assert!(matches!(
+                writer.try_lock(),
+                Err(std::fs::TryLockError::WouldBlock)
+            ));
+        })
+        .unwrap();
+        drop(acquire_lock(&path, LockMode::Exclusive).unwrap());
+        // A corrupt tail must fail the entire selection, then release ownership.
+        let original = fs::read_to_string(&path).unwrap();
+        fs::write(&path, format!("{original}{{PRIVATE invalid")).unwrap();
+        assert!(routing_history_with(&path, 1, |_| ()).is_err());
+        acquire_lock(&path, LockMode::Exclusive).unwrap();
     }
 }
