@@ -81,6 +81,36 @@ impl ObservationTotals {
         }
         Ok(())
     }
+
+    /// A recent sample must fit its actual attribution buckets, not merely the
+    /// global event counts. Models beyond the retained set share the omitted
+    /// bucket; never relabel them as a retained model or as unattributed.
+    fn validate_sample(&self, events: &[HarnessEvent]) -> Result<(), &'static str> {
+        let mut remaining = self.clone();
+        for event in events {
+            if event
+                .previous_model
+                .as_ref()
+                .is_some_and(|model| !self.models.contains_key(model) && !self.models_truncated)
+            {
+                return Err("sample model missing from observation totals");
+            }
+            let counts = match &event.model {
+                None => &mut remaining.unattributed_event_counts,
+                Some(model) => match remaining.models.get_mut(model) {
+                    Some(counts) => counts,
+                    None if self.models_truncated => &mut remaining.omitted_model_event_counts,
+                    None => return Err("sample model missing from observation totals"),
+                },
+            };
+            let count = counts
+                .get_mut(&event.kind)
+                .filter(|count| **count > 0)
+                .ok_or("sample exceeds attributed observation totals")?;
+            *count -= 1;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -241,15 +271,7 @@ impl TryFrom<WireObservations> for HarnessObservations {
             {
                 return Err("inconsistent observation sample");
             }
-            let mut sample = ObservationTotals::default();
-            for event in &wire.events {
-                sample.observe(event);
-            }
-            if sample.event_counts.iter().any(|(kind, count)| {
-                *count > totals.event_counts.get(kind).copied().unwrap_or_default()
-            }) {
-                return Err("sample exceeds observation totals");
-            }
+            totals.validate_sample(&wire.events)?;
         }
         Ok(Self {
             source: wire.source,
@@ -321,6 +343,55 @@ impl HarnessObservations {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sampled_attribution_must_fit_named_unattributed_and_omitted_buckets() {
+        let event = json!({"kind":"tool_failed", "recorded_at_ms":1, "model":"model-a"});
+        let base = json!({"source":"application", "status":"recorded", "events":[event],
+            "totals":{"event_counts":{"tool_failed":2}, "models":{"model-a":{"tool_failed":1}},
+                "unattributed_event_counts":{"tool_failed":1}, "omitted_model_event_counts":{},
+                "models_truncated":false, "discarded_inputs":0}});
+        let decode = |value: Value| serde_json::from_value::<HarnessObservations>(value);
+        assert!(decode(base.clone()).is_ok()); // Older unsampled events remain valid.
+        for model in [json!("model-b"), json!(null)] {
+            let mut bad = base.clone();
+            bad["totals"]["models"] = json!({"model-b":{"tool_failed":2}});
+            bad["totals"]["unattributed_event_counts"] = json!({});
+            if model.is_null() {
+                bad["events"][0].as_object_mut().unwrap().remove("model");
+            }
+            assert!(decode(bad).is_err());
+        }
+        let mut bad = base.clone();
+        bad["events"] = json!([event, event]); // Cannot borrow the unattributed count.
+        assert!(decode(bad).is_err());
+        let mut previous = base.clone();
+        previous["events"][0]["previous_model"] = json!("previous");
+        assert!(decode(previous.clone()).is_err());
+        previous["totals"]["models"]["previous"] = json!({});
+        assert!(decode(previous).is_ok());
+
+        let mut truncated = base;
+        truncated["totals"]["models_truncated"] = json!(true);
+        truncated["totals"]["unattributed_event_counts"] = json!({});
+        truncated["totals"]["omitted_model_event_counts"] = json!({"tool_failed":1});
+        truncated["events"] = json!([event, {"kind":"tool_failed", "recorded_at_ms":2, "model":"omitted", "previous_model":"also-omitted"}]);
+        assert!(decode(truncated.clone()).is_ok());
+        // Named buckets may not borrow omitted counts, and omitted models share
+        // one budget rather than each getting the entire omitted total.
+        for models in [["model-a", "model-a"], ["omitted", "other-omitted"]] {
+            let mut bad = truncated.clone();
+            for (index, model) in models.iter().enumerate() {
+                bad["events"][index]["model"] = json!(model);
+            }
+            let error = decode(bad).unwrap_err();
+            assert!(!error.to_string().contains("model-a"));
+        }
+        let mut wrong_kind = truncated;
+        wrong_kind["events"][0]["kind"] = json!("tool_succeeded");
+        assert!(decode(wrong_kind).is_err());
+    }
+
     #[test]
     fn whole_session_counts_survive_sampling_and_model_cardinality_limits() {
         let mut observations = HarnessObservations {

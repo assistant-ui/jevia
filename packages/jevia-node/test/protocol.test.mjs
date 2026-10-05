@@ -106,6 +106,47 @@ test("validates bounded passive observations without requiring verification or k
   ]) assert.equal(isRouteRecord(wrap(invalid)), false);
 });
 
+test("sampled attribution cannot borrow another model, unattributed, or omitted counts", () => {
+  const event = { kind: "tool_failed", recorded_at_ms: 1, model: "model-a" };
+  const base = { source: "application", status: "recorded", events: [event], totals: {
+    event_counts: { tool_failed: 2 }, models: { "model-a": { tool_failed: 1 } },
+    unattributed_event_counts: { tool_failed: 1 }, omitted_model_event_counts: {},
+    models_truncated: false, discarded_inputs: 0,
+  } };
+  const valid = (observations) => isRouteRecord({ ...record, execution: { ...execution, observations } });
+  assert.equal(valid(base), true);
+  for (const model of ["model-a", undefined]) {
+    const bad = structuredClone(base);
+    bad.events[0].model = model;
+    bad.totals.models = { "model-b": { tool_failed: 2 } };
+    bad.totals.unattributed_event_counts = {};
+    assert.equal(valid(bad), false);
+  }
+  assert.equal(valid({ ...base, events: [event, event] }), false);
+  const previous = structuredClone(base);
+  previous.events[0].previous_model = "previous";
+  assert.equal(valid(previous), false);
+  previous.totals.models.previous = {};
+  assert.equal(valid(previous), true);
+
+  const truncated = structuredClone(base);
+  truncated.totals.models_truncated = true;
+  truncated.totals.unattributed_event_counts = {};
+  truncated.totals.omitted_model_event_counts = { tool_failed: 1 };
+  truncated.events.push({ ...event, model: "omitted", previous_model: "also-omitted" });
+  const before = structuredClone(truncated);
+  assert.equal(valid(truncated), true);
+  assert.deepEqual(truncated, before);
+  for (const models of [["model-a", "model-a"], ["omitted", "other-omitted"]]) {
+    const bad = structuredClone(truncated);
+    bad.events.forEach((event, index) => { event.model = models[index]; });
+    assert.equal(valid(bad), false);
+  }
+  const wrongKind = structuredClone(truncated);
+  wrongKind.events[0].kind = "tool_succeeded";
+  assert.equal(valid(wrongKind), false);
+});
+
 test("accepts native adapter facts without assigning outcomes", () => {
   for (const source of ["codex_hooks", "opencode_plugin"]) {
     for (const kind of ["tool_completed", "turn_interrupted", "model_observed"]) {
