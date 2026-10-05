@@ -6,7 +6,7 @@ use serde_json::json;
 use std::{fs, os::unix::fs::PermissionsExt, time::Duration};
 
 #[test]
-fn leading_dash_task_reaches_the_harness_and_record_without_becoming_an_option() {
+fn literal_task_reaches_the_harness_and_record_without_becoming_an_option() {
     let dir = tempfile::tempdir().unwrap();
     let state = dir.path().join(".jevia");
     fs::create_dir(&state).unwrap();
@@ -32,7 +32,15 @@ fn leading_dash_task_reaches_the_harness_and_record_without_becoming_an_option()
         },
     );
     fs::write(state.join("config.toml"), config.to_toml().unwrap()).unwrap();
-    for task in ["--help", "- Fix the parser", "- first\n- second"] {
+    for task in [
+        "--help",
+        "- Fix the parser",
+        "- first\n- second",
+        "attach",
+        "serve",
+        "web",
+        "ordinary task",
+    ] {
         let key = jevia_core::route_cache_key(task, Some("agent"), &config, &[]).unwrap();
         let decision: RouteDecision = serde_json::from_value(json!({
             "run_id":"cached", "tier":"fast", "suggested_tier":"fast", "confidence":0.99,

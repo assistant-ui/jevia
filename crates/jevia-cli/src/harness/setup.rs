@@ -51,16 +51,14 @@ impl Preset {
     }
 }
 
-/// Escape leading-dash prompts only for the exact built-in native templates.
+/// Separate every prompt from native options for the exact built-in templates.
+/// Even a plain word like `attach` must not be mistaken for a capture conflict.
 /// Custom wrappers/templates keep their argv contract; never guess their parser.
 pub fn preserve_literal_task(
     harness: &HarnessConfig,
     invocation: &mut HarnessInvocation,
     task: &str,
 ) {
-    if !task.starts_with('-') {
-        return;
-    }
     let name = std::path::Path::new(&harness.command)
         .file_name()
         .and_then(|name| name.to_str());
@@ -71,6 +69,11 @@ pub fn preserve_literal_task(
     }) else {
         return;
     };
+    // Gemini already uses an explicit prompt option and has no native adapter.
+    // Only leading-dash values need its existing equals-form protection.
+    if *preset == Preset::Gemini && !task.starts_with('-') {
+        return;
+    }
     let task_index = harness.args.len() - 1;
     invocation.args.remove(task_index);
     if *preset == Preset::Gemini {

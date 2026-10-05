@@ -14,7 +14,7 @@ const jevia = resolve(process.env.JEVIA_TEST_BINARY ?? "target/debug/jevia");
 const tools = process.env.JEVIA_NATIVE_BIN_DIR;
 const pins = { codex: "codex-cli 0.158.0-alpha.2", opencode: "1.18.33" };
 
-async function fixture(t, harness, trusted = false, scenario = "complete") {
+async function fixture(t, harness, trusted = false, scenario = "complete", task = "- Print the fixture-tool marker and reply with fixture response.") {
   const cwd = await mkdtemp(join(tmpdir(), "jevia-native-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
   const home = join(cwd, "isolated-home");
@@ -159,7 +159,6 @@ async function fixture(t, harness, trusted = false, scenario = "complete") {
     await exec("python3", [resolve("tests/helpers/review-native-hooks.py"), jevia], { cwd, env, timeout: 50_000 });
     assert.equal(requests.length, 0, "Trust review must not route or submit a model task");
   }
-  const task = "- Print the fixture-tool marker and reply with fixture response.";
   const extra = harness === "codex" ? ["--", "--skip-git-repo-check", "--sandbox", "read-only"] : [];
   const pending = exec(jevia, ["run", harness, `--task=${task}`, "--non-interactive", "--timeout-seconds", "45", ...extra], { cwd, env, timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
   activeRun = pending.child;
@@ -171,7 +170,7 @@ async function fixture(t, harness, trusted = false, scenario = "complete") {
   assert.equal(records.length, 1, "One execution must produce exactly one saved run");
   t.diagnostic(`${harness} execution: ${records[0].execution.duration_ms} ms; capture=${records[0].execution.observations.status}; events=${records[0].execution.observations.events.length}`);
   assert.equal(records[0].task, task);
-  assert.ok(requests.some((r) => r.path !== "/v1/systemone" && JSON.stringify(r.input).includes(task)), "native provider receives the literal leading-dash task");
+  assert.ok(requests.some((r) => r.path !== "/v1/systemone" && JSON.stringify(r.input).includes(task)), "native provider receives the literal task");
   // Read the next real routing request, not just the saved file or explain text.
   // No feedback/verification call is made between execution and this decision.
   const followup = await exec(jevia, ["route", "Check the fixture marker again", "--no-cache", "--explain", "--json"], { cwd, env, timeout: 15_000 });
@@ -208,6 +207,16 @@ test("real OpenCode loads the injected plugin and records passive model facts", 
   assert.ok(!JSON.stringify(observations).includes("fixture response"));
   assert.ok(!(await readdir(join(cwd, ".jevia"))).some((name) => name.startsWith("jevia-events-")));
 });
+
+for (const task of ["attach", "serve", "web"]) {
+  test(`real OpenCode records the literal task ${task}`, { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 150_000 }, async (t) => {
+    const { record } = await fixture(t, "opencode", false, "complete", task);
+    assert.equal(record.execution.exit_code, 0);
+    assert.equal(record.outcome, "unknown");
+    assert.equal(record.execution.observations.status, "recorded");
+    assert.ok(record.execution.observations.events.some((e) => e.kind === "tool_completed"));
+  });
+}
 
 test("real trusted hooks record a tool call and turn without inferring success", { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 180_000 }, async (t) => {
   const { requests, record } = await fixture(t, "codex", true);
