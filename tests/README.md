@@ -20,8 +20,9 @@ node --test tests/native-harness.test.mjs
 Without that environment variable the tests explicitly skip; CI sets it and a
 missing/wrong binary fails. Child environments are allowlisted, homes/config/data
 directories are isolated, and model endpoints are local HTTP fixtures. No real
-provider credentials or paid generations are needed. The only generated tool
-call prints a fixed marker; no model-generated code is executed.
+provider credentials or paid generations are needed. Fixture tool calls print a
+fixed marker or launch a foreground child that returns a fixed response; no
+model-generated code is executed.
 
 The native contracts run on Linux and macOS. They need npm and registry access
 for **setup**: the OpenCode fixture installs the real, version-matched
@@ -72,6 +73,17 @@ CLI exit code in every harness.
 
 ### Coverage boundaries
 
+Resume tests launch a second real process against the first native session ID,
+select a different fixture model, and require fresh events with that same session
+ID. The original run stays unchanged; the next routing request must contain both
+attempts without inventing known outcomes or replaying the first tool event.
+The foreground OpenCode subagent test invokes the real `task` tool, requires a
+separate child session/model, and observes the child's result returning to the
+parent. It checks actual plugin events, not hand-authored recording payloads.
+Request-model metadata remains an observation, not proof of internal provider
+fallbacks or model quality. These cases use the same isolated configuration and
+ordinary Codex hook-review flow as the single-turn tests.
+
 | Workflow | Native contract coverage |
 | --- | --- |
 | Non-interactive tool/turn recording | OpenCode and reviewed Codex hooks |
@@ -79,7 +91,9 @@ CLI exit code in every harness.
 | Cancellation during provider work | OpenCode and reviewed Codex hooks |
 | Provider authentication rejection | OpenCode and reviewed Codex hooks |
 | Automatic history reuse | All of the above, inspected at the next request |
-| Interactive coding, resume, model switches, subagents | Not established by this suite; hook-review UI is not an interactive coding test |
+| Resume with a changed requested model | OpenCode and reviewed Codex hooks; distinct recordings for the same native session |
+| Foreground subagent session/model attribution | OpenCode `task` tool; parent receives the real child's fixture response |
+| Interactive coding, in-turn model fallbacks, Codex subagents, background subagents | Not established by this suite; hook-review UI is not an interactive coding test |
 | Python, Go, Rust, and mixed-language task correctness | Not established; the native fixture only prints a marker |
 | Live-provider quality, cost, accuracy, or Windows native support | Not established by these loopback tests |
 
