@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -32,6 +32,25 @@ test("the installed dependency graph removes the vulnerable glob chain", async (
   assert.doesNotMatch(lock, /^\s+(?:braces|micromatch|fast-glob)@/m);
   const farmRequire = createRequire(require.resolve("@farm.js/core"));
   assert.equal(typeof farmRequire("tinyglobby").glob, "function");
+});
+
+test("every emitted Farm glob call uses the replacement dependency", async () => {
+  const dist = new URL("../node_modules/@farm.js/core/dist/", import.meta.url);
+  let esmCalls = 0;
+  let cjsCalls = 0;
+  for (const file of await readdir(dist, { recursive: true })) {
+    if (!/\.(?:mjs|cjs)$/.test(file)) continue;
+    const source = await readFile(new URL(file, dist), "utf8");
+    assert.doesNotMatch(source, /import\(["']fast-glob["']\)/, file);
+    assert.doesNotMatch(source, /\bglob\.default\(/, file);
+    const calls = [...source.matchAll(/import\("tinyglobby"\)/g)].length;
+    if (file.endsWith(".mjs")) esmCalls += calls;
+    else cjsCalls += calls;
+  }
+  // Three source call sites, emitted once as ESM chunks and in five CJS bundles.
+  // Re-review this inventory whenever Farm changes its published bundle layout.
+  assert.equal(esmCalls, 3);
+  assert.equal(cjsCalls, 15);
 });
 
 test("Farm upgrades keep CLI/core and version-scoped security protections aligned", async () => {

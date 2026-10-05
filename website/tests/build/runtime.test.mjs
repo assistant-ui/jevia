@@ -195,7 +195,8 @@ test("unmatched routes return 404 instead of a runtime error", { timeout: 5000 }
 test("the packaged Sharp runtime includes working native image support", async () => {
   const runtimeRequire = createRequire(functionEntry);
   const sharp = runtimeRequire("sharp");
-  assert.equal(runtimeRequire("sharp/package.json").version, "0.35.4");
+  // Farm 0.1.0 packages Sharp without requiring its private package.json export.
+  assert.equal(sharp.versions.sharp, "0.35.5");
   const png = await sharp({
     create: { width: 2, height: 2, channels: 4, background: "#090909" },
   }).png().toBuffer();
