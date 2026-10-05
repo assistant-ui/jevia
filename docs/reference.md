@@ -284,6 +284,10 @@ sample fills. `totals.models` attributes event counts only to models explicitly
 reported on those events; missing models stay in `unattributed_event_counts`.
 At most 32 model identifiers are retained. Further models contribute to
 `omitted_model_event_counts` and set `models_truncated`, without unbounded growth.
+When totals are present, each sampled event must fit its named-model,
+unattributed, or omitted-model counter. Contradictory attribution is rejected by
+history reads/imports and the Node SDK; it is never silently reassigned or repaired.
+Legacy observations without totals remain readable.
 Model switches are observations, not failures. Counts are observed activity, not
 task scores; partial capture/legacy truncated journals provide lower bounds.
 Supported events include session/turn boundaries, tool

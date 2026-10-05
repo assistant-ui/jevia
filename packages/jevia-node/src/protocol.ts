@@ -62,14 +62,27 @@ const isTotals: Guard = (value) => {
 const matchesTotals = (value: Record<string, unknown>): boolean => {
   if (value.totals === undefined) return true;
   if (!isTotals(value.totals)) return false;
-  const totals = value.totals as { event_counts: Record<string, number>; discarded_inputs: number };
-  const events = value.events as { kind: string }[];
+  const totals = value.totals as {
+    event_counts: Record<string, number>; discarded_inputs: number;
+    models: Record<string, Record<string, number>>; models_truncated: boolean;
+    unattributed_event_counts: Record<string, number>; omitted_model_event_counts: Record<string, number>;
+  };
+  const events = value.events as { kind: string; model?: string; previous_model?: string }[];
   const count = Object.values(totals.event_counts).reduce((a, b) => a + b, 0);
-  const sample: Record<string, number> = {};
-  for (const event of events) sample[event.kind] = (sample[event.kind] ?? 0) + 1;
+  // Mirror Rust's attribution buckets without mutating the returned CLI record.
+  const models = new Map(Object.entries(totals.models).map(([model, counts]) => [model, { ...counts }]));
+  const unattributed = { ...totals.unattributed_event_counts };
+  const omitted = { ...totals.omitted_model_event_counts };
   return count >= events.length && (count === 0 || events.length > 0) &&
     (totals.discarded_inputs === 0 || value.status === "partial") &&
-    Object.entries(sample).every(([kind, n]) => n <= (totals.event_counts[kind] ?? 0));
+    events.every((event) => {
+      if (event.previous_model !== undefined && !models.has(event.previous_model) && !totals.models_truncated) return false;
+      const bucket = event.model === undefined ? unattributed
+        : models.get(event.model) ?? (totals.models_truncated ? omitted : undefined);
+      if (!bucket || !(bucket[event.kind]! > 0)) return false;
+      bucket[event.kind]! -= 1;
+      return true;
+    });
 };
 const isObservations: Guard = (value) => isObject(value) && nullable(oneOf("claude_hooks", "codex_hooks", "opencode_plugin", "application"))(value.source) &&
   oneOf("unsupported", "disabled", "unavailable", "no_events", "recorded", "partial")(value.status) &&
