@@ -1,5 +1,24 @@
 # Jevia reference
 
+## CLI 0.1.9: routing context and native reliability
+
+CLI 0.1.9 includes the selected harness's tier/model candidates in routing,
+caps each outgoing history window at 64 KiB, and streams history projections
+and SQL stats rows to reduce memory use. It fixes literal native task arguments,
+transient version probes, and inconclusive verifier outcomes, and preserves
+pending recordings during maintenance. Exported SQL snapshots remain restorable
+within the existing 8 MiB record limit.
+
+Native contract tests use actual pinned Codex/OpenCode executables with local
+responses: reviewed hooks, cancellation, provider rejection, resume with a changed
+model, and OpenCode foreground subagents. They do not establish live-provider
+task-solving accuracy or every interactive/background workflow.
+
+Record schema 6, SQL schema 1, configuration, and automatic history reuse are
+unchanged; feedback and extra verification remain optional. Node SDK 0.1.3 stays
+compatible without a new npm release. Rust core users should review the new
+`JevError::UnknownHarness` variant when matching errors exhaustively.
+
 ## CLI 0.1.8: native capture and storage safety
 
 CLI 0.1.8 fixes live Claude capture, adds preview-first Codex hook review and
@@ -122,7 +141,7 @@ second for cleanup and never expose captured output. No user/project config is
 rewritten. Set `observations = "off"` to disable native capture; process recording
 stays on. Other harnesses, including Gemini, retain process facts only.
 
-Unreleased: transient probe exit/read/wait/deadline failures are retried once,
+CLI 0.1.9: transient probe exit/read/wait/deadline failures are retried once,
 only after the first process group/job is confirmed stopped. Each attempt keeps
 the deadline above and up to one second for cleanup (at most 12 seconds for
 Claude/Codex or 32 for OpenCode). Missing or inaccessible executables, oversized
@@ -218,7 +237,7 @@ the configured project directory for probes, interactive, and supervised runs.
 
 #### Before a demo
 
-Install CLI 0.1.8 with `cargo install jevia --version 0.1.8 --locked` and confirm
+Install CLI 0.1.9 with `cargo install jevia --version 0.1.9 --locked` and confirm
 `jevia --version`. Alternatively, build this source with
 `cargo build --release -p jevia`. The smoke script defaults to
 `target/release/jevia`; set `JEVIA_TEST_BINARY` to the absolute installed binary
@@ -381,7 +400,7 @@ exit, and lifecycle state). Each uses `router.history_limit`; pending and active
 runs do not crowd out either window. Observations that change the supplied context
 invalidate stale routing cache entries. Stored task text follows the existing privacy setting.
 
-Unreleased: routing also limits each history window to **64 KiB of serialized
+CLI 0.1.9: routing also limits each history window to **64 KiB of serialized
 JSON** (128 KiB combined, including array punctuation). Historical task text is a
 UTF-8-safe prefix of at most **2,048 bytes**, explicitly marked `task_truncated`
 when shortened. Within each count window, newer records get priority; a record
@@ -490,7 +509,7 @@ PostgreSQL storage checks do connect to the configured database.
 To install the exact crates.io release with Rust 1.92 or newer:
 
 ```bash
-cargo install jevia --version 0.1.8 --locked
+cargo install jevia --version 0.1.9 --locked
 ```
 
 To try unreleased development changes instead:
@@ -592,7 +611,7 @@ range or an all-time total. `--limit` accepts 1–100,000. The report says when 
 records were excluded; archived records are not included. Stats aggregate each
 record without retaining the window's full task, feedback, and event payloads.
 SQL reads are project-scoped and paged in batches of at most 200 records within
-one consistent snapshot. Unreleased SQL stats decode and discard each row as it
+one consistent snapshot. CLI 0.1.9 SQL stats decode and discard each row as it
 arrives instead of materializing a whole page; bounded driver prefetch still
 contributes to memory usage. JSONL counts nonblank lines, then scans and validates
 the full file under the same shared history lock and file handle, decoding each
@@ -1034,7 +1053,7 @@ or recording completion, and the phase deadline and cancellation remain active.
 The main command's exit code is preserved; background commands must report their
 own failures to the main command (or the verifier) if they should affect the outcome.
 
-Unreleased: live recording checkpoints carry a one-second work budget into JSONL
+CLI 0.1.9: live recording checkpoints carry a one-second work budget into JSONL
 workers, including queued workers whose async waiter was cancelled. Slow scans or
 rewrites stop between chunks/records without publishing partial history; the
 journal remains the retry source. This prevents an abandoned background rewrite
@@ -1114,7 +1133,7 @@ decision explanation or create a synthetic run.
 
 ## Routing cache
 
-Unreleased: `jevia run <harness>` supplies Jev with `current_harness.name` and
+CLI 0.1.9: `jevia run <harness>` supplies Jev with `current_harness.name` and
 `current_harness.tier_models`, containing only that harness's configured models for
 the declared tiers. This lets routing distinguish the current candidate models from
 historical models with the same tier labels. Commands, arguments, verifier settings,
@@ -1189,7 +1208,7 @@ leave one byte for that newline). Oversized lines fail with a
 redacted error and are never truncated or skipped. JSONL appends and rewrites
 also reject oversized output before publication. Existing oversized history
 must be inspected and reduced explicitly; this does not bound the total memory
-of arbitrary SQL rows. Unreleased JSONL repair/archive streams payloads but still
+of arbitrary SQL rows. CLI 0.1.9 JSONL repair/archive streams payloads but still
 keeps a set of unique run IDs for duplicate detection.
 
 The guided CLI path avoids editing TOML by hand (run `jevia init` first):
@@ -1549,7 +1568,7 @@ including space for a final newline. Invalid complete records are refused even
 when a later tail is repairable. Preview and apply leave the original bytes
 untouched and create no backup/archive on validation failure.
 
-Unreleased: JSONL maintenance streams one bounded physical line at a time.
+CLI 0.1.9: JSONL maintenance streams one bounded physical line at a time.
 Preview retains only run IDs and counts, not full records or output buffers.
 Apply makes a second validated pass under the same exclusive history lock,
 streaming exact bytes to private recovery files and a temporary replacement.
@@ -1563,7 +1582,7 @@ routed/pending, or legacy-unknown record. SQL also retains any record with an
 execution owner, even if its recorded lifecycle appears terminal. This command
 does not recover runs, stop processes, or infer that old work has finished.
 
-Unreleased: all backends also retain any run with a local pending recording journal
+CLI 0.1.9: all backends also retain any run with a local pending recording journal
 or loss marker in the invoking project's `.jevia/`, even if that run is terminal.
 These protected rows do not consume the `--keep` allowance. Preview does not replay
 or read recording contents; apply inventories recording names under the history/
