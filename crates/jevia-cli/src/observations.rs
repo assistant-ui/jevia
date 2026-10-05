@@ -3,6 +3,7 @@ mod adapters;
 mod cursor;
 #[cfg(test)]
 mod fairness;
+mod input;
 mod loss;
 use crate::{paths::ProjectPaths, storage::Storage};
 use anyhow::{Context, Result, bail};
@@ -21,7 +22,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-const INPUT_LIMIT: u64 = 64 * 1024;
+const INPUT_LIMIT: u64 = 8 * 1024 * 1024;
 const JOURNAL_LIMIT: u64 = 512 * 1024;
 pub const JOURNAL_ENV: &str = "JEVIA_OBSERVATION_JOURNAL";
 const HOOKS: &[&str] = &[
@@ -664,12 +665,7 @@ fn receive_inner(path: &Path, input: impl Read) -> Result<()> {
 }
 
 fn receive_for_source(path: &Path, source: ObservationSource, input: impl Read) -> Result<()> {
-    let mut bytes = Vec::new();
-    input.take(INPUT_LIMIT + 1).read_to_end(&mut bytes)?;
-    let event = (bytes.len() as u64 <= INPUT_LIMIT)
-        .then(|| serde_json::from_slice::<Value>(&bytes).ok())
-        .flatten()
-        .and_then(|input| normalize(source, &input));
+    let event = input::metadata(input).and_then(|input| normalize(source, &input));
     let _guard = journal_guard(path)?;
     let mut current = read_journal(&mut open_journal(path)?)?;
     if current.source != Some(source) {
