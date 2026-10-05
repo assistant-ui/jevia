@@ -51,13 +51,18 @@ fn literal_tasks_are_protected_in_native_presets_without_rewriting_custom_templa
             "- Fix the parser",
             "- first\n- second",
             "ordinary task",
+            "attach",
+            "serve",
+            "web",
+            "daemon",
+            "app-server",
         ] {
             let mut invocation = harness
                 .invocation("agent", "fast", task, "run", &["--verbose".into()])
                 .unwrap();
             let original = invocation.args.clone();
             preserve_literal_task(&harness, &mut invocation, task);
-            if !task.starts_with('-') {
+            if *preset == Preset::Gemini && !task.starts_with('-') {
                 assert_eq!(invocation.args, original);
             } else if *preset == Preset::Gemini {
                 assert_eq!(
@@ -73,6 +78,13 @@ fn literal_tasks_are_protected_in_native_presets_without_rewriting_custom_templa
                 assert_eq!(
                     &invocation.args[invocation.args.len() - 3..],
                     ["--verbose", "--", task]
+                );
+                let source =
+                    crate::observations::configured_source(Default::default(), &harness.command)
+                        .unwrap();
+                assert_eq!(
+                    crate::observations::capture_conflicts(source, &invocation.args),
+                    *preset == Preset::Codex && cfg!(windows)
                 );
             }
         }

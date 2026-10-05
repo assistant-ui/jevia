@@ -790,8 +790,10 @@ jevia run claude --task="- Fix the parser" --non-interactive -- --verbose
 ```
 
 Supply either a positional task or `--task=...`, not both. Jevia's `--` still
-introduces extra harness arguments. For exact built-in native presets, leading-dash
-tasks are placed after the harness's option delimiter (Gemini uses `--prompt=...`),
+introduces extra harness arguments. For exact built-in Claude, Codex, and OpenCode
+presets, all tasks are placed after the harness's option delimiter, so even words
+such as `attach`, `serve`, or `web` cannot be mistaken for capture options.
+Gemini uses `--prompt=...` for leading-dash tasks,
 with extra options before the task. Custom wrappers/templates are not rewritten;
 configure their own literal-argument convention. A standalone `-` can still mean
 stdin to a native harness; use descriptive task text instead.
