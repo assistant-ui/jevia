@@ -53,11 +53,14 @@ async function fixture(t, harness, trusted = false, scenario = "complete", task 
       res.setHeader("content-type", "text/event-stream");
       const first = input.tools?.some((tool) => tool.function?.name === "bash") &&
         requests.filter((r) => r.path === "/v1/chat/completions" && r.input.tools?.length).length === 1;
+      const tool = scenario === "subagent"
+        ? { name: "task", arguments: JSON.stringify({ description: "Return a fixed marker", prompt: "Reply with fixture child response.", subagent_type: "fixture-child" }) }
+        : { name: "bash", arguments: JSON.stringify({ command: "printf fixture-tool", description: "Print a fixed integration-test marker" }) };
       const chunks = first
-        ? [[{ role: "assistant", tool_calls: [{ index: 0, id: "call_fixture", type: "function", function: { name: "bash", arguments: JSON.stringify({ command: "printf fixture-tool", description: "Print a fixed integration-test marker" }) } }] }, null], [{}, "tool_calls"]]
-        : [[{ role: "assistant", content: "fixture response" }, null], [{}, "stop"]];
+        ? [[{ role: "assistant", tool_calls: [{ index: 0, id: "call_fixture", type: "function", function: tool }] }, null], [{}, "tool_calls"]]
+        : [[{ role: "assistant", content: input.model === "fixture-child" ? "fixture child response" : "fixture response" }, null], [{}, "stop"]];
       for (const [delta, finish_reason] of chunks) {
-        res.write(`data: ${JSON.stringify({ id: "chat_fixture", object: "chat.completion.chunk", created: 1, model: "fixture-model", choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
+        res.write(`data: ${JSON.stringify({ id: "chat_fixture", object: "chat.completion.chunk", created: 1, model: input.model, choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
       }
       res.end("data: [DONE]\n\n");
     } else if (req.url === "/v1/responses") {
@@ -114,12 +117,16 @@ async function fixture(t, harness, trusted = false, scenario = "complete", task 
     // Keep unrelated marketplace initialization out of this loopback test.
     // Disable plugins only in this disposable contract-test profile;
     // inline Jevia hooks still require the ordinary native trust review below.
-    await writeFile(join(agentHome, "config.toml"), `model = "fixture-model"\nmodel_provider = "fixture"\nfeatures.plugins = false\ncheck_for_update_on_startup = false\nweb_search = "disabled"\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "${base}"\nwire_api = "responses"\nrequires_openai_auth = false\nrequest_max_retries = 0\nstream_max_retries = 0\n`);
+    await writeFile(join(agentHome, "config.toml"), `model = "fixture-model"\nmodel_provider = "fixture"\nsandbox_mode = "read-only"\nfeatures.plugins = false\ncheck_for_update_on_startup = false\nweb_search = "disabled"\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "${base}"\nwire_api = "responses"\nrequires_openai_auth = false\nrequest_max_retries = 0\nstream_max_retries = 0\n`);
   } else {
     await mkdir(join(configHome, "opencode"), { recursive: true });
     await writeFile(join(configHome, "opencode", "opencode.json"), JSON.stringify({
       enabled_providers: ["fixture"], autoupdate: false, snapshot: false,
-      provider: { fixture: { npm: "@ai-sdk/openai-compatible", name: "Loopback fixture", options: { baseURL: base, apiKey: "loopback-only" }, models: { "fixture-model": { name: "Fixture", limit: { context: 10000, output: 100 } } } } },
+      provider: { fixture: { npm: "@ai-sdk/openai-compatible", name: "Loopback fixture", options: { baseURL: base, apiKey: "loopback-only" }, models: Object.fromEntries(["fixture-model", "fixture-next", "fixture-child"].map((id) => [id, { name: id, limit: { context: 10000, output: 100 } }])) } },
+      ...(scenario === "subagent" ? {
+        agent: { "fixture-child": { mode: "subagent", description: "Return a fixed integration marker", model: "fixture/fixture-child", permission: { "*": "deny" } } },
+        permission: { task: { "*": "deny", "fixture-child": "allow" } },
+      } : {}),
     }));
     // OpenCode installs this SDK even with default plugins disabled. Resolve it
     // before the measured harness launch, not inside its recording deadline.
@@ -160,10 +167,11 @@ async function fixture(t, harness, trusted = false, scenario = "complete", task 
     assert.equal(requests.length, 0, "Trust review must not route or submit a model task");
   }
   const extra = harness === "codex" ? ["--", "--skip-git-repo-check", "--sandbox", "read-only"] : [];
-  const pending = exec(jevia, ["run", harness, `--task=${task}`, "--non-interactive", "--timeout-seconds", "45", ...extra], { cwd, env, timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+  const run = (task, extra) => exec(jevia, ["run", harness, `--task=${task}`, "--non-interactive", "--timeout-seconds", "45", ...extra], { cwd, env, timeout: 60_000, maxBuffer: 2 * 1024 * 1024 });
+  const pending = run(task, extra);
   activeRun = pending.child;
   const result = await pending.catch((error) => {
-    if (scenario === "complete" || error.signal || typeof error.code !== "number") throw error;
+    if (!["cancel", "provider_error"].includes(scenario) || error.signal || typeof error.code !== "number") throw error;
     return { stdout: error.stdout, stderr: error.stderr, code: error.code };
   });
   const records = JSON.parse((await exec(jevia, ["runs", "--json"], { cwd, env })).stdout);
@@ -187,8 +195,82 @@ async function fixture(t, harness, trusted = false, scenario = "complete", task 
   assert.equal(history.harness_observations.source, records[0].execution.observations.source);
   assert.equal(history.harness_observations.status, records[0].execution.observations.status);
   assert.equal(history.harness_observations.sampled_events, records[0].execution.observations.events.length);
-  return { cwd, requests, result, record: records[0] };
+  return { cwd, env, config, model, run, requests, result, record: records[0] };
 }
+
+for (const harness of ["opencode", "codex"]) {
+  test(`real ${harness} resumes a session with a different model and fresh recording`, { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 180_000 }, async (t) => {
+    const f = await fixture(t, harness, harness === "codex");
+    const session = f.record.execution.observations.events.find((event) => event.session_id)?.session_id;
+    assert.ok(session, "The first launch must report a native session ID");
+    const nextModel = harness === "codex" ? "fixture-next" : "fixture/fixture-next";
+    let source = (await readFile(f.config, "utf8")).replaceAll(f.model, nextModel);
+    if (harness === "codex") {
+      // Resume is a custom argv template. Supply its literal-task delimiter
+      // explicitly; keep the same reviewed hooks and read-only profile.
+      source = source.replace('args = ["exec","--model","{model}","{task}"]',
+        `args = ${JSON.stringify(["exec", "resume", "--skip-git-repo-check", "--model", "{model}", session, "--", "{task}"])}`);
+    }
+    await writeFile(f.config, source);
+    const task = "Continue the existing session with the new fixture model.";
+    const offset = f.requests.length;
+    const result = await f.run(task, harness === "opencode" ? ["--", "--session", session] : []);
+    assert.match(result.stdout + result.stderr, /fixture response/);
+    const runs = JSON.parse((await exec(jevia, ["runs", "--json"], { cwd: f.cwd, env: f.env })).stdout).filter((run) => run.execution);
+    assert.equal(runs.length, 2);
+    const resumed = runs.find((run) => run.run_id !== f.record.run_id);
+    assert.equal(resumed.task, task);
+    assert.equal(resumed.execution.model, nextModel);
+    assert.equal(resumed.execution.exit_code, 0);
+    assert.equal(resumed.execution.verification, undefined);
+    assert.equal(resumed.outcome, "unknown");
+    assert.equal(resumed.lifecycle.state, "completed");
+    const events = resumed.execution.observations.events;
+    assert.equal(resumed.execution.observations.status, "recorded");
+    assert.ok(events.some((event) => event.session_id === session && event.kind === "turn_completed"));
+    assert.ok(events.every((event) => !event.session_id || event.session_id === session), "Resume must not silently start another session");
+    assert.ok(events.some((event) => event.model === nextModel), "Native events must identify the new model");
+    assert.ok(!events.some((event) => event.kind === "tool_completed"), "The resumed response must not replay the first turn's tool event");
+    assert.ok(f.requests.slice(offset).some((request) => request.input.model === "fixture-next" && JSON.stringify(request.input).includes(task)), "The new model receives the resumed task");
+    const followup = await exec(jevia, ["route", "Inspect both fixture turns", "--no-cache", "--json", "--explain"], { cwd: f.cwd, env: f.env });
+    assert.match(followup.stderr, /known_outcomes=0 passive_observations=2/);
+    const history = f.requests.filter((request) => request.path === "/v1/systemone").at(-1).input.state;
+    assert.deepEqual(history.recent_completed_outcomes, []);
+    assert.deepEqual(new Set(history.recent_execution_observations.map((run) => run.requested_model)), new Set([f.model, nextModel]));
+    assert.equal(history.recent_execution_observations.length, 2);
+    for (const saved of runs) {
+      const summary = history.recent_execution_observations.find((run) => run.requested_model === saved.execution.model);
+      assert.equal(summary.harness_observations.sampled_events, saved.execution.observations.events.length);
+      assert.equal(summary.harness_observations.status, "recorded");
+    }
+    assert.deepEqual(runs.find((run) => run.run_id === f.record.run_id), f.record, "Resume must not rewrite the original run");
+    assert.ok(!(await readdir(join(f.cwd, ".jevia"))).some((name) => name.startsWith("jevia-events-")));
+    t.diagnostic(`${harness} resumed: ${events.length} fresh events; both turns present in routing history`);
+  });
+}
+
+test("real OpenCode subagent events retain distinct session and model identities", { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 180_000 }, async (t) => {
+  const { cwd, record, requests } = await fixture(t, "opencode", false, "subagent");
+  assert.equal(record.outcome, "unknown");
+  assert.equal(record.execution.exit_code, 0);
+  assert.equal(record.execution.verification, undefined);
+  assert.equal(record.execution.observations.status, "recorded");
+  const events = record.execution.observations.events;
+  const parent = events.find((event) => event.kind === "session_started");
+  const child = events.find((event) => event.kind === "subagent_started");
+  assert.ok(parent?.session_id);
+  assert.ok(child?.agent_id);
+  assert.notEqual(child.session_id, parent.session_id);
+  assert.equal(child.agent_id, child.session_id);
+  assert.ok(events.some((event) => event.kind === "model_observed" && event.session_id === child.session_id && event.model === "fixture/fixture-child"));
+  assert.ok(events.some((event) => event.kind === "turn_completed" && event.session_id === child.session_id));
+  assert.ok(events.some((event) => event.kind === "tool_completed" && event.session_id === parent.session_id && event.tool_name === "task"));
+  assert.ok(!events.some((event) => event.kind === "tool_succeeded"));
+  assert.ok(requests.some((request) => request.input.model === "fixture-child"));
+  assert.ok(requests.some((request) => request.input.messages?.some((message) => message.role === "tool" && JSON.stringify(message.content).includes("fixture child response"))), "The real child result must return to its parent");
+  assert.ok(!JSON.stringify(record.execution.observations).includes("fixture child response"));
+  assert.ok(!(await readdir(join(cwd, ".jevia"))).some((name) => name.startsWith("jevia-events-")));
+});
 
 test("real OpenCode loads the injected plugin and records passive model facts", { skip: !tools && "set JEVIA_NATIVE_BIN_DIR to pinned CLI executables", timeout: 150_000 }, async (t) => {
   const { cwd, requests, result, record } = await fixture(t, "opencode");
