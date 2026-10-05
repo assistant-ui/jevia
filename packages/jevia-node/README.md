@@ -130,7 +130,7 @@ CLI 0.1.6+ and SDK 0.1.2+; upgrade all readers/writers before using schema 6.
 
 ### Recorded outcomes inform the next route automatically
 
-Unreleased CLI update: outbound history is also capped at 64 KiB of JSON per
+CLI 0.1.9: outbound history is also capped at 64 KiB of JSON per
 window. Past tasks use explicitly marked UTF-8-safe excerpts of up to 2,048
 bytes; newer candidates take priority, with omissions disclosed to the router.
 This applies automatically through the Node SDK when using the updated CLI.
@@ -169,7 +169,7 @@ external run, but completion is not required merely to reuse `feedback`.
 
 ## API
 
-Unreleased CLI: `run()` sends the selected harness name and its configured
+CLI 0.1.9: `run()` sends the selected harness name and its configured
 tier-to-model mapping to Jev alongside the routing task and eligible history.
 Launch arguments, commands, verifier settings, and other harness definitions stay
 local. `route()` remains harness-agnostic; it does not guess a current harness from

@@ -2,6 +2,60 @@
 
 ## Unreleased
 
+## 0.1.9 — 2026-10-05
+
+### Routing and recording
+
+- Include the selected harness's tier/model candidates in Jev routing and cache
+  fingerprints, excluding executable arguments and unrelated harness settings.
+- Bound each outgoing history window to 64 KiB of JSON with UTF-8-safe task
+  excerpts, preserving full local history. Stream compact routing projections
+  from storage and reuse them for provider requests, cache keys, and diagnostics.
+- Preserve literal native tasks, including leading dashes and words such as
+  `attach`, `serve`, and `web`, without confusing them with capture options.
+- Retry transient native version-probe failures once without launching a task;
+  keep unsupported versions and unsafe explicit configuration fail-closed.
+- Keep interrupted, timed-out, or unlaunched verifier results unknown. Normal
+  zero/nonzero verifier exits still determine optional verification outcomes.
+- Preserve stored verification when an idempotent completion retry omits it;
+  reject explicit conflicting evidence without changing the original record.
+- Require native provenance for recording health, report OpenCode collector
+  failures without blocking tool execution, and bound checkpoint worker lifetime.
+- Redact hook-review configuration errors without exposing private values.
+
+### Storage and performance
+
+- Stream stats aggregation and SQL rows within consistent keyset-paged snapshots.
+  A local synthetic 200-record/512-KiB-task benchmark reduced SQLite stats peak
+  RSS from approximately 124 MiB to 48 MiB with identical results. Driver buffers
+  still contribute memory; this is not a universal performance guarantee.
+- Validate history before repair/archive, reject special cache and maintenance
+  inputs, and stream JSONL maintenance while retaining ID-based validation.
+- Retain runs with pending recording journals during archive. Enforce restorable
+  SQL record/snapshot limits without truncating oversized legacy records or
+  publishing partial recovery files.
+- Reject non-file installer destinations and preserve website dependency
+  security patches through the Farm upgrade.
+
+### Verification and compatibility
+
+- Exercise actual pinned Codex/OpenCode CLIs on Linux and macOS with isolated
+  homes and local response fixtures: normal hook review, literal tasks, tool/turn
+  capture, cancellation, provider rejection, and automatic routing-history reuse.
+- Add resumed-session/model-change contracts for both harnesses and real
+  foreground OpenCode subagent attribution. These are recording contracts, not
+  live-provider accuracy benchmarks; interactive, in-turn fallback, Codex
+  subagent, and background-subagent coverage is not established by this suite.
+
+Record schema 6, SQL schema 1, and configuration are unchanged. Automatic recording
+and history reuse remain enabled; feedback and extra verification stay optional.
+Node SDK 0.1.3 remains compatible and is not republished. Rust 1.92 and Node.js 20
+remain the minimum versions. The experimental Rust core adds prepared-history
+APIs and `JevError::UnknownHarness`; update exhaustive error matches as needed.
+Old decision-cache fingerprints miss safely; saved history is not rewritten.
+Back up history before explicit maintenance, especially legacy SQL records over
+the 8 MiB recovery limit.
+
 ## 0.1.8 — 2026-10-02
 
 - Add a preview-first Codex hook-review session without bypassing native trust,

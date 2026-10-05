@@ -20,7 +20,7 @@ assert!(config.tiers.contains_key(&config.router.fallback_tier));
 
 Requires Rust 1.92 or newer. The API is experimental.
 
-## Unreleased: harness-aware routing
+## Upgrading to 0.1.9: harness-aware routing
 
 `JevClient::route_for_harness(task, harness_name, config, history)` adds the selected
 harness name and its declared tier/model candidates to the Jev request. Commands,
@@ -33,6 +33,11 @@ Unknown harnesses fail before a provider request with the new redacted
 `route_cache_key` applies the same check and hashes the same request context.
 The fingerprint version changes, so old cache entries miss safely without
 removing any history. This is not a record or configuration schema change.
+
+Routing history now uses independently bounded 64 KiB JSON windows with UTF-8-safe
+task excerpts. `RoutingHistory` and the prepared-history client/cache APIs let
+streaming integrations reuse that projection without retaining full records.
+Existing slice-based APIs remain available; local history is not truncated.
 
 ## Upgrading to 0.1.8
 
