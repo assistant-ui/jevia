@@ -1,6 +1,7 @@
 //! Logical history integrity, not database-native physical integrity or repair.
 
 use anyhow::{Context, Result, anyhow, bail};
+use futures_util::TryStreamExt;
 use sqlx::{Any, Row, Transaction};
 
 use super::{Database, SCHEMA_VERSION, db, decode};
@@ -44,16 +45,15 @@ impl Database {
         let mut cursor = None;
         let mut count = 0;
         loop {
-            let rows = match cursor {
-                None => db(sqlx::query("SELECT run_id, ordinal, learning, record FROM jevia_runs WHERE project = $1 ORDER BY ordinal ASC LIMIT $2")
-                    .bind(&self.project).bind(PAGE_SIZE).fetch_all(&mut **tx)).await?,
-                Some(cursor) => db(sqlx::query("SELECT run_id, ordinal, learning, record FROM jevia_runs WHERE project = $1 AND ordinal > $2 ORDER BY ordinal ASC LIMIT $3")
-                    .bind(&self.project).bind(cursor).bind(PAGE_SIZE).fetch_all(&mut **tx)).await?,
+            let query = match cursor {
+                None => sqlx::query("SELECT run_id, ordinal, learning, record FROM jevia_runs WHERE project = $1 ORDER BY ordinal ASC LIMIT $2")
+                    .bind(&self.project).bind(PAGE_SIZE),
+                Some(cursor) => sqlx::query("SELECT run_id, ordinal, learning, record FROM jevia_runs WHERE project = $1 AND ordinal > $2 ORDER BY ordinal ASC LIMIT $3")
+                    .bind(&self.project).bind(cursor).bind(PAGE_SIZE),
             };
-            if rows.is_empty() {
-                break;
-            }
-            for row in rows {
+            let mut rows = query.fetch(&mut **tx);
+            let mut visited = 0;
+            while let Some(row) = db(rows.try_next()).await? {
                 let position = count + 1;
                 let fields = || -> sqlx::Result<(String, i64, i64, String)> {
                     Ok((
@@ -85,7 +85,11 @@ impl Database {
                     bail!("learning index mismatch at record {position}; no repair attempted");
                 }
                 count += 1;
+                visited += 1;
                 cursor = Some(ordinal);
+            }
+            if visited == 0 {
+                break;
             }
         }
         if count != expected {
