@@ -18,10 +18,8 @@ fn cli(root: &Path) -> Command {
 fn unsafe_history_numbers_fail_before_output_routing_or_import_without_rewriting() {
     let root = tempfile::tempdir().unwrap();
     cli(root.path()).arg("init").assert().success();
-    let fixture: Value = serde_json::from_str(include_str!(
-        "../../jevia-core/tests/fixtures/numeric-record.json"
-    ))
-    .unwrap();
+    let fixture: Value =
+        serde_json::from_str(include_str!("fixtures/numeric-record.json")).unwrap();
     let config_path = root.path().join(".jevia/config.toml");
     let history = root.path().join(".jevia/runs.jsonl");
     let default_config = Config::default().to_toml().unwrap();

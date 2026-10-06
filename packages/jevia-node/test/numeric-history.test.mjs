@@ -5,6 +5,9 @@ import { isRouteRecord } from "../dist/protocol.js";
 
 const fixture = JSON.parse(readFileSync(new URL("../../../crates/jevia-core/tests/fixtures/numeric-record.json", import.meta.url), "utf8"));
 
+// Keep fixtures local to each published Rust crate, and catch contract drift here.
+assert.deepEqual(fixture, JSON.parse(readFileSync(new URL("../../../crates/jevia-cli/tests/fixtures/numeric-record.json", import.meta.url), "utf8")));
+
 test("history timestamps and durations agree with Rust at safe-integer boundaries", () => {
   for (const schema_version of [1, 2, 3, 4, 5, 6]) {
     for (const path of [

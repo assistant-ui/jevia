@@ -9,7 +9,7 @@ async fn unsafe_numbers(postgres: bool) {
     let f = Fixture::new(postgres).await;
     let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../jevia-core/tests/fixtures/numeric-record.json"
+        "/tests/fixtures/numeric-record.json"
     )))
     .unwrap();
     let valid: RouteRecord = serde_json::from_value(fixture.clone()).unwrap();
