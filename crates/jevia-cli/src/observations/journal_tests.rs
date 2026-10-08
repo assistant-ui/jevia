@@ -114,3 +114,37 @@ fn compatible_legacy_journals_still_decode_and_finalize() {
     receive_inner(&journal, br#"{"hook_event_name":"Stop"}"#.as_slice()).unwrap();
     assert_eq!(read_snapshot_file(&journal).unwrap().event_count(), 2);
 }
+
+#[test]
+fn duplicate_fields_are_rejected_without_replacing_the_journal() {
+    let directory = tempfile::tempdir().unwrap();
+    let journal = directory.path().join("jevia-events-test.jsonl");
+    let mut observations = snapshot();
+    observations.totals = Some(observations.counts());
+    let original = serde_json::to_string(&Entry::Snapshot(observations)).unwrap();
+    for (field, replacement) in [
+        (
+            "\"type\":\"snapshot\"",
+            "\"type\":\"discarded\",\"type\":\"snapshot\"",
+        ),
+        (
+            "\"status\":\"recorded\"",
+            "\"status\":\"no_events\",\"status\":\"recorded\"",
+        ),
+        (
+            "\"recorded_at_ms\":1",
+            "\"recorded_at_ms\":0,\"recorded_at_ms\":1",
+        ),
+        (
+            "\"discarded_inputs\":0",
+            "\"discarded_inputs\":0,\"discarded_inputs\":0",
+        ),
+    ] {
+        assert!(original.contains(field));
+        let raw = original.replacen(field, replacement, 1);
+        fs::write(&journal, &raw).unwrap();
+        assert!(read_snapshot_file(&journal).is_err());
+        assert!(receive_inner(&journal, br#"{"hook_event_name":"Stop"}"#.as_slice()).is_err());
+        assert_eq!(fs::read_to_string(&journal).unwrap(), raw);
+    }
+}

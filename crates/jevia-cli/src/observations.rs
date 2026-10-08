@@ -510,28 +510,30 @@ enum Entry {
     Event(HarnessEvent),
     Discarded,
     Truncated,
-    Snapshot(#[serde(deserialize_with = "journal_snapshot")] HarnessObservations),
+    Snapshot(HarnessObservations),
 }
 
 // Journals are consumed and replaced by capture/replay. Unlike read-only history
 // decoding, accepting unknown metadata here would silently erase it. Keep the
 // additive history format permissive, but leave newer journals for a compatible
 // reader. Nested events and totals already reject unknown fields in jevia-core.
-fn journal_snapshot<'de, D>(deserializer: D) -> std::result::Result<HarnessObservations, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let value = Value::deserialize(deserializer)?;
-    if value.as_object().is_some_and(|object| {
-        object
-            .keys()
-            .any(|key| !matches!(key.as_str(), "source" | "status" | "events" | "totals"))
-    }) {
-        return Err(serde::de::Error::custom(
-            "unsupported observation snapshot field",
-        ));
+fn journal_entry(line: &[u8]) -> Result<Entry> {
+    let value: Value = serde_json::from_slice(line)?;
+    if value.get("type").and_then(Value::as_str) == Some("snapshot")
+        && value
+            .get("event")
+            .and_then(Value::as_object)
+            .is_some_and(|object| {
+                object
+                    .keys()
+                    .any(|key| !matches!(key.as_str(), "source" | "status" | "events" | "totals"))
+            })
+    {
+        bail!("unsupported observation snapshot field");
     }
-    serde_json::from_value(value).map_err(serde::de::Error::custom)
+    // Decode the original bytes, not the Value projection: serde must still
+    // reject duplicate fields, including inside sampled events and totals.
+    Ok(serde_json::from_slice(line)?)
 }
 
 pub(crate) fn checkpoint_matches(bytes: &[u8], saved: &HarnessObservations) -> bool {
@@ -649,7 +651,7 @@ fn read_journal(file: &mut File) -> Result<HarnessObservations> {
         .filter(|line| !line.is_empty())
         .collect();
     for line in &lines {
-        match serde_json::from_slice::<Entry>(line) {
+        match journal_entry(line) {
             Ok(Entry::Snapshot(snapshot)) if lines.len() == 1 => return Ok(snapshot),
             Ok(Entry::Event(event))
                 if event.validate().is_ok() && observations.events.len() < MAX_HARNESS_EVENTS =>
