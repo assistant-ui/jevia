@@ -48,7 +48,7 @@ impl ObservationTotals {
     }
 
     pub fn validate(&self) -> Result<(), &'static str> {
-        const MAX_SAFE: u64 = 9_007_199_254_740_991;
+        const MAX_SAFE: u64 = crate::MAX_SAFE_INTEGER;
         if self.models.len() > MAX_OBSERVED_MODELS
             || self.models.keys().any(|m| !valid_identifier(m))
             || self.discarded_inputs > MAX_SAFE
@@ -198,6 +198,7 @@ pub struct HarnessEvent {
 
 impl HarnessEvent {
     pub fn validate(&self) -> Result<(), &'static str> {
+        crate::route::validate_millis(self.recorded_at_ms)?;
         for value in [
             &self.session_id,
             &self.agent_id,

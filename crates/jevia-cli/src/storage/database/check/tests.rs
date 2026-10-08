@@ -5,6 +5,73 @@ use serde_json::json;
 
 const RECORDS: usize = PAGE_SIZE as usize * 2 + 5;
 
+async fn unsafe_numbers(postgres: bool) {
+    let f = Fixture::new(postgres).await;
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/numeric-record.json"
+    )))
+    .unwrap();
+    let valid: RouteRecord = serde_json::from_value(fixture.clone()).unwrap();
+    f.storage.append(&valid).await.unwrap();
+    for path in [
+        "/created_at_ms",
+        "/lifecycle/started_at_ms",
+        "/lifecycle/finished_at_ms",
+        "/outcome_evidence/recorded_at_ms",
+        "/feedback/0/recorded_at_ms",
+        "/execution/duration_ms",
+        "/execution/verification/duration_ms",
+        "/execution/observations/events/0/recorded_at_ms",
+    ] {
+        let mut invalid = fixture.clone();
+        *invalid.pointer_mut(path).unwrap() = json!(jevia_core::MAX_SAFE_INTEGER + 2);
+        let raw = invalid.to_string();
+        sqlx::query("UPDATE jevia_runs SET record = $2 WHERE project = $1")
+            .bind(&f.db().project)
+            .bind(&raw)
+            .execute(&f.db().pool)
+            .await
+            .unwrap();
+        for result in [
+            f.storage.check_deep().await,
+            f.db().export(std::io::sink()).await,
+        ] {
+            let error = format!("{:#}", result.unwrap_err());
+            assert!(!error.contains("PRIVATE"));
+            assert!(!error.contains("9007199254740993"));
+        }
+        assert!(f.storage.get("numeric-boundary").await.is_err());
+        assert!(f.storage.recent(10, false).await.is_err());
+        let after: String = sqlx::query_scalar("SELECT record FROM jevia_runs WHERE project = $1")
+            .bind(&f.db().project)
+            .fetch_one(&f.db().pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            after, raw,
+            "invalid stored values must never be rounded or repaired"
+        );
+        assert_eq!(f.counter().await, 1);
+    }
+    let mut invalid = valid;
+    invalid.decision.run_id = "another-run".into();
+    invalid.decision.created_at_ms = jevia_core::MAX_SAFE_INTEGER + 1;
+    assert!(f.storage.append(&invalid).await.is_err());
+    assert_eq!(f.counter().await, 1);
+}
+
+#[tokio::test]
+async fn sqlite_unsafe_history_numbers_are_rejected_without_repair() {
+    unsafe_numbers(false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated PostgreSQL database in JEVIA_TEST_POSTGRES_URL"]
+async fn postgres_unsafe_history_numbers_are_rejected_without_repair() {
+    unsafe_numbers(true).await;
+}
+
 struct Fixture {
     _dir: tempfile::TempDir,
     storage: Storage,

@@ -11,6 +11,16 @@ use uuid::Uuid;
 /// Current version of a persisted run record.
 pub const RECORD_SCHEMA_VERSION: u32 = 6;
 
+/// Largest integer preserved exactly by the JSON number contract of the Node SDK.
+pub const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+
+pub(crate) fn validate_millis(value: u64) -> Result<(), &'static str> {
+    if value > MAX_SAFE_INTEGER {
+        return Err("timestamp or duration exceeds the supported safe-integer range");
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OutcomeSource {
@@ -143,6 +153,7 @@ impl RouteDecision {
     /// Shared validation for provider output, persisted history, and cached decisions.
     /// Errors describe fields only; provider values must never enter diagnostics.
     pub fn validate(&self) -> Result<(), &'static str> {
+        validate_millis(self.created_at_ms)?;
         if [
             &self.run_id,
             &self.tier,
@@ -227,6 +238,41 @@ pub struct RouteRecord {
 }
 
 impl RouteRecord {
+    /// Validate numeric fields before storage, import, or returning JSON to clients.
+    /// Reject out-of-range values instead of rounding, clamping, or rewriting them.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        self.decision.validate()?;
+        if let Some(lifecycle) = &self.lifecycle {
+            for value in [lifecycle.started_at_ms, lifecycle.finished_at_ms]
+                .into_iter()
+                .flatten()
+            {
+                validate_millis(value)?;
+            }
+        }
+        if let Some(evidence) = &self.outcome_evidence {
+            validate_millis(evidence.recorded_at_ms)?;
+        }
+        for feedback in &self.feedback {
+            validate_millis(feedback.recorded_at_ms)?;
+        }
+        if let Some(execution) = &self.execution {
+            validate_millis(execution.duration_ms)?;
+            if let Some(verification) = &execution.verification {
+                validate_millis(verification.duration_ms)?;
+            }
+            if let Some(observations) = &execution.observations {
+                for event in &observations.events {
+                    event.validate()?;
+                }
+                if let Some(totals) = &observations.totals {
+                    totals.validate()?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Finished executions provide operational context, not a quality label.
     /// Routed-only and active runs must not be mistaken for completed attempts.
     pub fn is_execution_observation(&self) -> bool {
