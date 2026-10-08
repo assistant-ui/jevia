@@ -1561,6 +1561,12 @@ Provider and transport failures also omit raw response values and endpoint URLs,
 including underlying error chains. Diagnostics retain safe failure categories,
 JSON positions where available, and HTTP status codes.
 
+Routing HTTP requests never follow redirects, including same-origin redirects.
+Configure the canonical Jev API base URL directly. A 3xx response fails with its
+status code; its Location header and response body are not logged. This prevents
+redirects from forwarding current tasks, historical evidence, or credentials to
+another endpoint. Failed requests do not create routing decisions or cache entries.
+
 ### History maintenance
 
 Both maintenance commands preview by default. Inspect the report before repeating
