@@ -61,10 +61,7 @@ fn maintenance_refuses_invalid_decisions_before_any_rewrite_or_snapshot() {
                         .get_output()
                         .clone();
                     let stderr = String::from_utf8_lossy(&result.stderr);
-                    assert!(
-                        stderr.contains("invalid routing decision on line"),
-                        "{stderr}"
-                    );
+                    assert!(stderr.contains("invalid run record on line"), "{stderr}");
                     assert!(stderr.contains("refusing to rewrite history"), "{stderr}");
                     assert!(!stderr.contains("PRIVATE"));
                     assert!(result.stdout.is_empty());

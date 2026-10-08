@@ -205,15 +205,14 @@ fn decode_record_line(bytes: &[u8], index: usize, path: &Path) -> Result<Option<
         );
     }
     record
-        .decision
         .validate()
         .map_err(anyhow::Error::msg)
-        .with_context(|| format!("invalid routing decision on line {index} (contents redacted)"))?;
+        .with_context(|| format!("invalid run record on line {index} (contents redacted)"))?;
     Ok(Some(record))
 }
 
 pub fn append(path: &Path, record: &RouteRecord) -> Result<()> {
-    record.decision.validate().map_err(anyhow::Error::msg)?;
+    record.validate().map_err(anyhow::Error::msg)?;
     let parent = path
         .parent()
         .context("run history path does not have a parent directory")?;

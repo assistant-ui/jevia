@@ -216,8 +216,8 @@ fn scan(
                     record.schema_version
                 );
             }
-            record.decision.validate().map_err(anyhow::Error::msg).with_context(||
-                format!("invalid routing decision on line {index} (contents redacted); refusing to rewrite history"))?;
+            record.validate().map_err(anyhow::Error::msg).with_context(||
+                format!("invalid run record on line {index} (contents redacted); refusing to rewrite history"))?;
             eligible = archivable(&record)
                 && pending.is_none_or(|pending| !pending.contains(&record.decision.run_id));
             if !ids.insert(record.decision.run_id) {
