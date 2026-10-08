@@ -21,7 +21,7 @@ pub use jev::{
     route_cache_key_with_history,
 };
 pub use route::{
-    DecisionSource, ExecutionEvidence, FeedbackEvent, Outcome, OutcomeEvidence, OutcomeSource,
-    RECORD_SCHEMA_VERSION, RouteDecision, RouteRecord, RunLifecycle, RunState,
+    DecisionSource, ExecutionEvidence, FeedbackEvent, MAX_SAFE_INTEGER, Outcome, OutcomeEvidence,
+    OutcomeSource, RECORD_SCHEMA_VERSION, RouteDecision, RouteRecord, RunLifecycle, RunState,
     VerificationEvidence,
 };
