@@ -67,6 +67,45 @@ test("SQLite setup previews, imports explicitly, and uses selected storage for S
   await migrateAndVerify(t, { backend: "sqlite", path: ".jevia/sdk history.db" });
 });
 
+test("blank execution fields fail in the CLI before SDK protocol decoding", async (t) => {
+  const { cwd, client } = await fixture(t);
+  const historyPath = join(cwd, ".jevia/runs.jsonl");
+  const fixtureRecord = JSON.parse(await readFile(new URL("../../../crates/jevia-cli/tests/fixtures/numeric-record.json", import.meta.url), "utf8"));
+  for (const path of [["execution", "harness"], ["execution", "model"], ["execution", "verification", "command"]]) {
+    for (const text of ["", " \t\n", "\ufeff"]) {
+      const invalid = structuredClone(fixtureRecord);
+      path.slice(0, -1).reduce((object, key) => object[key], invalid)[path.at(-1)] = text;
+      const raw = `${JSON.stringify(invalid)}\n`;
+      await writeFile(historyPath, raw);
+      const health = await client.checkStorageReport({ deep: true });
+      assert.equal(health.ok, false);
+      await assert.rejects(client.show(invalid.run_id), (error) => {
+        assert.ok(error instanceof JeviaCommandError);
+        assert.ok(!inspect(error).includes("PRIVATE"));
+        return true;
+      });
+      assert.equal(await readFile(historyPath, "utf8"), raw);
+    }
+  }
+});
+
+test("real CLI and SDK agree on safe timestamps without rounding persisted history", async (t) => {
+  const { cwd, client } = await fixture(t);
+  const path = join(cwd, ".jevia/runs.jsonl");
+  const safe = { ...record, created_at_ms: Number.MAX_SAFE_INTEGER };
+  const raw = `${JSON.stringify(safe)}\n`;
+  await writeFile(path, raw);
+  assert.equal((await client.checkStorageReport({ deep: true })).ok, true);
+  assert.equal((await client.show(record.run_id)).created_at_ms, Number.MAX_SAFE_INTEGER);
+  // Construct exact bytes: JS cannot represent this integer without rounding.
+  const invalid = raw.replace('"created_at_ms":9007199254740991', '"created_at_ms":9007199254740993');
+  assert.notEqual(invalid, raw);
+  await writeFile(path, invalid);
+  assert.equal((await client.checkStorageReport({ deep: true })).ok, false);
+  await assert.rejects(client.show(record.run_id), JeviaCommandError);
+  assert.equal(await readFile(path, "utf8"), invalid);
+});
+
 test("failed setup preserves config and does not expose database credentials", async (t) => {
   const secret = "PRIVATE_DATABASE_SENTINEL";
   const { client, config, configPath } = await fixture(t, { SDK_TEST_DB: `invalid://${secret}` });
