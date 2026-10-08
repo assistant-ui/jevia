@@ -32,9 +32,10 @@ impl HistoryBatch {
             Storage::Jsonl(paths) => {
                 let path = paths.runs.clone();
                 let ids = available.clone();
-                let records =
-                    tokio::task::spawn_blocking(move || crate::store::try_get_many(&path, &ids))
-                        .await;
+                let records = tokio::task::spawn_blocking(move || {
+                    crate::store::try_get_many(&path, &ids, saved_observations)
+                })
+                .await;
                 #[cfg(test)]
                 {
                     batch.reads += 1;
@@ -53,8 +54,7 @@ impl HistoryBatch {
                 for id in available {
                     let result = records
                         .remove(&id)
-                        .ok_or("history_unavailable_or_missing")
-                        .and_then(saved_observations);
+                        .unwrap_or(Err("history_unavailable_or_missing"));
                     batch.saved.insert(id, result);
                 }
             }
