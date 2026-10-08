@@ -32,7 +32,10 @@
       "@ai-sdk/provider-utils@>=4.0.0-beta.10 <4.0.33": "4.0.33",
       "@farm.js/core@0.1.0>@scalar/api-reference": "1.72.1",
       "@farm.js/core@0.1.0>fast-glob": "-",
-      "sharp@<0.35.4": "0.35.4",
+      "gray-matter@4.0.3>js-yaml": "4.3.2",
+      "geist@1.7.2>next": "-",
+      "sharp@<0.35.5": "0.35.5",
+      "source-map-js@<1.2.2": "1.2.2",
       "@scalar/json-magic@0.15.2>undici": "7.29.1",
       "uuid@<11.1.1": "11.1.1",
       "vite@<7.3.6": "7.3.6",
@@ -46,7 +49,8 @@
       }
     },
     "patchedDependencies": {
-      "@farm.js/core@0.1.0": "patches/@farm.js__core@0.1.0.patch"
+      "@farm.js/core@0.1.0": "patches/@farm.js__core@0.1.0.patch",
+      "gray-matter@4.0.3": "patches/gray-matter@4.0.3.patch"
     }
   },
   "packageManager": "pnpm@10.9.0"
