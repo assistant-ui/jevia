@@ -5,7 +5,14 @@ pub const LOOKUP_BATCH_SIZE: usize = 32;
 
 /// One fully validated snapshot for a bounded group of cleanup owners. Missing
 /// IDs stay absent; duplicate IDs retain the existing first-match semantics.
-pub fn try_get_many(path: &Path, ids: &BTreeSet<String>) -> Result<BTreeMap<String, RouteRecord>> {
+/// Project each match during the scan, so unrelated task/evidence payloads do
+/// not remain allocated for every owner in the batch. The whole history is
+/// still validated under one shared lock before returning any result.
+pub fn try_get_many<T>(
+    path: &Path,
+    ids: &BTreeSet<String>,
+    mut project: impl FnMut(RouteRecord) -> T,
+) -> Result<BTreeMap<String, T>> {
     if ids.len() > LOOKUP_BATCH_SIZE {
         bail!("history lookup batch is too large");
     }
@@ -21,7 +28,7 @@ pub fn try_get_many(path: &Path, ids: &BTreeSet<String>) -> Result<BTreeMap<Stri
         if ids.contains(&record.decision.run_id) {
             found
                 .entry(record.decision.run_id.clone())
-                .or_insert(record);
+                .or_insert_with(|| project(record));
         }
         Ok(())
     })?;
@@ -103,19 +110,50 @@ mod tests {
         let ids = ["run-0".to_owned(), "missing".to_owned()]
             .into_iter()
             .collect();
-        let found = try_get_many(&path, &ids).unwrap();
+        let found = try_get_many(&path, &ids, |record| record).unwrap();
         assert_eq!(found.len(), 1);
         assert_eq!(found["run-0"], first);
         let oversized = (0..=LOOKUP_BATCH_SIZE)
             .map(|i| format!("run-{i}"))
             .collect();
-        assert!(try_get_many(&path, &oversized).is_err());
+        assert!(try_get_many(&path, &oversized, |record| record).is_err());
         let held = acquire_lock(&path, LockMode::Exclusive).unwrap();
-        assert!(try_get_many(&path, &ids).is_err());
+        assert!(try_get_many(&path, &ids, |record| record).is_err());
         drop(held);
         fs::write(&path, format!("{raw}PRIVATE invalid tail")).unwrap();
-        let error = try_get_many(&path, &ids).unwrap_err();
+        let error = try_get_many(&path, &ids, |record| record).unwrap_err();
         assert!(!format!("{error:#}").contains("PRIVATE"));
+    }
+
+    #[test]
+    fn batch_projects_only_the_first_requested_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("runs.jsonl");
+        let mut raw = String::new();
+        for id in [0, 1, 0, 2] {
+            let mut record = record(id);
+            record.task = Some("x".repeat(1024 * 1024));
+            raw.push_str(&serde_json::to_string(&record).unwrap());
+            raw.push('\n');
+        }
+        fs::write(&path, &raw).unwrap();
+        let ids = ["run-0".to_owned(), "run-2".to_owned(), "missing".to_owned()]
+            .into_iter()
+            .collect();
+        let mut calls = Vec::new();
+        let found = try_get_many(&path, &ids, |record| {
+            calls.push(record.decision.run_id);
+            record.decision.created_at_ms
+        })
+        .unwrap();
+        assert_eq!(calls, ["run-0", "run-2"]);
+        assert_eq!(
+            found,
+            [("run-0".into(), 0), ("run-2".into(), 2)]
+                .into_iter()
+                .collect()
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), raw);
     }
 
     #[test]

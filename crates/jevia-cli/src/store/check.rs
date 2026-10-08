@@ -54,11 +54,10 @@ pub fn check_deep(path: &Path) -> Result<usize> {
             bail!("empty run identity at line {position}; no repair attempted");
         }
         record
-            .decision
             .validate()
             .map_err(anyhow::Error::msg)
             .with_context(|| {
-                format!("invalid routing decision at line {position} (contents redacted)")
+                format!("invalid run record at line {position} (contents redacted)")
             })?;
         if !ids.insert(record.decision.run_id) {
             bail!(

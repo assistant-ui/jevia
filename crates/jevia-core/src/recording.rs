@@ -22,7 +22,7 @@ impl ExecutionRecording {
     pub fn into_evidence(self) -> Result<ExecutionEvidence, &'static str> {
         if !valid_identifier(&self.harness)
             || !valid_identifier(&self.model)
-            || self.duration_ms > 9_007_199_254_740_991
+            || self.duration_ms > crate::MAX_SAFE_INTEGER
             || self.events.len() > MAX_HARNESS_EVENTS
         {
             return Err("invalid execution recording");
@@ -34,9 +34,6 @@ impl ExecutionRecording {
             totals: None,
         };
         for event in self.events {
-            if event.recorded_at_ms > 9_007_199_254_740_991 {
-                return Err("invalid execution event timestamp");
-            }
             event.validate()?;
             observations.observe(event);
         }

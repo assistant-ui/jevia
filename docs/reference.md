@@ -1467,6 +1467,11 @@ change the destination; setup cannot detect which database it previously named.
   access check separately when needed; database-native integrity checks and
   backups remain the operator's responsibility. Missing storage is not initialized.
 - Database/record schema versions are checked; unknown versions are rejected.
+  Record timestamps, durations, and observation counters must be nonnegative
+  integers no greater than `9007199254740991` (`Number.MAX_SAFE_INTEGER`), matching
+  the Node SDK's JSON contract. Reads, deep checks, and imports reject values
+  outside that range without rounding or rewriting the source history. Keep the
+  original file/database and inspect invalid values locally before correcting them.
   Driver errors are redacted and database operations have five-second timeouts.
   An outage never silently switches history back to local JSONL.
 - Imports preview by default and commit all-or-nothing with `--apply`. Identical
@@ -1557,6 +1562,12 @@ or stdout/stderr streamed by your configured harness and verifier.
 Provider and transport failures also omit raw response values and endpoint URLs,
 including underlying error chains. Diagnostics retain safe failure categories,
 JSON positions where available, and HTTP status codes.
+
+Routing HTTP requests never follow redirects, including same-origin redirects.
+Configure the canonical Jev API base URL directly. A 3xx response fails with its
+status code; its Location header and response body are not logged. This prevents
+redirects from forwarding current tasks, historical evidence, or credentials to
+another endpoint. Failed requests do not create routing decisions or cache entries.
 
 ### History maintenance
 

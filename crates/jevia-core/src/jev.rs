@@ -36,6 +36,9 @@ impl JevClient {
 
         let http = reqwest::Client::builder()
             .timeout(Duration::from_millis(config.timeout_ms))
+            // Redirects can forward task/history bodies even when reqwest strips
+            // authorization. Only the explicitly configured endpoint is trusted.
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent(concat!("jevia/", env!("CARGO_PKG_VERSION")))
             .build()?;
         let endpoint = format!(
