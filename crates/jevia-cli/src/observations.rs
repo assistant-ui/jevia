@@ -249,13 +249,28 @@ impl Capture {
         run_id: &str,
         previous: &mut HarnessObservations,
     ) -> Result<()> {
+        self.checkpoint_until(
+            storage,
+            run_id,
+            previous,
+            std::time::Instant::now() + Duration::from_secs(1),
+        )
+        .await
+    }
+
+    async fn checkpoint_until(
+        &self,
+        storage: &Storage,
+        run_id: &str,
+        previous: &mut HarnessObservations,
+        deadline: std::time::Instant,
+    ) -> Result<()> {
         if self.journal.is_none() {
             return Ok(());
         }
         // The supervisor may drop this future on timeout or process exit. Its
         // blocking workers must still stop, including after waiting in the pool,
         // so a late full-history rewrite cannot starve terminal persistence.
-        let deadline = std::time::Instant::now() + Duration::from_secs(1);
         let capture = self.clone();
         let snapshot = tokio::task::spawn_blocking(move || {
             if std::time::Instant::now() >= deadline {
@@ -777,6 +792,10 @@ fn normalize(source: ObservationSource, input: &Value) -> Option<HarnessEvent> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn semantic_deadline() -> std::time::Instant {
+        std::time::Instant::now() + Duration::from_secs(30)
+    }
     use jevia_core::{
         Config, DecisionSource, ExecutionEvidence, Outcome, RouteDecision, RouteRecord, RunState,
         StorageConfig,
@@ -1100,12 +1119,26 @@ mod tests {
                 assert_eq!(capture.snapshot(), lost);
             }
             let mut previous = initial;
+            // Expiry is tested explicitly, not by requiring disk IO to complete
+            // within the production one-second budget on a loaded CI runner.
+            let persisted = storage.get(id).await.unwrap();
+            let journal_before = fs::read(journal).unwrap();
+            let unchanged = previous.clone();
+            let error = capture
+                .checkpoint_until(&storage, id, &mut previous, std::time::Instant::now())
+                .await
+                .unwrap_err();
+            assert!(error.to_string().contains("budget exhausted"));
+            assert_eq!(previous, unchanged);
+            assert_eq!(storage.get(id).await.unwrap(), persisted);
+            assert_eq!(fs::read(journal).unwrap(), journal_before);
+            assert!(journal.with_extension("loss").exists());
             capture
-                .checkpoint(&storage, id, &mut previous)
+                .checkpoint_until(&storage, id, &mut previous, semantic_deadline())
                 .await
                 .unwrap();
             capture
-                .checkpoint(&storage, id, &mut previous)
+                .checkpoint_until(&storage, id, &mut previous, semantic_deadline())
                 .await
                 .unwrap();
             assert_eq!(previous, lost);
@@ -1126,7 +1159,7 @@ mod tests {
                 journal.exists(),
                 "cleanup must retain a marker newer than the saved snapshot"
             );
-            replay(&paths, &storage, None).await;
+            replay_with_budget(&paths, &storage, None, Duration::from_secs(30)).await;
             let saved = storage.get(id).await.unwrap();
             assert_eq!(saved.outcome, Outcome::Unknown);
             assert!(!saved.is_learning_evidence());
@@ -1243,7 +1276,7 @@ mod tests {
             .observations
             .unwrap();
         capture
-            .checkpoint(&storage, &id, &mut previous)
+            .checkpoint_until(&storage, &id, &mut previous, semantic_deadline())
             .await
             .unwrap();
         assert_eq!(previous.events.len(), 1);
@@ -1251,7 +1284,7 @@ mod tests {
         fs::write(journal, b"{torn snapshot\n").unwrap();
         assert!(
             capture
-                .checkpoint(&storage, &id, &mut previous)
+                .checkpoint_until(&storage, &id, &mut previous, semantic_deadline())
                 .await
                 .is_err()
         );

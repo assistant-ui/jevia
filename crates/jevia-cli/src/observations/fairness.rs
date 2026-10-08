@@ -70,14 +70,14 @@ async fn corrupt_prefix_cannot_starve_a_later_valid_journal() {
     let cursor = cursor::Cursor::open(&paths.directory).unwrap();
     cursor.advance(id).unwrap();
     drop(cursor);
-    replay(&paths, &storage, None).await;
+    replay_with_budget(&paths, &storage, None, Duration::from_secs(30)).await;
     let after = fs::read_to_string(paths.directory.join("replay-state/cursor")).unwrap();
     assert!(after.starts_with("00000000-0000-0000-0000-"));
     save_journal(&target, observations).unwrap();
     fs::write(paths.directory.join("replay-state/cursor"), "invalid").unwrap();
-    replay(&paths, &storage, None).await;
+    replay_with_budget(&paths, &storage, None, Duration::from_secs(30)).await;
     assert!(target.exists());
-    replay(&paths, &storage, Some(id)).await;
+    replay_with_budget(&paths, &storage, Some(id), Duration::from_secs(30)).await;
     assert!(
         !target.exists(),
         "targeted recovery must not depend on the global cursor"
