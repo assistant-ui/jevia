@@ -5,7 +5,7 @@ use serde_json::json;
 
 const RECORDS: usize = PAGE_SIZE as usize * 2 + 5;
 
-async fn unsafe_numbers(postgres: bool) {
+async fn invalid_evidence(postgres: bool) {
     let f = Fixture::new(postgres).await;
     let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -14,7 +14,7 @@ async fn unsafe_numbers(postgres: bool) {
     .unwrap();
     let valid: RouteRecord = serde_json::from_value(fixture.clone()).unwrap();
     f.storage.append(&valid).await.unwrap();
-    for path in [
+    let numeric_cases = [
         "/created_at_ms",
         "/lifecycle/started_at_ms",
         "/lifecycle/finished_at_ms",
@@ -23,9 +23,29 @@ async fn unsafe_numbers(postgres: bool) {
         "/execution/duration_ms",
         "/execution/verification/duration_ms",
         "/execution/observations/events/0/recorded_at_ms",
-    ] {
+    ]
+    .into_iter()
+    .map(|path| (path, json!(jevia_core::MAX_SAFE_INTEGER + 2)));
+    let text_cases = [
+        "/execution/harness",
+        "/execution/model",
+        "/execution/verification/command",
+    ]
+    .into_iter()
+    .flat_map(|path| {
+        ["", " \t\n", "\u{feff}"]
+            .into_iter()
+            .map(move |text| (path, json!(text)))
+    });
+    for (path, value) in numeric_cases.chain(text_cases) {
         let mut invalid = fixture.clone();
-        *invalid.pointer_mut(path).unwrap() = json!(jevia_core::MAX_SAFE_INTEGER + 2);
+        *invalid.pointer_mut(path).unwrap() = value;
+        // Some numeric fields already reject invalid values during decoding.
+        // Values that decode must still be rejected by the storage writer.
+        if let Ok(mut rejected) = serde_json::from_value::<RouteRecord>(invalid.clone()) {
+            rejected.decision.run_id = uuid::Uuid::new_v4().to_string();
+            assert!(f.storage.append(&rejected).await.is_err());
+        }
         let raw = invalid.to_string();
         sqlx::query("UPDATE jevia_runs SET record = $2 WHERE project = $1")
             .bind(&f.db().project)
@@ -62,14 +82,14 @@ async fn unsafe_numbers(postgres: bool) {
 }
 
 #[tokio::test]
-async fn sqlite_unsafe_history_numbers_are_rejected_without_repair() {
-    unsafe_numbers(false).await;
+async fn sqlite_invalid_history_evidence_is_rejected_without_repair() {
+    invalid_evidence(false).await;
 }
 
 #[tokio::test]
 #[ignore = "requires an isolated PostgreSQL database in JEVIA_TEST_POSTGRES_URL"]
-async fn postgres_unsafe_history_numbers_are_rejected_without_repair() {
-    unsafe_numbers(true).await;
+async fn postgres_invalid_history_evidence_is_rejected_without_repair() {
+    invalid_evidence(true).await;
 }
 
 struct Fixture {
