@@ -4,6 +4,8 @@ mod cursor;
 #[cfg(test)]
 mod fairness;
 mod input;
+#[cfg(test)]
+mod journal_tests;
 mod loss;
 use crate::{paths::ProjectPaths, storage::Storage};
 use anyhow::{Context, Result, bail};
@@ -498,12 +500,38 @@ async fn supported_version(
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(tag = "type", content = "event", rename_all = "snake_case")]
+#[serde(
+    tag = "type",
+    content = "event",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 enum Entry {
     Event(HarnessEvent),
     Discarded,
     Truncated,
-    Snapshot(HarnessObservations),
+    Snapshot(#[serde(deserialize_with = "journal_snapshot")] HarnessObservations),
+}
+
+// Journals are consumed and replaced by capture/replay. Unlike read-only history
+// decoding, accepting unknown metadata here would silently erase it. Keep the
+// additive history format permissive, but leave newer journals for a compatible
+// reader. Nested events and totals already reject unknown fields in jevia-core.
+fn journal_snapshot<'de, D>(deserializer: D) -> std::result::Result<HarnessObservations, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    if value.as_object().is_some_and(|object| {
+        object
+            .keys()
+            .any(|key| !matches!(key.as_str(), "source" | "status" | "events" | "totals"))
+    }) {
+        return Err(serde::de::Error::custom(
+            "unsupported observation snapshot field",
+        ));
+    }
+    serde_json::from_value(value).map_err(serde::de::Error::custom)
 }
 
 pub(crate) fn checkpoint_matches(bytes: &[u8], saved: &HarnessObservations) -> bool {
