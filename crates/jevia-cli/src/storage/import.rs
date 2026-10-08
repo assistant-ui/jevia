@@ -135,9 +135,8 @@ struct Validator {
 impl Validator {
     fn check(&mut self, record: &RouteRecord) -> Result<()> {
         record
-            .decision
             .validate()
-            .map_err(|_| anyhow!("invalid import routing decision (contents redacted)"))?;
+            .map_err(|_| anyhow!("invalid import run record (contents redacted)"))?;
         if !(1..=RECORD_SCHEMA_VERSION).contains(&record.schema_version) {
             bail!("unsupported import record schema; no records imported");
         }

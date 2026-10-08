@@ -1,0 +1,12 @@
+[
+  ["", false],
+  [" \t\r\n", false],
+  ["\u00a0\u2003", false],
+  ["\ufeff", false],
+  [" \ufeff\n", false],
+  ["custom-wrapper", true],
+  [" model with spaces ", true],
+  ["sh -c 'test -f file'", true],
+  ["\u0085", true],
+  ["\u200b", true]
+]

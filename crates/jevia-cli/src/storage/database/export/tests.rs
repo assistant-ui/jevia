@@ -117,10 +117,16 @@ async fn consistent_snapshot(postgres: bool) {
     let f = Fixture::new(postgres).await;
     f.seed().await;
     let mut tx = f.db().read_snapshot().await.unwrap();
-    let mut page = f.db().export_page(&mut tx, None).await.unwrap();
-    assert_eq!(page.len(), PAGE_SIZE as usize);
-    let mut cursor = page.last().unwrap().0;
-    let mut exported: Vec<_> = page.drain(..).map(|(_, record)| record).collect();
+    let mut exported = Vec::new();
+    let (mut cursor, count) = f
+        .db()
+        .visit_export_page(&mut tx, None, |record| {
+            exported.push(record.clone());
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert_eq!(count, PAGE_SIZE as usize);
     // Mutate rows not yet exported on a different connection. All these commits
     // finish while the reader is open: export must not take a project write lock.
     let mut writer = f.db().write().await.unwrap();
@@ -140,13 +146,19 @@ async fn consistent_snapshot(postgres: bool) {
     f.db().insert(&mut writer, &record(RECORDS)).await.unwrap();
     writer.commit().await.unwrap();
     loop {
-        let page = f.db().export_page(&mut tx, Some(cursor)).await.unwrap();
-        if page.is_empty() {
+        let (last, count) = f
+            .db()
+            .visit_export_page(&mut tx, cursor, |record| {
+                exported.push(record.clone());
+                Ok(())
+            })
+            .await
+            .unwrap();
+        if count == 0 {
             break;
         }
-        assert!(page.len() <= PAGE_SIZE as usize);
-        cursor = page.last().unwrap().0;
-        exported.extend(page.into_iter().map(|(_, record)| record));
+        assert!(count <= PAGE_SIZE as usize);
+        cursor = last;
     }
     tx.rollback().await.unwrap();
     assert_eq!(exported, (0..RECORDS).map(record).collect::<Vec<_>>());
@@ -249,6 +261,24 @@ async fn failures(postgres: bool) {
             .unwrap(),
         RECORDS + 1
     );
+
+    // A failed write of the first row must stop before decoding the second.
+    // This also prevents a regression to collecting decoded pages in memory.
+    sqlx::query("UPDATE jevia_runs SET record = $2 WHERE project = $1 AND run_id = 'export-1'")
+        .bind(&f.db().project)
+        .bind("{private-malformed")
+        .execute(&f.db().pool)
+        .await
+        .unwrap();
+    let error = f
+        .db()
+        .export(FailingWriter { remaining: 0 })
+        .await
+        .unwrap_err();
+    assert_eq!(error.to_string(), "simulated full disk");
+    let mut tx = f.db().write().await.unwrap();
+    f.db().insert(&mut tx, &record(RECORDS + 1)).await.unwrap();
+    tx.rollback().await.unwrap();
 }
 
 #[tokio::test]

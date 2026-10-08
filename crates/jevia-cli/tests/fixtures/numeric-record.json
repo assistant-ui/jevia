@@ -1,0 +1,25 @@
+{
+  "schema_version": 6,
+  "run_id": "numeric-boundary",
+  "tier": "fast",
+  "suggested_tier": "fast",
+  "confidence": 0.9,
+  "probabilities": {},
+  "fallback_applied": false,
+  "jev_model": "fixture",
+  "created_at_ms": 1,
+  "source": "live",
+  "task": "PRIVATE numeric fixture",
+  "outcome": "unknown",
+  "lifecycle": {"state": "completed", "started_at_ms": 1, "finished_at_ms": 2},
+  "outcome_evidence": {"source": "manual", "recorded_at_ms": 2},
+  "feedback": [{"previous_outcome": "unknown", "previous_source": null, "outcome": "unknown", "recorded_at_ms": 2, "reason": "PRIVATE feedback"}],
+  "execution": {
+    "harness": "app",
+    "model": "requested",
+    "duration_ms": 1,
+    "exit_code": 0,
+    "verification": {"command": "PRIVATE verification", "launched": true, "duration_ms": 1, "exit_code": 0},
+    "observations": {"source": "application", "status": "recorded", "events": [{"kind": "turn_completed", "recorded_at_ms": 1}]}
+  }
+}

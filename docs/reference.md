@@ -1451,7 +1451,8 @@ change the destination; setup cannot detect which database it previously named.
   a write probe, automatic repair, Jev request, or cache access. JSONL validates
   record schemas and nonempty/unique run IDs under the shared history lock,
   streaming records while retaining an ID set (memory grows with the IDs).
-  SQL uses 200-row pages in one consistent read snapshot to validate record
+  SQL streams records within 200-row keyset pages in one consistent read snapshot
+  (without collecting page payloads) to validate record
   schemas, indexed run IDs, learning flags against current evidence rules, and
   positive append ordinals bounded by the project's append counter. Gaps left
   by retention are valid; the counter need not equal the newest retained ordinal.
@@ -1466,6 +1467,11 @@ change the destination; setup cannot detect which database it previously named.
   access check separately when needed; database-native integrity checks and
   backups remain the operator's responsibility. Missing storage is not initialized.
 - Database/record schema versions are checked; unknown versions are rejected.
+  Record timestamps, durations, and observation counters must be nonnegative
+  integers no greater than `9007199254740991` (`Number.MAX_SAFE_INTEGER`), matching
+  the Node SDK's JSON contract. Reads, deep checks, and imports reject values
+  outside that range without rounding or rewriting the source history. Keep the
+  original file/database and inspect invalid values locally before correcting them.
   Driver errors are redacted and database operations have five-second timeouts.
   An outage never silently switches history back to local JSONL.
 - Imports preview by default and commit all-or-nothing with `--apply`. Identical
@@ -1488,8 +1494,9 @@ change the destination; setup cannot detect which database it previously named.
   all database writers); this is not a resumable or chunk-committed import. Guided
   `storage setup --import-jsonl` still captures its migration source in memory.
 - `jevia storage export --output .jevia/snapshot.jsonl` writes a new private
-  snapshot in append order. It streams one JSONL record or a bounded SQL page at
-  a time, rather than loading the entire history. JSONL holds its shared history
+  snapshot in append order. It validates and writes one JSONL or SQL record at
+  a time, without collecting SQL page payloads. Driver prefetch buffers and the
+  largest record still require memory. JSONL holds its shared history
   lock; SQL uses one consistent read snapshot across all pages (PostgreSQL
   repeatable-read/read-only, SQLite WAL snapshot) without taking the project write
   lock. SQL changes committed after the snapshot begins appear in a later export,
@@ -1555,6 +1562,12 @@ or stdout/stderr streamed by your configured harness and verifier.
 Provider and transport failures also omit raw response values and endpoint URLs,
 including underlying error chains. Diagnostics retain safe failure categories,
 JSON positions where available, and HTTP status codes.
+
+Routing HTTP requests never follow redirects, including same-origin redirects.
+Configure the canonical Jev API base URL directly. A 3xx response fails with its
+status code; its Location header and response body are not logged. This prevents
+redirects from forwarding current tasks, historical evidence, or credentials to
+another endpoint. Failed requests do not create routing decisions or cache entries.
 
 ### History maintenance
 

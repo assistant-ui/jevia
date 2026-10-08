@@ -4,6 +4,8 @@ mod cursor;
 #[cfg(test)]
 mod fairness;
 mod input;
+#[cfg(test)]
+mod journal_tests;
 mod loss;
 use crate::{paths::ProjectPaths, storage::Storage};
 use anyhow::{Context, Result, bail};
@@ -513,12 +515,40 @@ async fn supported_version(
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(tag = "type", content = "event", rename_all = "snake_case")]
+#[serde(
+    tag = "type",
+    content = "event",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 enum Entry {
     Event(HarnessEvent),
     Discarded,
     Truncated,
     Snapshot(HarnessObservations),
+}
+
+// Journals are consumed and replaced by capture/replay. Unlike read-only history
+// decoding, accepting unknown metadata here would silently erase it. Keep the
+// additive history format permissive, but leave newer journals for a compatible
+// reader. Nested events and totals already reject unknown fields in jevia-core.
+fn journal_entry(line: &[u8]) -> Result<Entry> {
+    let value: Value = serde_json::from_slice(line)?;
+    if value.get("type").and_then(Value::as_str) == Some("snapshot")
+        && value
+            .get("event")
+            .and_then(Value::as_object)
+            .is_some_and(|object| {
+                object
+                    .keys()
+                    .any(|key| !matches!(key.as_str(), "source" | "status" | "events" | "totals"))
+            })
+    {
+        bail!("unsupported observation snapshot field");
+    }
+    // Decode the original bytes, not the Value projection: serde must still
+    // reject duplicate fields, including inside sampled events and totals.
+    Ok(serde_json::from_slice(line)?)
 }
 
 pub(crate) fn checkpoint_matches(bytes: &[u8], saved: &HarnessObservations) -> bool {
@@ -636,7 +666,7 @@ fn read_journal(file: &mut File) -> Result<HarnessObservations> {
         .filter(|line| !line.is_empty())
         .collect();
     for line in &lines {
-        match serde_json::from_slice::<Entry>(line) {
+        match journal_entry(line) {
             Ok(Entry::Snapshot(snapshot)) if lines.len() == 1 => return Ok(snapshot),
             Ok(Entry::Event(event))
                 if event.validate().is_ok() && observations.events.len() < MAX_HARNESS_EVENTS =>

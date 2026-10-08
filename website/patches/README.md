@@ -35,8 +35,29 @@ security gates or ignore advisories to land a version update.
 Farm 0.1.0 resolves package metadata from the package entry point when the manifest
 is not exported, so the previous `sharp@0.35.4.patch` is no longer needed. Farm now
 uses Sharp 0.35.5 without patching its exports. The existing security override
-still prevents other dependency paths from resolving Sharp below 0.35.4.
+still prevents other dependency paths from resolving Sharp below 0.35.5.
 
 `tests/build/runtime.test.mjs` verifies the bundled version through Sharp's public
 `versions.sharp` property, encodes a PNG, and reads its metadata using the packaged
 native runtime. Do not restore a private manifest export just to check a version.
+
+## Gray-matter YAML engine
+
+The version-scoped `gray-matter@4.0.3.patch` migrates its two YAML API calls from
+`safeLoad`/`safeDump` to JS-YAML 4's `load`/`dump`. The accompanying dependency
+override selects JS-YAML 4.3.2, whose default schema excludes JavaScript-specific
+tags. This removes the JS-YAML 3 → argparse 1 → sprintf-js dependency path for
+[GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), which has
+no patched sprintf-js release. An override alone is not sufficient: the old
+method names throw in JS-YAML 4.
+
+`tests/frontmatter.test.mjs` resolves the parser through Farm's installed docs
+dependency and checks metadata, body content, YAML round-trips, invalid input,
+and rejection of JavaScript-specific YAML tags. Remove the patch and override
+together when gray-matter adopts a safe dependency path upstream.
+
+The source-map-js 1.2.2 and Sharp 0.35.5 minimum-version overrides also cover
+current audit findings. The scoped Geist override removes its unused Next.js
+peer: Jevia loads only the bundled font files through Farm's `localFont`, never
+Geist's Next.js font adapters. This avoids installing a second web framework and
+its advisory-bearing dependency tree. Audit remains unfiltered.
