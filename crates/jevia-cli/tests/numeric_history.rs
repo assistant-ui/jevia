@@ -15,7 +15,7 @@ fn cli(root: &Path) -> Command {
 }
 
 #[test]
-fn unsafe_history_numbers_fail_before_output_routing_or_import_without_rewriting() {
+fn invalid_history_evidence_fails_before_output_routing_or_import_without_rewriting() {
     let root = tempfile::tempdir().unwrap();
     cli(root.path()).arg("init").assert().success();
     let fixture: Value =
@@ -36,7 +36,7 @@ fn unsafe_history_numbers_fail_before_output_routing_or_import_without_rewriting
         .args(["storage", "init"])
         .assert()
         .success();
-    for path in [
+    let numeric_cases = [
         "/created_at_ms",
         "/lifecycle/started_at_ms",
         "/lifecycle/finished_at_ms",
@@ -45,10 +45,24 @@ fn unsafe_history_numbers_fail_before_output_routing_or_import_without_rewriting
         "/execution/duration_ms",
         "/execution/verification/duration_ms",
         "/execution/observations/events/0/recorded_at_ms",
-    ] {
+    ]
+    .into_iter()
+    .map(|path| (path, json!(MAX_SAFE_INTEGER), json!(MAX_SAFE_INTEGER + 2)));
+    let text_cases = [
+        "/execution/harness",
+        "/execution/model",
+        "/execution/verification/command",
+    ]
+    .into_iter()
+    .flat_map(|path| {
+        ["", " \t\n", "\u{feff}"]
+            .into_iter()
+            .map(move |text| (path, json!(" valid text "), json!(text)))
+    });
+    for (path, valid, invalid) in numeric_cases.chain(text_cases) {
         fs::write(&config_path, &default_config).unwrap();
         let mut input = fixture.clone();
-        *input.pointer_mut(path).unwrap() = json!(MAX_SAFE_INTEGER);
+        *input.pointer_mut(path).unwrap() = valid.clone();
         fs::write(&history, format!("{input}\n")).unwrap();
         cli(root.path())
             .args(["storage", "check", "--deep", "--json"])
@@ -65,10 +79,10 @@ fn unsafe_history_numbers_fail_before_output_routing_or_import_without_rewriting
             serde_json::from_slice::<Value>(&shown)
                 .unwrap()
                 .pointer(path),
-            Some(&json!(MAX_SAFE_INTEGER))
+            Some(&valid)
         );
 
-        *input.pointer_mut(path).unwrap() = json!(MAX_SAFE_INTEGER + 2);
+        *input.pointer_mut(path).unwrap() = invalid;
         let raw = format!("{input}\n");
         fs::write(&history, &raw).unwrap();
         for args in [
@@ -76,6 +90,8 @@ fn unsafe_history_numbers_fail_before_output_routing_or_import_without_rewriting
             vec!["runs", "show", "numeric-boundary", "--json"],
             vec!["stats", "--json"],
             vec!["route", "synthetic", "--json"],
+            vec!["runs", "repair", "--apply"],
+            vec!["runs", "archive", "--keep", "1", "--apply"],
         ] {
             let output = cli(root.path())
                 .args(args)

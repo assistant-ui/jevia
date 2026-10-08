@@ -238,7 +238,7 @@ pub struct RouteRecord {
 }
 
 impl RouteRecord {
-    /// Validate numeric fields before storage, import, or returning JSON to clients.
+    /// Validate evidence fields before storage, import, or returning JSON to clients.
     /// Reject out-of-range values instead of rounding, clamping, or rewriting them.
     pub fn validate(&self) -> Result<(), &'static str> {
         self.decision.validate()?;
@@ -257,8 +257,14 @@ impl RouteRecord {
             validate_millis(feedback.recorded_at_ms)?;
         }
         if let Some(execution) = &self.execution {
+            if !has_sdk_text(&execution.harness) || !has_sdk_text(&execution.model) {
+                return Err("execution harness and model must be nonempty");
+            }
             validate_millis(execution.duration_ms)?;
             if let Some(verification) = &execution.verification {
+                if !has_sdk_text(&verification.command) {
+                    return Err("verification command must be nonempty");
+                }
                 validate_millis(verification.duration_ms)?;
             }
             if let Some(observations) = &execution.observations {
@@ -313,6 +319,15 @@ impl RouteRecord {
     }
 }
 
+// Match String.prototype.trim used by the SDK: ECMAScript includes BOM but
+// excludes NEXT LINE (U+0085), unlike Rust's Unicode White_Space predicate.
+// Validation never trims or otherwise rewrites the persisted value.
+fn has_sdk_text(value: &str) -> bool {
+    !value
+        .trim_matches(|ch: char| ch == '\u{feff}' || (ch.is_whitespace() && ch != '\u{85}'))
+        .is_empty()
+}
+
 fn now_ms() -> u64 {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -324,6 +339,39 @@ fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn execution_text_matches_sdk_without_requiring_optional_evidence() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/numeric-record.json")).unwrap();
+        let cases: Vec<(String, bool)> =
+            serde_json::from_str(include_str!("../tests/fixtures/execution-text.json")).unwrap();
+        for schema in 1..=RECORD_SCHEMA_VERSION {
+            for path in [
+                "/execution/harness",
+                "/execution/model",
+                "/execution/verification/command",
+            ] {
+                for (text, valid) in &cases {
+                    let mut value = fixture.clone();
+                    value["schema_version"] = schema.into();
+                    *value.pointer_mut(path).unwrap() = text.clone().into();
+                    let record: RouteRecord = serde_json::from_value(value).unwrap();
+                    assert_eq!(
+                        record.validate().is_ok(),
+                        *valid,
+                        "{schema}: {path}: {text:?}"
+                    );
+                }
+            }
+        }
+        let mut record: RouteRecord = serde_json::from_value(fixture).unwrap();
+        record.execution.as_mut().unwrap().verification = None;
+        assert!(record.validate().is_ok());
+        record.execution = None;
+        record.lifecycle = None;
+        assert!(record.validate().is_ok());
+    }
 
     #[test]
     fn legacy_records_without_execution_evidence_remain_readable() {

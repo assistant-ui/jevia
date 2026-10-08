@@ -8,6 +8,26 @@ const fixture = JSON.parse(readFileSync(new URL("../../../crates/jevia-core/test
 // Keep fixtures local to each published Rust crate, and catch contract drift here.
 assert.deepEqual(fixture, JSON.parse(readFileSync(new URL("../../../crates/jevia-cli/tests/fixtures/numeric-record.json", import.meta.url), "utf8")));
 
+test("execution text agrees with Rust without requiring verification", () => {
+  const cases = JSON.parse(readFileSync(new URL("../../../crates/jevia-core/tests/fixtures/execution-text.json", import.meta.url), "utf8"));
+  for (const schema_version of [1, 2, 3, 4, 5, 6]) {
+    for (const path of [["execution", "harness"], ["execution", "model"], ["execution", "verification", "command"]]) {
+      for (const [text, valid] of cases) {
+        const value = structuredClone(fixture);
+        value.schema_version = schema_version;
+        path.slice(0, -1).reduce((object, key) => object[key], value)[path.at(-1)] = text;
+        assert.equal(isRouteRecord(value), valid, `${schema_version}:${path.join(".")}:${JSON.stringify(text)}`);
+      }
+    }
+  }
+  const optional = structuredClone(fixture);
+  delete optional.execution.verification;
+  assert.ok(isRouteRecord(optional));
+  delete optional.execution;
+  delete optional.lifecycle;
+  assert.ok(isRouteRecord(optional));
+});
+
 test("history timestamps and durations agree with Rust at safe-integer boundaries", () => {
   for (const schema_version of [1, 2, 3, 4, 5, 6]) {
     for (const path of [
