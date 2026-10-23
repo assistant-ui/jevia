@@ -32,7 +32,8 @@ affected version lines, leaving H3 1.x and the bundled Vite 8 build unchanged.
 | `undici` through `@scalar/json-magic@0.15.2` | 7.29.1 | Fix GHSA-3wwx-pv8p-q78v; leave the separate 7.30.0 dependency unchanged |
 | `srvx` | 0.11.13 | Fix GHSA-p36q-q72m-gchr |
 | `uuid` | 11.1.1 | Fix GHSA-w5hq-g745-h8pq while keeping CommonJS support for Sequelize |
-| `vite` | 7.3.6 | Fix the Vite alerts and remove vulnerable esbuild 0.21; satisfy Nitro's Vite 7 peer |
+| `vite` 7.x | 7.3.7 | Fix the Vite and launch-editor alerts and remove vulnerable esbuild 0.21; satisfy Nitro's Vite 7 peer |
+| `vite-rolldown` (Farm core's `npm:vite` alias) | 8.1.6 | Farm pins 8.1.5; fix the same Vite and launch-editor alerts |
 | `yaml` 2.x | 2.8.3 | Fix GHSA-48c2-rrv3-qjmp |
 
 Review these overrides when upgrading Farm; remove them only when the upstream
