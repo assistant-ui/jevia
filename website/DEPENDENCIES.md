@@ -2,7 +2,7 @@
 
 ## Verification
 
-Use the pinned pnpm version from `package.json` and Node 22.13+:
+Use the pinned pnpm version from `package.json` and Node 26.13.0 (`.node-version`):
 
 ```sh
 pnpm install --frozen-lockfile

@@ -4,8 +4,8 @@ import test from "node:test";
 
 const websiteRoot = new URL("../", import.meta.url);
 
-test("local development, CI, and Vercel use the Node 22 release line", async () => {
-  const major = (await readFile(new URL(".node-version", websiteRoot), "utf8")).trim();
+test("local development and CI use Node 26 LTS; Vercel builds on the 24 line", async () => {
+  const version = (await readFile(new URL(".node-version", websiteRoot), "utf8")).trim();
   const packageJson = JSON.parse(
     await readFile(new URL("package.json", websiteRoot), "utf8"),
   );
@@ -14,7 +14,8 @@ test("local development, CI, and Vercel use the Node 22 release line", async () 
     "utf8",
   );
 
-  assert.equal(major, "22");
-  assert.equal(packageJson.engines.node, `${major}.x`);
+  assert.match(version, /^26\.\d+\.\d+$/);
+  // Vercel reads engines.node and does not offer Node 26 yet.
+  assert.equal(packageJson.engines.node, "24.x");
   assert.match(workflow, /node-version-file: website\/\.node-version/);
 });
