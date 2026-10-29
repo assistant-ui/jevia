@@ -11,7 +11,9 @@ interface CommandSettings {
   input?: string;
 }
 
-type Failure = (cause: ExecFileException, stdout: string, stderr: string) => Error;
+/** A process failure as reported by `execFile`, minus `cmd`, which this module never records. */
+export type CommandFailure = Omit<ExecFileException, "cmd">;
+type Failure = (cause: CommandFailure, stdout: string, stderr: string) => Error;
 const TERMINATION_GRACE_MS = 100;
 
 /** Bound settlement independently of process exit, with byte-limited capture. */
@@ -22,7 +24,7 @@ export function runCommand(settings: CommandSettings, signal: AbortSignal | unde
     let settled = false;
     const output = { stdout: [] as Buffer[], stderr: [] as Buffer[] };
     const sizes = { stdout: 0, stderr: 0 };
-    const finish = (error?: ExecFileException) => {
+    const finish = (error?: CommandFailure) => {
       if (settled) return;
       settled = true;
       clearTimeout(deadline);

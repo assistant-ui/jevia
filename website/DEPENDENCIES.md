@@ -2,7 +2,7 @@
 
 ## Verification
 
-Use the pinned pnpm version from `package.json` and Node 22.13+:
+Use the pinned pnpm version from `package.json` and Node 26.13.0 (`.node-version`):
 
 ```sh
 pnpm install --frozen-lockfile
@@ -29,12 +29,16 @@ affected version lines, leaving H3 1.x and the bundled Vite 8 build unchanged.
 | `@ai-sdk/provider-utils` 4.x | 4.0.33 | Fix GHSA-866g-f22w-33x8 without moving to AI SDK 7 dependencies |
 | `h3` 2.0.1 prereleases | 2.0.1-rc.18 | Fix the six H3 advisories through GHSA-q5pr-72pq-83v3 |
 | `sharp` | 0.35.4 | Fix GHSA-f88m-g3jw-g9cj and GHSA-rgj7-g3m4-5g8c |
-| `undici` through `@scalar/json-magic@0.15.2` | 7.29.1 | Fix GHSA-3wwx-pv8p-q78v; leave the separate 7.30.0 dependency unchanged |
+| `undici` 7.x below 7.30.1 | 7.30.1 | Fix GHSA-3wwx-pv8p-q78v, GHSA-9fm3-97px-rjf6, GHSA-55wc-3pg8-jfw6 and the other 7.29 advisories |
 | `srvx` | 0.11.13 | Fix GHSA-p36q-q72m-gchr |
 | `uuid` | 11.1.1 | Fix GHSA-w5hq-g745-h8pq while keeping CommonJS support for Sequelize |
 | `vite` 7.x | 7.3.7 | Fix the Vite and launch-editor alerts and remove vulnerable esbuild 0.21; satisfy Nitro's Vite 7 peer |
 | `vite-rolldown` (Farm core's `npm:vite` alias) | 8.1.6 | Farm pins 8.1.5; fix the same Vite and launch-editor alerts |
 | `yaml` 2.x | 2.8.3 | Fix GHSA-48c2-rrv3-qjmp |
+| `zod` 4.x below 4.6.6 | 4.6.7 | Fix the zod <4.6.6 advisory (Scalar OpenAPI parser and MCP server pin older 4.x) |
+| `fast-uri` 3.x | 3.1.9 | Fix GHSA-xhq7-xmqj-769h, GHSA-333x-w4r6-6crp and related fast-uri advisories |
+| `satori` | 0.33.5 | Fix the satori <0.33.5 advisory; `@vercel/og@0.11.1` pins 0.25.0 |
+| `fflate` 0.7.x | 0.7.5 | Fix GHSA-px8p-9vwx-vf98 (reached through satori) |
 
 Review these overrides when upgrading Farm; remove them only when the upstream
 dependency graph selects safe versions without them. Keep the frozen lockfile
