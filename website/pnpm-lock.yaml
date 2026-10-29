@@ -37,27 +37,27 @@ importers:
   .:
     dependencies:
       '@farm.js/core':
-        specifier: 0.1.0
-        version: 0.1.0(patch_hash=1ab2543c6a270c8de08df7cbe610e67b73a37c7a0b9c1f7de74e7eccbec54f80)(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.5)(@vercel/sandbox@2.9.2)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.12(srvx@1.0.5))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))(jiti@2.7.0)(kysely@0.28.17)(lightningcss@1.33.0)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sequelize@6.37.8(pg@8.23.0))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.0))(typescript@5.9.3)(yaml@2.8.3)
+        specifier: 0.1.37
+        version: 0.1.37(@aws-sdk/client-dynamodb@3.1141.0)(@aws-sdk/lib-dynamodb@3.1141.0(@aws-sdk/client-dynamodb@3.1141.0))(@farming-labs/docs@0.2.125(@vercel/sandbox@2.9.2)(react@19.3.1))(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.6)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.17(srvx@1.0.8))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))(esbuild@0.28.2)(jiti@2.7.0)(kysely@0.28.17)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sequelize@6.37.8(pg@8.23.1))(sharp@0.35.5(@types/node@26.6.6))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))(yaml@2.8.3)
       geist:
         specifier: 1.7.2
         version: 1.7.2
       lucide-react:
         specifier: 1.48.0
-        version: 1.48.0(react@19.3.0)
+        version: 1.48.0(react@19.3.1)
       prism-react-renderer:
         specifier: ^2.4.1
-        version: 2.4.1(react@19.3.0)
+        version: 2.4.1(react@19.3.1)
       react:
         specifier: ^19.0.0
-        version: 19.3.0
+        version: 19.3.1
       react-dom:
         specifier: ^19.0.0
-        version: 19.3.0(react@19.3.0)
+        version: 19.3.1(react@19.3.1)
     devDependencies:
       '@farm.js/cli':
         specifier: 0.1.0
-        version: 0.1.0(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.5)(@vercel/sandbox@2.9.2)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.12(srvx@1.0.5))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))(jiti@2.7.0)(kysely@0.28.17)(lightningcss@1.33.0)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sequelize@6.37.8(pg@8.23.0))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.0))(typescript@5.9.3)(yaml@2.8.3)
+        version: 0.1.0(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.6)(@vercel/sandbox@2.9.2)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.17(srvx@1.0.8))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))(jiti@2.7.0)(kysely@0.28.17)(lightningcss@1.33.0)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sequelize@6.37.8(pg@8.23.1))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))(typescript@5.9.3)(yaml@2.8.3)
       '@types/react':
         specifier: ^19.0.0
         version: 19.3.0
@@ -270,8 +270,14 @@ packages:
   '@better-auth/utils@0.5.0':
     resolution: {integrity: sha512-BL8W4EfIZFwlu0r54m3v1ztjDhu6dDe/amLTm0xybmbZaNgYUqhD3SjpAsnq0q8YD6/ki4iwIgxJNLP/N3TxiA==}
 
+  '@better-auth/utils@0.5.1':
+    resolution: {integrity: sha512-WETqw5vQ52uQ/xwWR4E8rTgT6fDEr/wnS+otDNkBCa/69281FCF32OKDdQUcahMCnjsvqXBNiEvAQHFB0EVRRg==}
+
   '@better-fetch/fetch@1.3.2':
     resolution: {integrity: sha512-Gs7n99b5tqUC6cQAPbV0uED3IraHB6xQbHLQ/C3l7ZFafHScOx9pQ+DYmP5blbLFShVWLqxNUlI9wi4xU/X+ow==}
+
+  '@better-fetch/fetch@1.3.3':
+    resolution: {integrity: sha512-U6SlDt/GUWtK2JAxS/NhdoYTEim+EL1G5byz2TUj83KjLZBUpYzb5SmX0aXaCnbGkAjFKnV/o/0+cyXMbEcqqg==}
 
   '@clack/core@1.5.1':
     resolution: {integrity: sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ==}
@@ -508,6 +514,30 @@ packages:
       react-dom:
         optional: true
 
+  '@farm.js/core@0.1.37':
+    resolution: {integrity: sha512-wlOzQsxC2Y3S/C5q+C1AxAKSYfJlgQsUzZxZn/OE08zlBVuvXFIdqeHj4Ifb4SRB5h0sihcPzpr9V02f9xiRxA==}
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      '@farming-labs/docs': ^0.2.118
+      '@tailwindcss/vite': ^4.3.3
+      '@vercel/og': ^1.0.1
+      react: ^18.2.0 || ^19.0.0
+      react-dom: ^18.2.0 || ^19.0.0
+      sharp: ^0.35.5
+    peerDependenciesMeta:
+      '@farming-labs/docs':
+        optional: true
+      '@tailwindcss/vite':
+        optional: true
+      '@vercel/og':
+        optional: true
+      react:
+        optional: true
+      react-dom:
+        optional: true
+      sharp:
+        optional: true
+
   '@farm.js/tunnel-darwin-arm64@0.1.1':
     resolution: {integrity: sha512-QFZGrH22vJbHa7DbwH61kraQzIFhmi8ipd4fIP9s5cHWQB+2W0uEodZoBVbrSLhxGwxcYHqG46VJwlCIQCjnvA==}
     engines: {node: '>=20.0.0'}
@@ -576,88 +606,217 @@ packages:
   '@farming-labs/orm-d1@0.0.62':
     resolution: {integrity: sha512-yIeY4quFnWjclFzh8xuvgYVvr7fO+1yCPKDbgX9qMqS+uHCH1HFnPI58UJf9Tj1n6bSq11OUcBqwODeRHwK/3w==}
 
+  '@farming-labs/orm-d1@0.0.65':
+    resolution: {integrity: sha512-6nFfXt62qflKoUcNkvirQj16WoI9SPV39Qeob6iF88kBnWSkm6HPqCFKW5gGGcekmaijkoc/oYFm6MCx2QwbLw==}
+
   '@farming-labs/orm-drizzle@0.0.62':
     resolution: {integrity: sha512-XJ6KtJ4pMfJVDBEi78vBuD4cWvqjK3JbK+Y5GbpJxdqNIpNoWEoDGsWnY/JwBMqJJdZbNLuV845uzuHzvTIXSw==}
     peerDependencies:
       drizzle-orm: ^0.45.2
 
+  '@farming-labs/orm-drizzle@0.0.65':
+    resolution: {integrity: sha512-/dXo/aHawf9BVmLctFd/FB9cl8MVsh/nfiY+/HRUyG2YJKnVHxJsxV7SKPOl7dzyRf8qThKlqVapSesftMZ/gQ==}
+    peerDependencies:
+      drizzle-orm: ^0.45.2
+    peerDependenciesMeta:
+      drizzle-orm:
+        optional: true
+
   '@farming-labs/orm-dynamodb@0.0.62':
     resolution: {integrity: sha512-ycOpgK46F4lnI2oj7E3MLfVDw/BvYWdOkaYgP5/eAXJj5bcbFjTRGPdS/LBm9NPDPugzd4f7SBNGUVJCqaS/0A==}
+
+  '@farming-labs/orm-dynamodb@0.0.65':
+    resolution: {integrity: sha512-N0NBz9WMHqtvn/dVI0ZLvVLM9sdNsuAehVSnHkfmimP9aFPF9nInhELuUWaksD+Wo3uwZzErFfvGnXOu8ew6mA==}
+    peerDependencies:
+      '@aws-sdk/client-dynamodb': ^3.1049.0
+      '@aws-sdk/lib-dynamodb': ^3.1049.0
+    peerDependenciesMeta:
+      '@aws-sdk/client-dynamodb':
+        optional: true
+      '@aws-sdk/lib-dynamodb':
+        optional: true
 
   '@farming-labs/orm-edgedb@0.0.62':
     resolution: {integrity: sha512-O3e9qwUnASDmpAK82T8YeFBpwSctr5XXRMNDLLfhtW12x9HBbED/uk2qq3df4HK7L+3t43viwO9lyeYR33LIoQ==}
 
+  '@farming-labs/orm-edgedb@0.0.65':
+    resolution: {integrity: sha512-VfcFmPbKBFe9U4CL2MqKbL0jxRifBB+fVM5mxU2AJ6G9l/1i6AzRDtsfXhRy9Sl8swsRA4C+WXTGXXPnTCoB6w==}
+
   '@farming-labs/orm-firestore@0.0.62':
     resolution: {integrity: sha512-0aU0LnQZTDHqKkPYsP4OVcPBvdsHLVNFoAloheaj/3wxSoVYj0CvMY5VvyUaad8lSFhzAPQCf/ThnWqP8X9x1A==}
 
+  '@farming-labs/orm-firestore@0.0.65':
+    resolution: {integrity: sha512-iJB9vW/GGbWb0gXJef8pTmYcbeXXabLyRou82trWjOmrbUblRqMXX1YaErLe7FvJj+JUVhJ6YGM0QHGpFPz6NA==}
+
   '@farming-labs/orm-kv@0.0.62':
     resolution: {integrity: sha512-ly98TndFaKX2ZU07dXqicUzE6Wy9tB2kflHhV8gPL6CZ7Z/9gaH497kw1oTjD57cHfIQUygluvq16En40KLq+Q==}
+
+  '@farming-labs/orm-kv@0.0.65':
+    resolution: {integrity: sha512-C9uzRKhqC/xwROoZJmgZFYEtW/+hyzg0pz/VrvHLMYiAs9CpAZS7/qFlgi4o3VDMPHwwG+bIQuv+ylonhASIYw==}
 
   '@farming-labs/orm-kysely@0.0.62':
     resolution: {integrity: sha512-C2JQKWDnZOK+xrEWUASwCO3nQ3WMlZKo+CIhbGtLuEx/CiCzETUj9c22gO/N40AVy4UWqJa5dDps3Amp/DfzGw==}
     peerDependencies:
       kysely: ^0.28.17
 
+  '@farming-labs/orm-kysely@0.0.65':
+    resolution: {integrity: sha512-W+mcEYxuoHggPSXyjBNSzgNr+az9xZoWgP2Y7XFBnzBsGSwE3FpEL79xXzdAO9oyzAwwKYetg64ThEL5YtbLKA==}
+    peerDependencies:
+      kysely: ^0.28.17
+    peerDependenciesMeta:
+      kysely:
+        optional: true
+
   '@farming-labs/orm-mikroorm@0.0.62':
     resolution: {integrity: sha512-BSU7t+26Jtzk05yhhGLglJ3yi2QQGATGVJCEpWKQw1a75spU6jweh6pSBqBc68hXhgrmP5/9bdekJu0BNhAzDw==}
     peerDependencies:
       '@mikro-orm/core': ^7.0.17
+
+  '@farming-labs/orm-mikroorm@0.0.65':
+    resolution: {integrity: sha512-2cylBPkAcwKOYEtl9tUw8SVui1ExkLNzJkiHBT/zrRWEF9mBu04X+YhZ94ZHkxJ2LQur67OIlHhp8fXbeLp7YA==}
+    peerDependencies:
+      '@mikro-orm/core': ^7.0.17
+    peerDependenciesMeta:
+      '@mikro-orm/core':
+        optional: true
 
   '@farming-labs/orm-mongo@0.0.62':
     resolution: {integrity: sha512-wJZuaYoeePgRLcL+4GWLG8L9+k+VkmqeQgog2pT6zCrTKeactW+ZnFnJG5XNt8uRpRf29TZBglG6zPhCg36yPg==}
     peerDependencies:
       mongodb: ^6.0.0
 
+  '@farming-labs/orm-mongo@0.0.65':
+    resolution: {integrity: sha512-/6EBcsg0HHcRQF6hr+lssq2G52D0Fwyp4ZwLSibetBf+3d7jFbtNx2ahsGltYUuL64s/UZo+VBUjIZIuyFDT4A==}
+    peerDependencies:
+      mongodb: ^6.0.0
+    peerDependenciesMeta:
+      mongodb:
+        optional: true
+
   '@farming-labs/orm-mongoose@0.0.62':
     resolution: {integrity: sha512-POrb37nRg5VKPzATl9QGpox9fzEi4COoJ70K/Mnkpwh5/PihWceOPtAAbr3i6DylYnW22Aa4E+/XW4LGVTI3Hw==}
     peerDependencies:
       mongoose: ^8.0.0
 
+  '@farming-labs/orm-mongoose@0.0.65':
+    resolution: {integrity: sha512-FlX+8oHlKz1lX6nhzim/P733dn6/F4AHomFx95gB2Xw3Yfw4frqxcFrmDE4yplUCHo/4QFS5MYbPPNXAnwz+Og==}
+    peerDependencies:
+      mongoose: ^8.0.0
+    peerDependenciesMeta:
+      mongoose:
+        optional: true
+
   '@farming-labs/orm-neo4j@0.0.62':
     resolution: {integrity: sha512-LqpmSXrwRKxYvUFpjWoYwXcP+7lKJl/C17aaPSapQE2Nktig4Yw8iPi4OV7F7A9VLNTLaDWbl3qnDF1Cz13/iQ==}
+
+  '@farming-labs/orm-neo4j@0.0.65':
+    resolution: {integrity: sha512-bfxvXOO/bB+bYOhVq6w3rc0Mb8ofNyL67LfQENH31CFq7n0VR/6ufqCIAUzcrT7N3Ml1cAhbeI+tA5o8ZIfRNQ==}
 
   '@farming-labs/orm-prisma@0.0.62':
     resolution: {integrity: sha512-rAmBWDxFwpo6Cg7PZz5jGzek00klsOrR0Rd3MxTYvJX11OQrHlg3MYtJHMUyIrb+rpeniI8EuNmei5n2Vx2mDA==}
     peerDependencies:
       '@prisma/client': ^6.0.0
 
+  '@farming-labs/orm-prisma@0.0.65':
+    resolution: {integrity: sha512-QaQT0nSi8Yo1qkPyh0IJ0Pa8p2VXf/SCDP7GI6F4lmtG8QdCKLV8xMCOYpzyMEQ4BWRefebalaWO8wMK6kpSVA==}
+    peerDependencies:
+      '@prisma/client': ^6.0.0
+    peerDependenciesMeta:
+      '@prisma/client':
+        optional: true
+
   '@farming-labs/orm-redis@0.0.62':
     resolution: {integrity: sha512-jXwdXXz3rSy4aVyhjhMjusgFZbtI4UWLLP7exEApfAk87134jrmdhqfvFlKK/yEeHO9s2iGkjJ4KB/BUHGUueg==}
 
+  '@farming-labs/orm-redis@0.0.65':
+    resolution: {integrity: sha512-g/CaRuzZfvupKn1/LKRAOt6VPsnXroZVktiXppAgrfKIr/JtUj0xi2TfaMrA9bgbF+SWk9a+mBAn/n5ETalqLQ==}
+
   '@farming-labs/orm-runtime@0.0.62':
     resolution: {integrity: sha512-h95+Fma0rbWH4jxrQ1ZAopAJ7OUH076RlImwRd0Unmy9oWoXZ5QK/g0qNR8LLg1CWEY14T2/HJ8d/MnQBuoYKw==}
+
+  '@farming-labs/orm-runtime@0.0.65':
+    resolution: {integrity: sha512-guidSljDw1wBgn36glxz/Lv/G2HR2iNKI33I89WuJGiiNzTqSDBk6peV4t+j5eNaqCxRKnLoc/bYlPPEUh1uuQ==}
+    peerDependencies:
+      '@aws-sdk/client-dynamodb': ^3.1049.0
+    peerDependenciesMeta:
+      '@aws-sdk/client-dynamodb':
+        optional: true
 
   '@farming-labs/orm-sequelize@0.0.62':
     resolution: {integrity: sha512-MY/bzu4DZAcbfilWBpuaEWQvF61p2BYVJj2y/OvcJlRgif+qHOVGiL6C48yl1g2E+4SpROSqgwLjWinLpFrjlQ==}
     peerDependencies:
       sequelize: ^6.37.8
 
+  '@farming-labs/orm-sequelize@0.0.65':
+    resolution: {integrity: sha512-mHLu2pRO3AJmuHWGux6VTKERsCPx9kRsOF/0QLU1IG2DzSU8+Sjx8x7PBBEBABLKxn+KMGEIvkFCmy5exeB5Vw==}
+    peerDependencies:
+      sequelize: ^6.37.8
+    peerDependenciesMeta:
+      sequelize:
+        optional: true
+
   '@farming-labs/orm-sql@0.0.62':
     resolution: {integrity: sha512-Ufr4z4wphmihazj02ZzaW8UoG09v4TRhG+FcnNQBmPHKEkvAoBaGnB74/StzBVMBeKK64HeaZEY7azjOn3vB6g==}
 
+  '@farming-labs/orm-sql@0.0.65':
+    resolution: {integrity: sha512-sBxzDyqiKM38Qy3js08CiydNz6YUKbKdTQnlwswGAqNiLDJU1Zd0qi+NnB3Lrbbi+2abOtyr8qe527Ri8n3Ejw==}
+
   '@farming-labs/orm-supabase@0.0.62':
     resolution: {integrity: sha512-GSv4KjGcPKuxF0TMSTDUGdvo28YoDe86baKotcxeMDffJ2F+lkxlxutpxcqBXMMVbJ5ZIdw+Udikf/MbsE54gA==}
+
+  '@farming-labs/orm-supabase@0.0.65':
+    resolution: {integrity: sha512-PIv3XmjOdSq2XEE/okZmL+EP2vbh54/y1Xv9Gx1Jayzs2g9GambcoA8SioMy+wi5g7ZXJBvFLEqJffO34tw2Xg==}
 
   '@farming-labs/orm-surrealdb@0.0.62':
     resolution: {integrity: sha512-oxJwgq5FNCsR9jG2CZMi3Wun0XsDgPJl+Vv5BUnuSGzMUGqDAdnK2wnDdQ2OuBXNmvRIEL7w9SPvcfE7Jl1rZg==}
     peerDependencies:
       surrealdb: ^2.0.3
 
+  '@farming-labs/orm-surrealdb@0.0.65':
+    resolution: {integrity: sha512-t7hycrzyovL3uY/e7371kW/PQTaviRzKePpvPR9tO3fVkfmJ4+AGxyeOXHoKsnyGk22rqh3JnMv4dKS9g6LFUw==}
+    peerDependencies:
+      surrealdb: ^2.0.3
+    peerDependenciesMeta:
+      surrealdb:
+        optional: true
+
   '@farming-labs/orm-typeorm@0.0.62':
     resolution: {integrity: sha512-cJ1rnLzw+KJIYlGnWgziYtAEKFx8gso8pI8+CHwHahud8RE7Ua+kZni11LXmPv6ZGabV15zI9PEo9+JDv/c60A==}
     peerDependencies:
       typeorm: ^0.3.28
 
+  '@farming-labs/orm-typeorm@0.0.65':
+    resolution: {integrity: sha512-TF3EEdeOHMU3DAJeceM0aUeqTFyoDh2DVu3sb5sVANCIpQwnSrfcfizqIzToOXRZpPJNr+RH/Xkw+xGs0/vfXA==}
+    peerDependencies:
+      typeorm: ^0.3.28
+    peerDependenciesMeta:
+      typeorm:
+        optional: true
+
   '@farming-labs/orm-unstorage@0.0.62':
     resolution: {integrity: sha512-90ZedhspZfXFSnNbtMXQvlp2wv1K8bnnO2m02wbB3QdB8O3FWnPQCsXZlZH3IjXGtHB7S7JCH1TFJDK9H20pbg==}
+
+  '@farming-labs/orm-unstorage@0.0.65':
+    resolution: {integrity: sha512-ITwntwCe2VLcr0RWwYAOGX6tkNGbmcNwEFIAZaLtiiPbO9yQnB/ootCSOXhzH6lklD8BWzDy7gN2/90/12P+5w==}
 
   '@farming-labs/orm-xata@0.0.62':
     resolution: {integrity: sha512-gvpH0wjkg0WPQubHUcL6S+Wy0g6+pIm1G1CN+ANciQ2f19DnclxrSLZF/iL81RHVnLglvrWqZ3rnaKyRRQukEQ==}
     peerDependencies:
       '@xata.io/client': ^0.30.1
 
+  '@farming-labs/orm-xata@0.0.65':
+    resolution: {integrity: sha512-mX4BXe0Ao1EkldkVD+pL7N8JRfmQPgplNOSVCniwIOMuEYFe9RqjgglVLVF6yDfbcKG9MnDtuqeDIgsd69aA/A==}
+    peerDependencies:
+      '@xata.io/client': ^0.30.1
+    peerDependenciesMeta:
+      '@xata.io/client':
+        optional: true
+
   '@farming-labs/orm@0.0.62':
     resolution: {integrity: sha512-L36KN/y7UVdlbxQYVBqtPebKjfYfRuVDyzhCBnOM64HnhkmmWtUAt2HNvx6/jvv9ixe2uXS1aLj6o8cn+QOU7w==}
+
+  '@farming-labs/orm@0.0.65':
+    resolution: {integrity: sha512-5lJfMrqh9nI31qV6UPNPZymMlPUHF/VIvX/qbGG5fdP1NuQFrvXe9ZU8Pu/hYMdqdia7m/LriUdQO0uqr/IhiA==}
 
   '@floating-ui/core@1.8.0':
     resolution: {integrity: sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ==}
@@ -933,16 +1092,28 @@ packages:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
 
-  '@napi-rs/wasm-runtime@1.2.5':
-    resolution: {integrity: sha512-HshSvXzmBxNzqejd3k/KemgQ3hdREUYFRRrgxOZ+gPljDIsO2SDZrVZMd4Z/HsxudQbE62OVyVFE8z9BCurfjA==}
+  '@napi-rs/wasm-runtime@1.2.6':
+    resolution: {integrity: sha512-mRyDmEw9/fCDXCGfL1sbgIw/GUK0PVxRW4YwgPN61F3LQ+fSyoBFarJVzgGyhF6kRzEQZ0FejDqm4WLXSeqQmw==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=23.5.0}
     peerDependencies:
-      '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
-      '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
+      '@emnapi/core': ^1.7.1 || 2.0.0-beta.2
+      '@emnapi/runtime': ^1.7.1 || 2.0.0-beta.2
 
   '@noble/hashes@2.4.0':
     resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
     engines: {node: '>= 20.19.0'}
+
+  '@nodelib/fs.scandir@2.1.5':
+    resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
+    engines: {node: '>= 8'}
+
+  '@nodelib/fs.stat@2.0.5':
+    resolution: {integrity: sha512-RkhPPp2zrqDAQA/2jNhnztcPAlv64XdhIp7a7454A5ovI7Bukxgt7MX7udwAu3zg1DcpPU0rz3VV1SeaqvY4+A==}
+    engines: {node: '>= 8'}
+
+  '@nodelib/fs.walk@1.2.8':
+    resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
+    engines: {node: '>= 8'}
 
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
@@ -958,8 +1129,8 @@ packages:
   '@oxc-project/types@0.140.0':
     resolution: {integrity: sha512-h5LUOzGArYemnW1NMz/DuuQhBi96J6JL2Bk8zE4kvqxB5Sg3jxmCiH4uyOWHDkiKSt5vWlG4FIwCR/DbstcNRQ==}
 
-  '@oxc-project/types@0.151.0':
-    resolution: {integrity: sha512-J1yXrIlNDZVzE3ada310xeAw7nH8yCAyLPuUIsjKatFPmfn5bS1oW+cM+QsGOtVWd5nhSpbwZWx/rue+r5Z+PA==}
+  '@oxc-project/types@0.155.0':
+    resolution: {integrity: sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==}
 
   '@phosphor-icons/core@2.1.1':
     resolution: {integrity: sha512-v4ARvrip4qBCImOE5rmPUylOEK4iiED9ZyKjcvzuezqMaiRASCHKcRIuvvxL/twvLpkfnEODCOJp5dM4eZilxQ==}
@@ -994,8 +1165,8 @@ packages:
     resolution: {integrity: sha512-C7c51Nn4yTxXFKvgh2txJFNweaVcfUPQxwEUFw4aWsCmfiBDJsTSwviIF8EcwjQ6k8bPyMWCl1vw4BdxE569Cg==}
     engines: {node: '>= 10'}
 
-  '@rolldown/binding-android-arm-eabi@1.2.11':
-    resolution: {integrity: sha512-A5kXfGKvKWWZE0TtPrfsvT+q4Y5d1QG8gGUzpYjGydM+fARM9MuX90PrXYXe0XbsDVgyxxNzHo6giCj90bsFNw==}
+  '@rolldown/binding-android-arm-eabi@1.2.15':
+    resolution: {integrity: sha512-aLcgK9gIJ3YRvrrtfSBbRa27F5WrpiTaPulnFpsHPxpUHgFlSgnU4854MHwoRGEBhfRJDWCS2WQ7lIjskE9Olw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
     os: [android]
@@ -1012,8 +1183,8 @@ packages:
     cpu: [arm64]
     os: [android]
 
-  '@rolldown/binding-android-arm64@1.2.11':
-    resolution: {integrity: sha512-z6cTycz+iJ4PVkuL4HHW4DfTfoeU/2nqYYuSOrTmH7yHK5Y0LCOnA03V4ZNxavyVaU1oOqUgIg2klN/s+USGOA==}
+  '@rolldown/binding-android-arm64@1.2.15':
+    resolution: {integrity: sha512-xD7DdZCrbThKuxNg7ooQmvp07ys4J/pnSEMTG3/OdOWl6daC67m/Q4fL78sRHMxTH/N4fGUbYhcPM0MF5WFHkg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [android]
@@ -1030,8 +1201,8 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
-  '@rolldown/binding-darwin-arm64@1.2.11':
-    resolution: {integrity: sha512-jShvqNtP6vDC6/A5JOAzbVV+DkgHqhl/ScVCJEbt+TUY6QYz7YnXcrg3sLtFBniro0f/Ld50ZwCWA6f7KYD1nQ==}
+  '@rolldown/binding-darwin-arm64@1.2.15':
+    resolution: {integrity: sha512-m2WuQ6r0B4OTYxyPpNLtXaMRbRDUbG8YQV2Q3KTdSSK8Th6KHCnC8jVCJt8bvYeSB5WivkkNbc85mKadaSdOxA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [darwin]
@@ -1048,8 +1219,8 @@ packages:
     cpu: [x64]
     os: [darwin]
 
-  '@rolldown/binding-darwin-x64@1.2.11':
-    resolution: {integrity: sha512-f2i2xiNWq1Z1l2++q2fuhZRdLAT3aqxD6vRNm1RAxpUoBcdqNB3C0s1Bt+K+PbEx2F5F4gQp6hqKkphCY/xF9w==}
+  '@rolldown/binding-darwin-x64@1.2.15':
+    resolution: {integrity: sha512-5RtnsHM36nodM9WbMy+zip0LGS/G+y5wro5RHrpOlr4ac24+1zSi9kiV2MP1myZeZ/ifEHfulQcWjnAXzc2C2A==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [darwin]
@@ -1066,8 +1237,8 @@ packages:
     cpu: [x64]
     os: [freebsd]
 
-  '@rolldown/binding-freebsd-x64@1.2.11':
-    resolution: {integrity: sha512-4Ir5FSOKIAMr4r0kExpt1s3bMgzJU3rA45AYOHtQpls0oNeqcYBKrWMlckrYH4KCfGLfkfn1tN1dmZPMVsdXow==}
+  '@rolldown/binding-freebsd-x64@1.2.15':
+    resolution: {integrity: sha512-g3l09pyFqhu+135JKkbkwiKGQmwU5hUMUPJ4VdBADvuqR8d33L6H578rh8m7rtxbdp+VmX/+nzI7nvhSZlzpUQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [freebsd]
@@ -1084,8 +1255,8 @@ packages:
     cpu: [arm]
     os: [linux]
 
-  '@rolldown/binding-linux-arm-gnueabihf@1.2.11':
-    resolution: {integrity: sha512-/gnRDM+39BROzAN/k1OZjDPnDMcZxB/0EUxKjONO5yVkNEvlsoMDrxGNKgZi/ttFriS2gwlDNzB65pvNbFOXIQ==}
+  '@rolldown/binding-linux-arm-gnueabihf@1.2.15':
+    resolution: {integrity: sha512-nIe3VugI97nGQtspPxDqA4sXMUpeiocKIP/CqpY/u/vgbT+alX+cVxu1C/oVBPKg4feNTmYovE91v4DgXvXNwQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
     os: [linux]
@@ -1102,8 +1273,8 @@ packages:
     cpu: [arm64]
     os: [linux]
 
-  '@rolldown/binding-linux-arm64-gnu@1.2.11':
-    resolution: {integrity: sha512-PFaK8HwvAHbaKbBcDNQihjMKYvFnA5hiENx/l5tphTDz1E0WFp32l0A7aq7lyUwGsRw/xSrNIy/gIK4thrSCrw==}
+  '@rolldown/binding-linux-arm64-gnu@1.2.15':
+    resolution: {integrity: sha512-iTBjXx+B5QSvgI89lJfmqh4wTh8NabR1YZIIN3hNx4zSG0EVfVqkOvLulNpG4251pbd6/IAmZ/LefVk1Y4rPhw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
@@ -1120,8 +1291,8 @@ packages:
     cpu: [arm64]
     os: [linux]
 
-  '@rolldown/binding-linux-arm64-musl@1.2.11':
-    resolution: {integrity: sha512-AskzJUIKRLPxkruR1wLKewGbOw+EYfU/9lOrBFj4AFrEA8hPpKFnODWNu2WLaNs0QNkEb9QIJufmVZZIL/bJlg==}
+  '@rolldown/binding-linux-arm64-musl@1.2.15':
+    resolution: {integrity: sha512-uN26XOnVR7rqQupG3V9oAG2EGGatWjcJHOeDOHUFCh4TBWmP2tHTFoVN13aYbwfm0aHqJAEmcwhAu6sooIjfqQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
@@ -1138,8 +1309,8 @@ packages:
     cpu: [ppc64]
     os: [linux]
 
-  '@rolldown/binding-linux-ppc64-gnu@1.2.11':
-    resolution: {integrity: sha512-qlUGAheh2yh8afH7QBgx0PrRHN85hKnNd78x8MeMhXivuevgd8vgf6/CstOzmNKY/lLTHvNTrPy98cLnAugzJw==}
+  '@rolldown/binding-linux-ppc64-gnu@1.2.15':
+    resolution: {integrity: sha512-9nWkcdd+H+XhaA3fQIwpHnKIrfx/PQ6rO0pivr78Og07tXlUlctBBJoEYLPfhTmCR/QxEVdn6uPjHV5SymPhdw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
     os: [linux]
@@ -1156,8 +1327,8 @@ packages:
     cpu: [s390x]
     os: [linux]
 
-  '@rolldown/binding-linux-s390x-gnu@1.2.11':
-    resolution: {integrity: sha512-secpEad+0vCbSfn8upFySkDskv+bGPk3THSDS9Y89yc4rb4kzqHp8Dmyd9BkQW4SnhNXBZCl/6CrO//hZahNJQ==}
+  '@rolldown/binding-linux-s390x-gnu@1.2.15':
+    resolution: {integrity: sha512-Ggh0ciFjLwIusLSLz7LZYEaGdxOAUJXI+Qu5JCbhPJJHEt8vP+IjRATTJheiJsdzzTYgUiHUiw3X1Ea3ZpMBdA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [s390x]
     os: [linux]
@@ -1174,8 +1345,8 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  '@rolldown/binding-linux-x64-gnu@1.2.11':
-    resolution: {integrity: sha512-mOVBT3dPpkWm8XBWPmU4bf+U6dYDLeMo/9ojUmis4N0L5uu10qra5vOyngZ7/PSdoE4G9KvRt4bloRxNjLas7A==}
+  '@rolldown/binding-linux-x64-gnu@1.2.15':
+    resolution: {integrity: sha512-FHg60rS6DBePAYZ9X9F67x+JObFdmgn6tupA1C/a3B+CufFmTD4mX+e8M75tCiAO3foR/6xwVBI0KQiI7sn/rw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
@@ -1192,8 +1363,8 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  '@rolldown/binding-linux-x64-musl@1.2.11':
-    resolution: {integrity: sha512-Is78i9A8Ui4SqcxUwFJ9uMmjDn58IbVTjFWYdQestFEgeuEmHMLGNriXnVJKkwG2YiZjw8cP0zCTyDMdDGtOOg==}
+  '@rolldown/binding-linux-x64-musl@1.2.15':
+    resolution: {integrity: sha512-/cvV/7v5VGz/moiz0XKRj2dE8DzsKyhIu1KpOvJGPjRywg3yscON889UGvAe8zfiJLHup7VLjBduoGWi3HusWQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
@@ -1210,8 +1381,8 @@ packages:
     cpu: [arm64]
     os: [openharmony]
 
-  '@rolldown/binding-openharmony-arm64@1.2.11':
-    resolution: {integrity: sha512-dUCXneZ87INUMyQ0D+C0HrEBNUPNXHaPmU5GTjyKTJEiussw9Kaj5Ln8UztPe4epV/ffvgNBEadksdYhmW6xJA==}
+  '@rolldown/binding-openharmony-arm64@1.2.15':
+    resolution: {integrity: sha512-MyzC5Hrv/sm+Z7TSGKP/j8001RO2xQm1zOpCNVL4j0cY/VhBZviludA2YFQ7i4lH6ZAXxQm0lcMdBzM+99mE7w==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [openharmony]
@@ -1238,8 +1409,8 @@ packages:
     cpu: [arm64]
     os: [win32]
 
-  '@rolldown/binding-win32-arm64-msvc@1.2.11':
-    resolution: {integrity: sha512-jByxb6qfd+bH1xUd0qnfFnb17i9sWBPY2tOavJ0l3tdr3OTu+Kvtm8cd/JV5nFt657b1VqGltxg9olOEfofXWw==}
+  '@rolldown/binding-win32-arm64-msvc@1.2.15':
+    resolution: {integrity: sha512-+PgYiS+AH5omy6L45ZLxybasauJaj3M8buoT83D+nzPmCayXlxUV9hydhciCKVyIg0B/v0BtXPDE1uGqNwCPpg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [win32]
@@ -1256,8 +1427,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@rolldown/binding-win32-x64-msvc@1.2.11':
-    resolution: {integrity: sha512-/PzKqzAJ03i19oy2ItPvyvaVjOjBCNnfaJs8yvUdGBKmiESgnrJSQ2awd81QzFbbnAmu7YO9ZnJrDCb9VSJPRA==}
+  '@rolldown/binding-win32-x64-msvc@1.2.15':
+    resolution: {integrity: sha512-HFZd2QNQYn1JbIi+Hpd7H+r/lkWxcfIu28nirZ6eCn2LafuvmExMlb/P96Sfx5tf7pPArw39IdhmCF8vmV+NhQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
@@ -1695,6 +1866,9 @@ packages:
   '@types/estree-jsx@1.0.5':
     resolution: {integrity: sha512-52CcUVNFyfb1A2ALocQw/Dd1BQFNmSdkuC3BkZ6iqhdMfQz7JWOFRuJFloOzjk+6WijU56m9oKXFAXc7o3Towg==}
 
+  '@types/estree@1.0.10':
+    resolution: {integrity: sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==}
+
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
@@ -1716,8 +1890,8 @@ packages:
   '@types/node@24.19.0':
     resolution: {integrity: sha512-zY+5tKxXdhGh1PYI0ac+7juvEu4OI6vWtVVoj5i2m42jxAY1U+zHGt6QCyOFwykdP62sM3MJ9stoYYUw5aCWew==}
 
-  '@types/node@26.6.5':
-    resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
+  '@types/node@26.6.6':
+    resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
 
   '@types/prismjs@1.26.6':
     resolution: {integrity: sha512-vqlvI7qlMvcCBbVe0AKAb4f97//Hy0EBTaiW8AalRnG/xAN5zOiWWyrNqNXeq8+KAuvRewjCVY1+IPxk4RdNYw==}
@@ -1885,8 +2059,8 @@ packages:
     peerDependencies:
       acorn: ^6.0.0 || ^7.0.0 || ^8.0.0
 
-  acorn@8.18.0:
-    resolution: {integrity: sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==}
+  acorn@8.19.0:
+    resolution: {integrity: sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==}
     engines: {node: '>=0.4.0'}
     hasBin: true
 
@@ -2003,11 +2177,23 @@ packages:
       zod:
         optional: true
 
+  better-call@1.4.4:
+    resolution: {integrity: sha512-Gq4XdGFy4dmUxFEAX2nj0ycFcFbD9ZWh8YROouZoyXeF1M11TpYbplk0pDByTFF8Wz+MYa6W9052c9m7dD+mfw==}
+    peerDependencies:
+      zod: 4.6.7
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
   bowser@2.14.1:
     resolution: {integrity: sha512-tzPjzCxygAKWFOJP011oxFHs57HzIhOEracIgAePE4pqB3LikALKnSzUyU4MGs9/iCEUuHlAJTjTc5M+u7YEGg==}
 
   brace-expansion@2.1.7:
     resolution: {integrity: sha512-uZbew1NqdmPDTMJ8ah1y+b+9QEJrfkXFk3RcTQw3X0jW/xRUvFKsg1CfQdSYGdTbXZWExtU3J3ccxtnfw1Fi0g==}
+
+  braces@3.0.3:
+    resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
+    engines: {node: '>=8'}
 
   browserslist@4.29.1:
     resolution: {integrity: sha512-AUdjuRyCNGUYtqpqfTmWyM4fXay8yIQhmLnvYe/THMGfT9B/34X7xQd3ifKxwyNPPpowVBjLb+64BN9Rn1mizw==}
@@ -2111,8 +2297,8 @@ packages:
   crossws@0.3.5:
     resolution: {integrity: sha512-ojKiDvcmByhwa8YYqbQI/hg7MEU0NC03+pSdEq4ZUnZR9xXpwk7E43SMNGkn+JxJGPFtNvQ48+vV2p+P1ml5PA==}
 
-  crossws@0.4.12:
-    resolution: {integrity: sha512-aypfsr6t0uNvkqaZc6zvBfXzC6pLI0/sIulpkV6RwCVtZqG5ebBzv4weImKK0VNCj91Wl9F5j7p5WU4MNrybng==}
+  crossws@0.4.17:
+    resolution: {integrity: sha512-YG2kyfafNXKmu7e6k64yrj6whrw7m5sBIsOSXOlJ/72X3TQWRQuw8DhvXFDcBk8HF77PnTSygnm7xpYCTnFpow==}
     peerDependencies:
       srvx: '>=0.11.5'
     peerDependenciesMeta:
@@ -2173,8 +2359,8 @@ packages:
       sqlite3:
         optional: true
 
-  db0@0.4.1:
-    resolution: {integrity: sha512-6RBY/bSn42UrqATwsiULj2uYFyEykB3XeA/NLIVQeHNXlYV6D4Idxx3/aa6k5Y45Dwzx7sygeLotnqHWSeURYA==}
+  db0@0.4.2:
+    resolution: {integrity: sha512-OCBz+HiE8NgfQdlvvNrzdE+4RhmoAV3QnkxOhLU40bQH/N1msRwmPBvVyXmCUDmjhDl1+t4CFcSCccmi5jf+VQ==}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -2424,8 +2610,8 @@ packages:
     resolution: {integrity: sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ==}
     engines: {node: '>=18.0.0'}
 
-  exsolve@1.1.1:
-    resolution: {integrity: sha512-9U/jZUgjnSGyntRr6y5Muu1MJcwFl6kPu7k8qLF0IMNfLqvw0NZ4nnVDq0RVoZ0RvCyumib4Ez3KYrVfilrw+g==}
+  exsolve@1.2.0:
+    resolution: {integrity: sha512-h1pQPR9XoeSMdntRNCjyTznaume4UpfXrULBnlkZ2CUM/G5eSa+pBByGldO5uR8dxbPC+OuJXsPPNf+JZ81ADg==}
 
   extend-shallow@2.0.1:
     resolution: {integrity: sha512-zCnTtlxNoAiDc3gqY2aYAWFx7XWWiasuF2K8Me5WbN8otHKTUKBwjPtNpRs/rbUZm7KxWAaNj7P1a/p52GbVug==}
@@ -2440,6 +2626,10 @@ packages:
   fast-fifo@1.3.2:
     resolution: {integrity: sha512-/d9sfos4yxzpwkDkuN7k2SqFKtYNmCTzgfEpz82x34IM9/zc8KGxQoXg1liNC/izpRM/MBdt44Nmx41ZWqk+FQ==}
 
+  fast-glob@3.3.3:
+    resolution: {integrity: sha512-7MptL8U0cqcFdzIzwOTHoilX9x5BrNqye7Z/LuC7kCMRio1EMSyqRK3BEAUD7sXRq4iT4AzTVuZdhgQ2TCvYLg==}
+    engines: {node: '>=8.6.0'}
+
   fast-string-truncated-width@3.0.3:
     resolution: {integrity: sha512-0jjjIEL6+0jag3l2XWWizO64/aZVtpiGE3t0Zgqxv0DPuxiMjvB3M24fCyhZUO4KomJQPj3LTSUnDP3GpdwC0g==}
 
@@ -2452,6 +2642,9 @@ packages:
   fast-wrap-ansi@0.2.2:
     resolution: {integrity: sha512-7F2Fl+TjRSenLqlU3UjSH0iyqopqoZIu7eZVpEirP2g1GtWa2G/ecEmBdgz31+Mxr+ELclgg6sokpSFIQiZ02Q==}
 
+  fastq@1.20.3:
+    resolution: {integrity: sha512-XKv5nnLs6nLF71NgiKJLIZFLkPyIEuOselLG7ujZnGrRfQK8HpvY+WqKhAJUAdLomwVHErVS4LfxFlPq0/FTAw==}
+
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
     engines: {node: '>=12.0.0'}
@@ -2463,6 +2656,10 @@ packages:
 
   fflate@0.7.5:
     resolution: {integrity: sha512-QieYf//cis6ywHNi5qW1+PXPQ4bC+XVJAtS4AXIML8P76GroEiOxm/oQtn1f02UkJY1+KsXMJcC+R2v/Eg4G3g==}
+
+  fill-range@7.1.1:
+    resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
+    engines: {node: '>=8'}
 
   flatted@3.4.4:
     resolution: {integrity: sha512-5+ybhBZANEJxaH3X5evAFatUxLfEHSr7n6kYJ+1Qd0mUqr4eu9gIf6GDbWHf8RJijHrjjO8G+la14SlL2SeS1Q==}
@@ -2511,6 +2708,10 @@ packages:
 
   github-slugger@2.0.0:
     resolution: {integrity: sha512-IaOQ9puYtjrkq7Y0Ygl9KDZnrf/aiUJYUpVf89y8kyaxbRG7Y1SrX/jaumrv81vc61+kiMempujsM3Yw7w5qcw==}
+
+  glob-parent@5.1.2:
+    resolution: {integrity: sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow==}
+    engines: {node: '>= 6'}
 
   glob@10.5.0:
     resolution: {integrity: sha512-DfXN8DfhJ7NH3Oe7cFmu3NCu1wKbkReJ8TorzSAFbSKrlNaQSKfIzqYqVY8zlbs2NLBbWpRiU52GX2PbaBVNkg==}
@@ -2647,8 +2848,8 @@ packages:
   html-whitespace-sensitive-tag-names@3.0.1:
     resolution: {integrity: sha512-q+310vW8zmymYHALr1da4HyXUQ0zgiIwIicEfotYPWGN0OJVEN/58IJ3A4GBYcEq3LGAZqKb+ugvP0GNB9CEAA==}
 
-  httpxy@0.5.5:
-    resolution: {integrity: sha512-uDjmnPyp1q4Sgzf3w+J/Fc6UqcCEj0x4Wjp7OqK5dGhNeDgpyrAmnS6ey8QWrX3SWDon2DMKf9sBa5X9+CVyMA==}
+  httpxy@0.5.6:
+    resolution: {integrity: sha512-iqc3nOxvNb5FxbhJozt8wNmHgjlmk4zzba512jMEXVwHCEBCbGAj49eGfy5PI8ts3/LFSFq8siiSNqwfY1AlfQ==}
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -2695,12 +2896,24 @@ packages:
     resolution: {integrity: sha512-5BMULNob1vgFX6EjQw5izWDxrecWK9AM72rugNr0TFldMOi0fj6Jk+zeKIt0xGj4cEfQIJth4w3OKWOJ4f+AFw==}
     engines: {node: '>=0.10.0'}
 
+  is-extglob@2.1.1:
+    resolution: {integrity: sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ==}
+    engines: {node: '>=0.10.0'}
+
   is-fullwidth-code-point@3.0.0:
     resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==}
     engines: {node: '>=8'}
 
+  is-glob@4.0.3:
+    resolution: {integrity: sha512-xelSayHH36ZgE7ZWhli7pW34hNbNl8Ojv5KVmkJD4hBdD3th8Tfk9vYasLM+mXWOZhFkgZfxhLSnrwRr4elSSg==}
+    engines: {node: '>=0.10.0'}
+
   is-hexadecimal@2.0.1:
     resolution: {integrity: sha512-DgZQp241c8oO6cA1SbTEWiXeoxV42vlcJxgH+B3hi1AiqqKruZR3ZGF8In3fj4+/y/7rHvlOZLZtgJ/4ttYGZg==}
+
+  is-number@7.0.0:
+    resolution: {integrity: sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==}
+    engines: {node: '>=0.12.0'}
 
   is-plain-obj@4.1.0:
     resolution: {integrity: sha512-+Pgi+vMuUNkJyExiMBt5IlFoMyKnr5zhJ4Uspz58WOhBF5QoIZkFyNHIbBAtHwzVAgk5RtndVNsDRN61/mmDqg==}
@@ -2968,11 +3181,11 @@ packages:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
 
-  mdast-util-find-and-replace@3.0.2:
-    resolution: {integrity: sha512-Tmd1Vg/m3Xz43afeNxDIhWRtFZgM2VLyaf4vSTYwudTyeuTneoL3qtWMA5jeLyz/O1vDJmmV4QuScFCA2tBPwg==}
+  mdast-util-find-and-replace@3.0.4:
+    resolution: {integrity: sha512-z4B5c6jrnJ1ltOQemhWYPBSAo6y42Z8Gt2yEgfgNTMcLSU59B8bfj8Z8AnAlJrBGLnqkdAUZ7jdDEqQw3KuipQ==}
 
-  mdast-util-from-markdown@2.0.3:
-    resolution: {integrity: sha512-W4mAWTvSlKvf8L6J+VN9yLSqQ9AOAAvHuoDAmPkz4dHf553m5gVj2ejadHJhoJmcmxEnOv6Pa8XJhpxE93kb8Q==}
+  mdast-util-from-markdown@2.1.0:
+    resolution: {integrity: sha512-KRLgmPaP2H1ul2bpoJkOS+9pAcDAAj9Nu1mqLnh8NLeJG5tlvj42TH80PIGBpROWlRXLk0lDrWNuZCFy/tsB4A==}
 
   mdast-util-gfm-autolink-literal@2.0.1:
     resolution: {integrity: sha512-5HVP2MKaP6L+G6YaxPNjuL0BPrq9orG3TsrZ9YXbA3vDw/ACI4MEsnoDpn6ZNm7GnZgtAcONJyPhOP8tNJQavQ==}
@@ -2980,8 +3193,8 @@ packages:
   mdast-util-gfm-footnote@2.1.0:
     resolution: {integrity: sha512-sqpDWlsHn7Ac9GNZQMeUzPQSMzR6Wv0WKRNvQRg0KqHh02fpTz69Qc1QSseNX29bhz1ROIyNyxExfawVKTm1GQ==}
 
-  mdast-util-gfm-strikethrough@2.0.0:
-    resolution: {integrity: sha512-mKKb915TF+OC5ptj5bJ7WFRPdYtuHv0yTRxK2tJvi+BDqbkiG7h7u/9SI89nRAYcmap2xHQL9D+QG/6wSrTtXg==}
+  mdast-util-gfm-strikethrough@2.0.1:
+    resolution: {integrity: sha512-OuJHqvr455pwu2OaOrir7dbzqs4jlWKOtlu9L6GjcIjjQwNyw02VntQsr/Ek6/A13vgnXfUhBekWRUP1OkNivw==}
 
   mdast-util-gfm-table@2.0.0:
     resolution: {integrity: sha512-78UEvebzz/rJIxLvE7ZtDd/vIQ0RHv+3Mh5DR96p7cS7HsBhYIICDBCu8csTNWNO6tBWfqXPWekRuj2FNOGOZg==}
@@ -3010,8 +3223,8 @@ packages:
   mdast-util-to-hast@13.2.1:
     resolution: {integrity: sha512-cctsq2wp5vTsLIcaymblUriiTcZd0CwWtCbLvrOzYCDZoWyMNV8sZ7krj09FSnsiJi3WVsHLM4k6Dq/yaPyCXA==}
 
-  mdast-util-to-markdown@2.1.2:
-    resolution: {integrity: sha512-xj68wMTvGXVOKonmog6LwyJKrYXZPvlwabaryTjLh9LuvovB/KAH+kvi8Gjj+7rJjsFi23nkUxRQv1KqSroMqA==}
+  mdast-util-to-markdown@2.2.1:
+    resolution: {integrity: sha512-ThatlCBxG2GE+mljhNSfZPv56d3QrGiRh97jjYgIk80IzS4uU6d7cHAaexCYSAmUCCcOs3grJ07kX3oTGsFUOw==}
 
   mdast-util-to-string@4.0.0:
     resolution: {integrity: sha512-0H44vDimn51F0YwvxSJSm0eCDOJTRlmN0R1yBh4HLj9wiV1Dn0QoXGbvFAWj2hSItVTlCmBF1hqKlIyUBVFLPg==}
@@ -3019,11 +3232,15 @@ packages:
   memory-pager@1.5.0:
     resolution: {integrity: sha512-ZS4Bp4r/Zoeq6+NLJpP+0Zzm0pR8whtGPf1XExKLJBAczGMnSi3It14OiNCStjQjM6NU1okjQGSxgEZN8eBYKg==}
 
+  merge2@1.4.1:
+    resolution: {integrity: sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg==}
+    engines: {node: '>= 8'}
+
   microdiff@1.6.0:
     resolution: {integrity: sha512-w7JWt8Bno6I8h0rEqlxr4lNG4UbT1FVtWo42wWosIiaJ+rP3pXh7shCYDnyqBrYx36LJ1CZ64p8A62aVp0sJpQ==}
 
-  micromark-core-commonmark@2.0.3:
-    resolution: {integrity: sha512-RDBrHEMSxVFLg6xvnXmb1Ayr2WzLAWjeSATAoxwKYJV94TeNavgoIdA0a9ytzDSVzBy2YKFK+emCPOEibLeCrg==}
+  micromark-core-commonmark@2.0.4:
+    resolution: {integrity: sha512-wxEeE8v8XVvOrxn1TZj74qYhAtTQsSqufHVS3uNVyT1MupXxhyaHk8/9xDNPh9BmL77QNDgWTkZ3RsYHB2ry7w==}
 
   micromark-extension-gfm-autolink-literal@2.1.0:
     resolution: {integrity: sha512-oOg7knzhicgQ3t4QCjCWgTmfNhvQbDDnJeVu9v81r7NltNCVmhPy1fJRX27pISafdjL+SVc4d3l48Gb6pbRypw==}
@@ -3070,8 +3287,8 @@ packages:
   micromark-factory-mdx-expression@2.0.3:
     resolution: {integrity: sha512-kQnEtA3vzucU2BkrIa8/VaSAsP+EJ3CKOvhMuJgOEGg9KDC6OAY6nSnNDVRiVNRqj7Y4SlSzcStaH/5jge8JdQ==}
 
-  micromark-factory-space@2.0.1:
-    resolution: {integrity: sha512-zRkxjtBxxLd2Sc0d+fbnEunsTj46SWXgXciZmHq0kDYGnck/ZSGj9/wULTV95uoeYiK5hRXP2mJ98Uo4cq/LQg==}
+  micromark-factory-space@2.1.0:
+    resolution: {integrity: sha512-fS8hnLIjnjvdQIj39Geug8wWsR0HrYZ43KShKxNfwT7t2LOHo/LbWZEzEaSOjwtjdCsjoE6syHhonEzW0zv0+Q==}
 
   micromark-factory-title@2.0.1:
     resolution: {integrity: sha512-5bZ+3CjhAd9eChYTHsjy6TGxpOFSKgKKJPJxr293jTbfry2KDoWkhBb6TcPVB4NmzaPhMs1Frm9AZH7OD4Cjzw==}
@@ -3097,6 +3314,9 @@ packages:
   micromark-util-decode-string@2.0.1:
     resolution: {integrity: sha512-nDV/77Fj6eH1ynwscYTOsbK7rR//Uj0bZXBwJZRfaLEJ1iGBR6kIfNmlNqaqJf649EP0F3NWNdeJi03elllNUQ==}
 
+  micromark-util-edit-map@1.0.0:
+    resolution: {integrity: sha512-Pa2ljlsEL6sVwFaYeyrOLSYbQt73JvGbPOYFq+9AElXiSnfI5Q4465RRZ1sHv7lDjDOnGRDDaqPXqClqWK/q1Q==}
+
   micromark-util-encode@2.0.1:
     resolution: {integrity: sha512-c3cVx2y4KqUnwopcO9b/SCdo2O67LwJJ/UyqGfbigahfegL9myoEFoDYZgkT7f36T0bLrM9hZTAaAyH+PCAXjw==}
 
@@ -3121,11 +3341,15 @@ packages:
   micromark-util-symbol@2.0.1:
     resolution: {integrity: sha512-vs5t8Apaud9N28kgCrRUdEed4UJ+wWNvicHLPxCa9ENlYuAY31M0ETy5y1vA33YoNPDFTghEbnh6efaE8h4x0Q==}
 
-  micromark-util-types@2.0.2:
-    resolution: {integrity: sha512-Yw0ECSpJoViF1qTU4DC6NwtC4aWGt1EkzaQB8KPPyCRR8z9TWeV0HbEFGTO+ZY1wB22zmxnJqhPyTpOVCpeHTA==}
+  micromark-util-types@2.0.3:
+    resolution: {integrity: sha512-oxB2Ik03hI0gv+VNn9tnh1t1YEe9MDPptViAEgfdf3YQHsn0pzGTgCdlSCJXcwhqm8phaEuM7zeEu3QQzVBrPg==}
 
-  micromark@4.0.2:
-    resolution: {integrity: sha512-zpe98Q6kvavpCr1NPVSCMebCKfD7CA2NqZ+rykeNhONIJBpc1tFKt9hucLGwha3jNTNI8lHpctWJWoimVF4PfA==}
+  micromark@4.0.3:
+    resolution: {integrity: sha512-oGYfQzHSG5dOMovQcJ3fyTmZlWAWpi0XA0sJwJs+i6OT88o1+Jtw/8z0CmdowSLxGhhFK89rQ/oXph/wN02PNw==}
+
+  micromatch@4.0.8:
+    resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
+    engines: {node: '>=8.6'}
 
   minimatch@9.0.9:
     resolution: {integrity: sha512-OBwBN9AL4dqmETlpS2zasx+vTeWclWzkblfZk7KTA5j3jeOONz/tRCnZomUyvNg83wL5Zv9Ss6HMJXAgL8R2Yg==}
@@ -3258,8 +3482,8 @@ packages:
   obliterator@1.6.1:
     resolution: {integrity: sha512-9WXswnqINnnhOG/5SLimUlzuU1hFJUc8zkwyD59Sd+dPOMf05PmnYG/d6Q7HZ+KmgkZJa1PxRso6QdM3sTNHig==}
 
-  ocache@0.3.0:
-    resolution: {integrity: sha512-RS/9P0zeBb0gDJmadGERLH8lZNXK7xbufTDhclkXGvFGTsj0G4M5/cLk+mizcERH29mLXNnocfB5wjcK70wGJg==}
+  ocache@0.3.1:
+    resolution: {integrity: sha512-qeBrhQ0ly6tgXsakgNwLx6diRUppJZIcV5OjVGa5yp9HzztutkaGDDXJqVMo1fKWz5fNDtTp3iPU2fuhHf0+Lg==}
 
   ofetch@1.5.1:
     resolution: {integrity: sha512-2W4oUZlVaqAPAil6FUg/difl6YhqhUR7x2eZY4bQCko22UXg3hptq9KLQdqFClV+Wu85UX7hNtdGTngi/1BxcA==}
@@ -3301,6 +3525,9 @@ packages:
   pg-cloudflare@1.4.0:
     resolution: {integrity: sha512-Vo7z/6rrQYxpNRylp4Tlob2elzbh+N/MOQbxFVWCxS7oEx6jF53GTJFxK2WWpKuBRkmiin4Mt+xofFDjx09R0A==}
 
+  pg-cloudflare@1.4.1:
+    resolution: {integrity: sha512-6PQbsFWZcp9EmJEwy5cGQ2La+AMWpP46lgbb8X+U/XsHIUweYDNCpeuKck5RxL2MdVFi7krbbEi5nX4Zh7JhrQ==}
+
   pg-connection-string@2.14.0:
     resolution: {integrity: sha512-XwWDGcLRGCXAR8F/AM5bG7Q+A3Wm2s6QeEjlOKZLlH3UYcguiqCWKyWXVag5TLTIjR7oOJUY8kcADaZgWPyLeg==}
 
@@ -3319,12 +3546,24 @@ packages:
   pg-protocol@1.16.0:
     resolution: {integrity: sha512-sILXutLVjCLjcDuOmvhX5e2Z4cS5qG/6Bu3VkpFwdf/633ElGLpEh9bgmuI5I4sqKqkifQiGyiCcx1HdtrK7tg==}
 
+  pg-protocol@1.16.1:
+    resolution: {integrity: sha512-p9VOFMiHB/ZbJATetbg+99PxssTVSQRnyuPSQ67mN1+1KBOjZaZ83ZQzltnxPhJwSsC3nwVjJ10DVJlerbFzLg==}
+
   pg-types@2.2.0:
     resolution: {integrity: sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==}
     engines: {node: '>=4'}
 
   pg@8.23.0:
     resolution: {integrity: sha512-Ip2EQCngowJLGOfCwkFhPXU7/ljlhn6Rxlmy4XYfL2Y+vyRM59+8uR2xqRWKdYmbXmxCFOAmKxBuSUCdF34qLg==}
+    engines: {node: '>= 16.0.0'}
+    peerDependencies:
+      pg-native: '>=3.0.1'
+    peerDependenciesMeta:
+      pg-native:
+        optional: true
+
+  pg@8.23.1:
+    resolution: {integrity: sha512-aL96AHANtWjPLDOLqnhx+ngp9+UK7ETEU8VJrDCGvsSSi/mGLcWYsS6Herg7lmaBJe4uwrfqsa7gTEFaSizDoQ==}
     engines: {node: '>= 16.0.0'}
     peerDependencies:
       pg-native: '>=3.0.1'
@@ -3355,6 +3594,10 @@ packages:
 
   postcss@8.5.31:
     resolution: {integrity: sha512-YUbWYCgErwnMAVkjUnYa+KlMBzGpHwiIt/DE7f0G33AuX2LH9UcTk6KgWxd3zRU+pN3u/C+Xl3EnMLM4Hea7Sg==}
+    engines: {node: ^10 || ^12 || >=14}
+
+  postcss@8.5.32:
+    resolution: {integrity: sha512-LJlKCCAUFKOuZxipUdYw1NzIITEsPcgyOG9LkvRJvuKj/bRzbuRY0ARXvL0pWGpsZvn8jku+LMep2eU0seHp8g==}
     engines: {node: ^10 || ^12 || >=14}
 
   postgres-array@2.0.0:
@@ -3389,6 +3632,9 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
+  queue-microtask@1.2.3:
+    resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
+
   radix-vue@1.9.17:
     resolution: {integrity: sha512-mVCu7I2vXt1L2IUYHTt0sZMz7s1K2ZtqKeTIxG3yC5mMFfLBG4FtE1FDeRMpDd+Hhg/ybi9+iXmAP1ISREndoQ==}
     peerDependencies:
@@ -3397,17 +3643,17 @@ packages:
   radix3@1.1.2:
     resolution: {integrity: sha512-b484I/7b8rDEdSDKckSSBA8knMpcdsXudlE/LNL639wFoHKwLbEkQFZHWEYwDC0wa0FKUcCY+GAF73Z7wxNVFA==}
 
-  react-dom@19.3.0:
-    resolution: {integrity: sha512-JDk8dgif51OjFoDE70+OT9ICyYr+69HlmihNwp1+Nsfbna3t5sIiCa9ZJktDmQ4/1b/rn26hIAR2uYXDMr5r0Q==}
+  react-dom@19.3.1:
+    resolution: {integrity: sha512-Y0bARz53lhEC1NMCASs0/j+faB/zqt3R8hpvg1e8+61ZVJ4UL0UdC4cBbXfZMcIuhrfgeILTLe+ZeBCavQPtKQ==}
     peerDependencies:
-      react: ^19.3.0
+      react: ^19.3.1
 
   react-refresh@0.17.0:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
     engines: {node: '>=0.10.0'}
 
-  react@19.3.0:
-    resolution: {integrity: sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog==}
+  react@19.3.1:
+    resolution: {integrity: sha512-QNhWdt7nrgVWWQG58QuGsAR3jv3Hbe4mb4vz7w2csnHavciZJgda1CPNaldF6eVxv90ud3jUXpKlHL69gO38yw==}
     engines: {node: '>=0.10.0'}
 
   readdirp@5.1.1:
@@ -3488,6 +3734,10 @@ packages:
     resolution: {integrity: sha512-XQBQ3I8W1Cge0Seh+6gjj03LbmRFWuoszgK9ooCpwYIrhhoO80pfq4cUkU5DkknwfOfFteRwlZ56PYOGYyFWdg==}
     engines: {node: '>= 4'}
 
+  reusify@1.1.0:
+    resolution: {integrity: sha512-g6QUff04oZpHs0eG5p83rFLhHeV00ug/Yf9nZM6fLeUrPguBTkTQOdpAWWspMh55TZfVQDPaN3NQJfbVRAxdIw==}
+    engines: {iojs: '>=1.0.0', node: '>=0.10.0'}
+
   rolldown@1.1.5:
     resolution: {integrity: sha512-t9z29cJjXf/vxQ8dyhCSpt6H6aSwHTk8cT5I3iy6SMXuFpk5mB6PL6XfC8PCwrPTx93udwKUm9HRteAlTGBLiA==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -3498,8 +3748,8 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
-  rolldown@1.2.11:
-    resolution: {integrity: sha512-qpSwIyz0jHQq5qXBTNxFmE6664rJ7O+4TvPFOiOaBSrz8IOHc1koKKSqTM2H6u1UG1+TveuC6vaDHKXFOvb1Kw==}
+  rolldown@1.2.15:
+    resolution: {integrity: sha512-6odND+fel5zVw3I4Yc2e69gvguDnX0CAAGiNDZSq4ik5WUcaLrkD2GLuog0XcODbor31hZ5ayEMgVDno+KPV5g==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
@@ -3510,6 +3760,9 @@ packages:
 
   rou3@0.9.2:
     resolution: {integrity: sha512-3SOzvaAg8rkHrXtRjpCvCvbyO5to9oOO27Z/XqHEYXfMRVSw/qMIVdmaOk9W2lcRLtR6dlqTjo9hDeJk70QBYQ==}
+
+  run-parallel@1.2.0:
+    resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
 
   safe-buffer@5.2.1:
     resolution: {integrity: sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==}
@@ -3577,6 +3830,9 @@ packages:
   set-cookie-parser@3.1.2:
     resolution: {integrity: sha512-5/r/lTwbJ3zQ+qwdUFZYeRNqda7P5HD8zQKqlSjdGt1/S0cjLAphHusj4Y58ahDtWn/g32xrIS58/ikOvwl0Lw==}
 
+  set-cookie-parser@3.2.1:
+    resolution: {integrity: sha512-Npd1Pt+4zb3BrSZDPd2qFwRpS6b1EUEasRrO8xS0zMJi0fApXXK5YuzP0minyJnxwnFHoVoJwA55q0A0cu63gQ==}
+
   set-function-length@1.2.2:
     resolution: {integrity: sha512-pgRc4hJ4/sNjWCSS9AmnS40x3bNMDTknHgL5UaMBTMyJnU90EgWh1Rz+MC9eFu4BuN/UwZjKQuY/1v3rM7HMfg==}
     engines: {node: '>= 0.4'}
@@ -3639,8 +3895,8 @@ packages:
     resolution: {integrity: sha512-ed7OK4e9ywpE7pgRMkMQmZDPKSVdm0oX5IEtZiKnFucSF0zu6c80GZBe38UqHuVhTWJ9xsKgSMjCG2bml86KvA==}
     engines: {node: '>=14'}
 
-  srvx@1.0.5:
-    resolution: {integrity: sha512-KvSKRpgPG/oaq3cyT614OQ2bAa7DynuGamivCZeoZzIUULOdbQz6wUtnnVuC4+DCx2Zglzo8v5gBYmWIWYhDxA==}
+  srvx@1.0.8:
+    resolution: {integrity: sha512-ngFS/J6St4PJfHRHGjr78xkPPtbyXtdMOLNE4x/XZunEK3OhV7aGUWMHf9WTUEy6wm1U0W4okkd82ZFFWRVQTw==}
     engines: {node: '>=20.16.0'}
     hasBin: true
 
@@ -3745,6 +4001,10 @@ packages:
   to-buffer@1.2.2:
     resolution: {integrity: sha512-db0E3UJjcFhpDhAF4tLo03oli3pwl3dbnzXOUIlRKrp+ldk/VUxzpWYZENsw2SZiuBjHAk7DfB0VU7NKdpb6sw==}
     engines: {node: '>= 0.4'}
+
+  to-regex-range@5.0.1:
+    resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
+    engines: {node: '>=8.0'}
 
   toposort-class@1.0.1:
     resolution: {integrity: sha512-OsLcGGbYF3rMjPUf8oKktyvCiUxSbqMMS39m33MAjLTC1DVIH6x3WSt63/M77ihI09+Sdfk1AXvfhCEeUmC7mg==}
@@ -3884,14 +4144,14 @@ packages:
   unist-util-stringify-position@4.0.0:
     resolution: {integrity: sha512-0ASV06AAoKCDkS2+xw5RXJywruurpbC4JZSm7nr7MOt1ojAzvyyaO+UxZf18j8FCF6kmzCZKcAgN/yu2gm2XgQ==}
 
-  unist-util-visit-parents@6.0.2:
-    resolution: {integrity: sha512-goh1s1TBrqSqukSc8wrjwWhL0hiJxgA8m4kFxGlQ+8FYQ3C/m11FcTs4YYem7V664AhHVvgoQLk890Ssdsr2IQ==}
+  unist-util-visit-parents@6.1.0:
+    resolution: {integrity: sha512-vKXxz6O38sKDj1mtx/k2cWvkkFBuYGx6uGrlzBkVeWCRF/F8sdI0j3Wbkz/5rVNRRuVc8UrgRdbCxNhmYXgP3w==}
 
-  unist-util-visit@5.1.0:
-    resolution: {integrity: sha512-m+vIdyeCOpdr/QeQCu2EzxX/ohgS8KbnPDgFni4dQsfSCtpz8UqDyY5GjRru8PDKuYn7Fq19j1CQ+nJSsGKOzg==}
+  unist-util-visit@5.2.0:
+    resolution: {integrity: sha512-fpsYs/VVoZxfGY9/j3FQpZmN8wdLJaV1Pt38AaJNZu9uKIHcFU3halCdBveEq1HGKO1OEfJY65w1zvoFV1b3qQ==}
 
-  unstorage@1.17.5:
-    resolution: {integrity: sha512-0i3iqvRfx29hkNntHyQvJTpf5W9dQ9ZadSoRU8+xVlhVtT7jAX57fazYO9EHvcRCfBCyi5YRya7XCDOsbTgkPg==}
+  unstorage@1.17.6:
+    resolution: {integrity: sha512-gjKtcmn/KwZuJZO9o2sc0esAQnhmTw0LviDHwevTXbJMYs0dRTp8ZEEWXHU0vTpzbN3cA0yxlTeyXssMp3zDqw==}
     peerDependencies:
       '@azure/app-configuration': ^1.8.0
       '@azure/cosmos': ^4.2.0
@@ -3901,7 +4161,7 @@ packages:
       '@azure/storage-blob': ^12.26.0
       '@capacitor/preferences': ^6 || ^7 || ^8
       '@deno/kv': '>=0.9.0'
-      '@netlify/blobs': ^6.5.0 || ^7.0.0 || ^8.1.0 || ^9.0.0 || ^10.0.0
+      '@netlify/blobs': ^6.5.0 || ^7.0.0 || ^8.1.0 || ^9.0.0 || ^10.0.0 || ^11.0.0
       '@planetscale/database': ^1.19.0
       '@upstash/redis': ^1.34.3
       '@vercel/blob': '>=0.27.1'
@@ -4029,6 +4289,49 @@ packages:
     peerDependencies:
       '@types/node': ^20.19.0 || >=22.12.0
       '@vitejs/devtools': ^0.3.0
+      esbuild: ^0.27.0 || ^0.28.0
+      jiti: '>=1.21.0'
+      less: ^4.0.0
+      sass: ^1.70.0
+      sass-embedded: ^1.70.0
+      stylus: '>=0.54.8'
+      sugarss: ^5.0.0
+      terser: ^5.16.0
+      tsx: ^4.8.1
+      yaml: 2.8.3
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+      '@vitejs/devtools':
+        optional: true
+      esbuild:
+        optional: true
+      jiti:
+        optional: true
+      less:
+        optional: true
+      sass:
+        optional: true
+      sass-embedded:
+        optional: true
+      stylus:
+        optional: true
+      sugarss:
+        optional: true
+      terser:
+        optional: true
+      tsx:
+        optional: true
+      yaml:
+        optional: true
+
+  vite@8.3.4:
+    resolution: {integrity: sha512-IftLE8phJhdNRIGNEV4JCCvfNScoZQVfcXaN8TQropWGJtOHcu+iAB9pHcuGvmEb/kddw0LBe/jS8ztdC6xdiQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    hasBin: true
+    peerDependencies:
+      '@types/node': ^20.19.0 || >=22.12.0
+      '@vitejs/devtools': ^0.7.1
       esbuild: ^0.27.0 || ^0.28.0
       jiti: '>=1.21.0'
       less: ^4.0.0
@@ -4464,12 +4767,12 @@ snapshots:
     dependencies:
       '@babel/types': 7.29.8
 
-  '@babel/plugin-transform-react-jsx-self@7.29.7(@babel/core@7.29.7)':
+  '@babel/plugin-transform-react-jsx-self@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
 
-  '@babel/plugin-transform-react-jsx-source@7.29.7(@babel/core@7.29.7)':
+  '@babel/plugin-transform-react-jsx-source@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
@@ -4501,7 +4804,13 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.4.0
 
+  '@better-auth/utils@0.5.1':
+    dependencies:
+      '@noble/hashes': 2.4.0
+
   '@better-fetch/fetch@1.3.2': {}
+
+  '@better-fetch/fetch@1.3.3': {}
 
   '@clack/core@1.5.1':
     dependencies:
@@ -4719,9 +5028,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@farm.js/cli@0.1.0(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.5)(@vercel/sandbox@2.9.2)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.12(srvx@1.0.5))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))(jiti@2.7.0)(kysely@0.28.17)(lightningcss@1.33.0)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sequelize@6.37.8(pg@8.23.0))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.0))(typescript@5.9.3)(yaml@2.8.3)':
+  '@farm.js/cli@0.1.0(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.6)(@vercel/sandbox@2.9.2)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.17(srvx@1.0.8))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))(jiti@2.7.0)(kysely@0.28.17)(lightningcss@1.33.0)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sequelize@6.37.8(pg@8.23.1))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))(typescript@5.9.3)(yaml@2.8.3)':
     dependencies:
-      '@farm.js/core': 0.1.0(patch_hash=1ab2543c6a270c8de08df7cbe610e67b73a37c7a0b9c1f7de74e7eccbec54f80)(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.5)(@vercel/sandbox@2.9.2)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.12(srvx@1.0.5))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))(jiti@2.7.0)(kysely@0.28.17)(lightningcss@1.33.0)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sequelize@6.37.8(pg@8.23.0))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.0))(typescript@5.9.3)(yaml@2.8.3)
+      '@farm.js/core': 0.1.0(patch_hash=1ab2543c6a270c8de08df7cbe610e67b73a37c7a0b9c1f7de74e7eccbec54f80)(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.6)(@vercel/sandbox@2.9.2)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.17(srvx@1.0.8))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))(jiti@2.7.0)(kysely@0.28.17)(lightningcss@1.33.0)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sequelize@6.37.8(pg@8.23.1))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))(typescript@5.9.3)(yaml@2.8.3)
       '@farm.js/tunnel': 0.1.1
       commander: 11.1.0
       croner: 9.1.0
@@ -4791,25 +5100,25 @@ snapshots:
       - uploadthing
       - yaml
 
-  '@farm.js/core@0.1.0(patch_hash=1ab2543c6a270c8de08df7cbe610e67b73a37c7a0b9c1f7de74e7eccbec54f80)(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.5)(@vercel/sandbox@2.9.2)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.12(srvx@1.0.5))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))(jiti@2.7.0)(kysely@0.28.17)(lightningcss@1.33.0)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(sequelize@6.37.8(pg@8.23.0))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.0))(typescript@5.9.3)(yaml@2.8.3)':
+  '@farm.js/core@0.1.0(patch_hash=1ab2543c6a270c8de08df7cbe610e67b73a37c7a0b9c1f7de74e7eccbec54f80)(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.6)(@vercel/sandbox@2.9.2)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.17(srvx@1.0.8))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))(jiti@2.7.0)(kysely@0.28.17)(lightningcss@1.33.0)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sequelize@6.37.8(pg@8.23.1))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))(typescript@5.9.3)(yaml@2.8.3)':
     dependencies:
-      '@farming-labs/docs': 0.2.125(@vercel/sandbox@2.9.2)(react@19.3.0)(supports-color@10.2.2)
+      '@farming-labs/docs': 0.2.125(@vercel/sandbox@2.9.2)(react@19.3.1)(supports-color@10.2.2)
       '@farming-labs/orm': 0.0.62
-      '@farming-labs/orm-runtime': 0.0.62(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0)))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))(kysely@0.28.17)(mongodb@6.21.0)(mongoose@8.24.4)(sequelize@6.37.8(pg@8.23.0))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.0))
+      '@farming-labs/orm-runtime': 0.0.62(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))(kysely@0.28.17)(mongodb@6.21.0)(mongoose@8.24.4)(sequelize@6.37.8(pg@8.23.1))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))
       '@formatjs/icu-messageformat-parser': 3.5.15
       '@jridgewell/trace-mapping': 0.3.31
       '@mdx-js/mdx': 3.1.1(supports-color@10.2.2)
       '@opentelemetry/api': 1.9.1
       '@scalar/api-reference': 1.72.1(supports-color@10.2.2)(tailwindcss@4.1.18)(typescript@5.9.3)(zod@4.6.7)
       '@scalar/openapi-parser': 0.22.3
-      '@tailwindcss/vite': 4.1.18(vite@7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3))
-      '@vercel/og': 0.11.1(@types/node@26.6.5)
-      '@vitejs/plugin-react': 4.7.0(supports-color@10.2.2)(vite@7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3))
+      '@tailwindcss/vite': 4.1.18(vite@7.3.7(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3))
+      '@vercel/og': 0.11.1(@types/node@26.6.6)
+      '@vitejs/plugin-react': 4.7.0(supports-color@10.2.2)(vite@7.3.7(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3))
       better-call: 1.4.0(zod@4.6.7)
-      db0: 0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))
+      db0: 0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))
       es-module-lexer: 2.0.0
       esbuild: 0.28.2
-      h3: 2.0.1-rc.32(crossws@0.4.12(srvx@1.0.5))(ocache@0.3.0)
+      h3: 2.0.1-rc.32(crossws@0.4.17(srvx@1.0.8))(ocache@0.3.1)
       image-size: 2.0.4
       intl-messageformat: 11.2.12
       marked: 12.0.2
@@ -4823,14 +5132,14 @@ snapshots:
       tailwindcss: 4.1.18
       tinyglobby: 0.2.17
       unstorage: 2.0.0-alpha.10
-      vite: 7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3)
+      vite: 7.3.7(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3)
       zod: 4.6.7
     optionalDependencies:
-      react: 19.3.0
-      react-dom: 19.3.0(react@19.3.0)
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
       rolldown: 1.2.0
-      sharp: 0.35.5(@types/node@26.6.5)
-      vite-rolldown: vite@8.1.6(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.8.3)
+      sharp: 0.35.5(@types/node@26.6.6)
+      vite-rolldown: vite@8.1.6(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.8.3)
     transitivePeerDependencies:
       - '@azure/app-configuration'
       - '@azure/cosmos'
@@ -4894,6 +5203,89 @@ snapshots:
       - uploadthing
       - yaml
 
+  '@farm.js/core@0.1.37(@aws-sdk/client-dynamodb@3.1141.0)(@aws-sdk/lib-dynamodb@3.1141.0(@aws-sdk/client-dynamodb@3.1141.0))(@farming-labs/docs@0.2.125(@vercel/sandbox@2.9.2)(react@19.3.1))(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@types/node@26.6.6)(@xata.io/client@0.30.1(typescript@5.9.3))(crossws@0.4.17(srvx@1.0.8))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))(esbuild@0.28.2)(jiti@2.7.0)(kysely@0.28.17)(mongodb@6.21.0)(mongoose@8.24.4)(ocache@0.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sequelize@6.37.8(pg@8.23.1))(sharp@0.35.5(@types/node@26.6.6))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))(yaml@2.8.3)':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-runtime': 0.0.65(@aws-sdk/client-dynamodb@3.1141.0)(@aws-sdk/lib-dynamodb@3.1141.0(@aws-sdk/client-dynamodb@3.1141.0))(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))(kysely@0.28.17)(mongodb@6.21.0)(mongoose@8.24.4)(sequelize@6.37.8(pg@8.23.1))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))
+      '@formatjs/icu-messageformat-parser': 3.5.15
+      '@jridgewell/trace-mapping': 0.3.31
+      '@mdx-js/mdx': 3.1.1(supports-color@10.2.2)
+      '@opentelemetry/api': 1.9.1
+      better-call: 1.4.4(zod@4.6.7)
+      db0: 0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))
+      es-module-lexer: 2.0.0
+      fast-glob: 3.3.3
+      h3: 2.0.1-rc.32(crossws@0.4.17(srvx@1.0.8))(ocache@0.3.1)
+      image-size: 2.0.4
+      intl-messageformat: 11.2.12
+      marked: 12.0.2
+      nitro: 3.0.260903-beta
+      pg: 8.23.1
+      picocolors: 1.1.1
+      remark-gfm: 4.0.1(supports-color@10.2.2)
+      rolldown: 1.2.15
+      sugar-high: 0.9.5
+      supports-color: 10.2.2
+      unstorage: 2.0.0-alpha.10
+      vite: 8.3.4(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.8.3)
+      zod: 4.6.7
+    optionalDependencies:
+      '@farming-labs/docs': 0.2.125(@vercel/sandbox@2.9.2)(react@19.3.1)(supports-color@10.2.2)
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
+      sharp: 0.35.5(@types/node@26.6.6)
+    transitivePeerDependencies:
+      - '@aws-sdk/client-dynamodb'
+      - '@aws-sdk/lib-dynamodb'
+      - '@azure/app-configuration'
+      - '@azure/cosmos'
+      - '@azure/data-tables'
+      - '@azure/identity'
+      - '@azure/keyvault-secrets'
+      - '@azure/storage-blob'
+      - '@capacitor/preferences'
+      - '@deno/kv'
+      - '@electric-sql/pglite'
+      - '@libsql/client'
+      - '@mikro-orm/core'
+      - '@netlify/blobs'
+      - '@planetscale/database'
+      - '@prisma/client'
+      - '@types/node'
+      - '@upstash/redis'
+      - '@vercel/blob'
+      - '@vercel/functions'
+      - '@vercel/kv'
+      - '@vitejs/devtools'
+      - '@xata.io/client'
+      - aws4fetch
+      - better-sqlite3
+      - crossws
+      - drizzle-orm
+      - esbuild
+      - idb-keyval
+      - ioredis
+      - jiti
+      - kysely
+      - less
+      - mongodb
+      - mongoose
+      - mysql2
+      - ocache
+      - pg-native
+      - sass
+      - sass-embedded
+      - sequelize
+      - sqlite3
+      - stylus
+      - sugarss
+      - surrealdb
+      - terser
+      - tsx
+      - typeorm
+      - uploadthing
+      - yaml
+
   '@farm.js/tunnel-darwin-arm64@0.1.1':
     optional: true
 
@@ -4929,7 +5321,7 @@ snapshots:
       '@farm.js/tunnel-win32-arm64-msvc': 0.1.1
       '@farm.js/tunnel-win32-x64-msvc': 0.1.1
 
-  '@farming-labs/docs@0.2.125(@vercel/sandbox@2.9.2)(react@19.3.0)(supports-color@10.2.2)':
+  '@farming-labs/docs@0.2.125(@vercel/sandbox@2.9.2)(react@19.3.1)(supports-color@10.2.2)':
     dependencies:
       '@clack/prompts': 1.8.1
       '@modelcontextprotocol/server': 2.3.0
@@ -4948,7 +5340,7 @@ snapshots:
       zod: 4.6.7
     optionalDependencies:
       '@vercel/sandbox': 2.9.2
-      react: 19.3.0
+      react: 19.3.1
     transitivePeerDependencies:
       - supports-color
 
@@ -4957,11 +5349,23 @@ snapshots:
       '@farming-labs/orm': 0.0.62
       '@farming-labs/orm-sql': 0.0.62
 
-  '@farming-labs/orm-drizzle@0.0.62(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))':
+  '@farming-labs/orm-d1@0.0.65':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-sql': 0.0.65
+
+  '@farming-labs/orm-drizzle@0.0.62(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))':
     dependencies:
       '@farming-labs/orm': 0.0.62
       '@farming-labs/orm-sql': 0.0.62
-      drizzle-orm: 0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0)
+      drizzle-orm: 0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)
+
+  '@farming-labs/orm-drizzle@0.0.65(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-sql': 0.0.65
+    optionalDependencies:
+      drizzle-orm: 0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)
 
   '@farming-labs/orm-dynamodb@0.0.62':
     dependencies:
@@ -4969,18 +5373,38 @@ snapshots:
       '@aws-sdk/lib-dynamodb': 3.1141.0(@aws-sdk/client-dynamodb@3.1141.0)
       '@farming-labs/orm': 0.0.62
 
+  '@farming-labs/orm-dynamodb@0.0.65(@aws-sdk/client-dynamodb@3.1141.0)(@aws-sdk/lib-dynamodb@3.1141.0(@aws-sdk/client-dynamodb@3.1141.0))':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+    optionalDependencies:
+      '@aws-sdk/client-dynamodb': 3.1141.0
+      '@aws-sdk/lib-dynamodb': 3.1141.0(@aws-sdk/client-dynamodb@3.1141.0)
+
   '@farming-labs/orm-edgedb@0.0.62':
     dependencies:
       '@farming-labs/orm': 0.0.62
       '@farming-labs/orm-sql': 0.0.62
 
+  '@farming-labs/orm-edgedb@0.0.65':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-sql': 0.0.65
+
   '@farming-labs/orm-firestore@0.0.62':
     dependencies:
       '@farming-labs/orm': 0.0.62
 
+  '@farming-labs/orm-firestore@0.0.65':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+
   '@farming-labs/orm-kv@0.0.62':
     dependencies:
       '@farming-labs/orm': 0.0.62
+
+  '@farming-labs/orm-kv@0.0.65':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
 
   '@farming-labs/orm-kysely@0.0.62(kysely@0.28.17)':
     dependencies:
@@ -4988,10 +5412,24 @@ snapshots:
       '@farming-labs/orm-sql': 0.0.62
       kysely: 0.28.17
 
+  '@farming-labs/orm-kysely@0.0.65(kysely@0.28.17)':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-sql': 0.0.65
+    optionalDependencies:
+      kysely: 0.28.17
+
   '@farming-labs/orm-mikroorm@0.0.62(@mikro-orm/core@7.2.1)':
     dependencies:
       '@farming-labs/orm': 0.0.62
       '@farming-labs/orm-sql': 0.0.62
+      '@mikro-orm/core': 7.2.1
+
+  '@farming-labs/orm-mikroorm@0.0.65(@mikro-orm/core@7.2.1)':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-sql': 0.0.65
+    optionalDependencies:
       '@mikro-orm/core': 7.2.1
 
   '@farming-labs/orm-mongo@0.0.62(mongodb@6.21.0)(mongoose@8.24.4)':
@@ -5002,30 +5440,59 @@ snapshots:
     transitivePeerDependencies:
       - mongoose
 
+  '@farming-labs/orm-mongo@0.0.65(mongodb@6.21.0)(mongoose@8.24.4)':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-mongoose': 0.0.65(mongoose@8.24.4)
+    optionalDependencies:
+      mongodb: 6.21.0
+    transitivePeerDependencies:
+      - mongoose
+
   '@farming-labs/orm-mongoose@0.0.62(mongoose@8.24.4)':
     dependencies:
       '@farming-labs/orm': 0.0.62
+      mongoose: 8.24.4
+
+  '@farming-labs/orm-mongoose@0.0.65(mongoose@8.24.4)':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+    optionalDependencies:
       mongoose: 8.24.4
 
   '@farming-labs/orm-neo4j@0.0.62':
     dependencies:
       '@farming-labs/orm': 0.0.62
 
+  '@farming-labs/orm-neo4j@0.0.65':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+
   '@farming-labs/orm-prisma@0.0.62(@prisma/client@6.19.3(typescript@5.9.3))':
     dependencies:
       '@farming-labs/orm': 0.0.62
+      '@prisma/client': 6.19.3(typescript@5.9.3)
+
+  '@farming-labs/orm-prisma@0.0.65(@prisma/client@6.19.3(typescript@5.9.3))':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+    optionalDependencies:
       '@prisma/client': 6.19.3(typescript@5.9.3)
 
   '@farming-labs/orm-redis@0.0.62':
     dependencies:
       '@farming-labs/orm': 0.0.62
 
-  '@farming-labs/orm-runtime@0.0.62(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0)))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))(kysely@0.28.17)(mongodb@6.21.0)(mongoose@8.24.4)(sequelize@6.37.8(pg@8.23.0))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.0))':
+  '@farming-labs/orm-redis@0.0.65':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+
+  '@farming-labs/orm-runtime@0.0.62(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))(kysely@0.28.17)(mongodb@6.21.0)(mongoose@8.24.4)(sequelize@6.37.8(pg@8.23.1))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))':
     dependencies:
       '@aws-sdk/client-dynamodb': 3.1141.0
       '@farming-labs/orm': 0.0.62
       '@farming-labs/orm-d1': 0.0.62
-      '@farming-labs/orm-drizzle': 0.0.62(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))
+      '@farming-labs/orm-drizzle': 0.0.62(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))
       '@farming-labs/orm-dynamodb': 0.0.62
       '@farming-labs/orm-edgedb': 0.0.62
       '@farming-labs/orm-firestore': 0.0.62
@@ -5037,12 +5504,12 @@ snapshots:
       '@farming-labs/orm-neo4j': 0.0.62
       '@farming-labs/orm-prisma': 0.0.62(@prisma/client@6.19.3(typescript@5.9.3))
       '@farming-labs/orm-redis': 0.0.62
-      '@farming-labs/orm-sequelize': 0.0.62(sequelize@6.37.8(pg@8.23.0))
+      '@farming-labs/orm-sequelize': 0.0.62(sequelize@6.37.8(pg@8.23.1))
       '@farming-labs/orm-sql': 0.0.62
       '@farming-labs/orm-supabase': 0.0.62
       '@farming-labs/orm-surrealdb': 0.0.62(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))
-      '@farming-labs/orm-typeorm': 0.0.62(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.0))
-      '@farming-labs/orm-unstorage': 0.0.62(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0)))
+      '@farming-labs/orm-typeorm': 0.0.62(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))
+      '@farming-labs/orm-unstorage': 0.0.62(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)))
       '@farming-labs/orm-xata': 0.0.62(@xata.io/client@0.30.1(typescript@5.9.3))
     transitivePeerDependencies:
       - '@azure/app-configuration'
@@ -5075,35 +5542,145 @@ snapshots:
       - typeorm
       - uploadthing
 
-  '@farming-labs/orm-sequelize@0.0.62(sequelize@6.37.8(pg@8.23.0))':
+  '@farming-labs/orm-runtime@0.0.65(@aws-sdk/client-dynamodb@3.1141.0)(@aws-sdk/lib-dynamodb@3.1141.0(@aws-sdk/client-dynamodb@3.1141.0))(@mikro-orm/core@7.2.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)))(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))(kysely@0.28.17)(mongodb@6.21.0)(mongoose@8.24.4)(sequelize@6.37.8(pg@8.23.1))(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-d1': 0.0.65
+      '@farming-labs/orm-drizzle': 0.0.65(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))
+      '@farming-labs/orm-dynamodb': 0.0.65(@aws-sdk/client-dynamodb@3.1141.0)(@aws-sdk/lib-dynamodb@3.1141.0(@aws-sdk/client-dynamodb@3.1141.0))
+      '@farming-labs/orm-edgedb': 0.0.65
+      '@farming-labs/orm-firestore': 0.0.65
+      '@farming-labs/orm-kv': 0.0.65
+      '@farming-labs/orm-kysely': 0.0.65(kysely@0.28.17)
+      '@farming-labs/orm-mikroorm': 0.0.65(@mikro-orm/core@7.2.1)
+      '@farming-labs/orm-mongo': 0.0.65(mongodb@6.21.0)(mongoose@8.24.4)
+      '@farming-labs/orm-mongoose': 0.0.65(mongoose@8.24.4)
+      '@farming-labs/orm-neo4j': 0.0.65
+      '@farming-labs/orm-prisma': 0.0.65(@prisma/client@6.19.3(typescript@5.9.3))
+      '@farming-labs/orm-redis': 0.0.65
+      '@farming-labs/orm-sequelize': 0.0.65(sequelize@6.37.8(pg@8.23.1))
+      '@farming-labs/orm-sql': 0.0.65
+      '@farming-labs/orm-supabase': 0.0.65
+      '@farming-labs/orm-surrealdb': 0.0.65(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))
+      '@farming-labs/orm-typeorm': 0.0.65(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))
+      '@farming-labs/orm-unstorage': 0.0.65(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)))
+      '@farming-labs/orm-xata': 0.0.65(@xata.io/client@0.30.1(typescript@5.9.3))
+    optionalDependencies:
+      '@aws-sdk/client-dynamodb': 3.1141.0
+    transitivePeerDependencies:
+      - '@aws-sdk/lib-dynamodb'
+      - '@azure/app-configuration'
+      - '@azure/cosmos'
+      - '@azure/data-tables'
+      - '@azure/identity'
+      - '@azure/keyvault-secrets'
+      - '@azure/storage-blob'
+      - '@capacitor/preferences'
+      - '@deno/kv'
+      - '@mikro-orm/core'
+      - '@netlify/blobs'
+      - '@planetscale/database'
+      - '@prisma/client'
+      - '@upstash/redis'
+      - '@vercel/blob'
+      - '@vercel/functions'
+      - '@vercel/kv'
+      - '@xata.io/client'
+      - aws4fetch
+      - db0
+      - drizzle-orm
+      - idb-keyval
+      - ioredis
+      - kysely
+      - mongodb
+      - mongoose
+      - sequelize
+      - surrealdb
+      - typeorm
+      - uploadthing
+
+  '@farming-labs/orm-sequelize@0.0.62(sequelize@6.37.8(pg@8.23.1))':
     dependencies:
       '@farming-labs/orm': 0.0.62
       '@farming-labs/orm-sql': 0.0.62
-      sequelize: 6.37.8(pg@8.23.0)
+      sequelize: 6.37.8(pg@8.23.1)
+
+  '@farming-labs/orm-sequelize@0.0.65(sequelize@6.37.8(pg@8.23.1))':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-sql': 0.0.65
+    optionalDependencies:
+      sequelize: 6.37.8(pg@8.23.1)
 
   '@farming-labs/orm-sql@0.0.62':
     dependencies:
       '@farming-labs/orm': 0.0.62
 
+  '@farming-labs/orm-sql@0.0.65':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+
   '@farming-labs/orm-supabase@0.0.62':
     dependencies:
       '@farming-labs/orm': 0.0.62
+
+  '@farming-labs/orm-supabase@0.0.65':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
 
   '@farming-labs/orm-surrealdb@0.0.62(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))':
     dependencies:
       '@farming-labs/orm': 0.0.62
       surrealdb: 2.0.8(tslib@2.8.1)(typescript@5.9.3)
 
-  '@farming-labs/orm-typeorm@0.0.62(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.0))':
+  '@farming-labs/orm-surrealdb@0.0.65(surrealdb@2.0.8(tslib@2.8.1)(typescript@5.9.3))':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+    optionalDependencies:
+      surrealdb: 2.0.8(tslib@2.8.1)(typescript@5.9.3)
+
+  '@farming-labs/orm-typeorm@0.0.62(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))':
     dependencies:
       '@farming-labs/orm': 0.0.62
       '@farming-labs/orm-sql': 0.0.62
-      typeorm: 0.3.31(mongodb@6.21.0)(pg@8.23.0)
+      typeorm: 0.3.31(mongodb@6.21.0)(pg@8.23.1)
 
-  '@farming-labs/orm-unstorage@0.0.62(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0)))':
+  '@farming-labs/orm-typeorm@0.0.65(typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1))':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-sql': 0.0.65
+    optionalDependencies:
+      typeorm: 0.3.31(mongodb@6.21.0)(pg@8.23.1)
+
+  '@farming-labs/orm-unstorage@0.0.62(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)))':
     dependencies:
       '@farming-labs/orm': 0.0.62
-      unstorage: 1.17.5(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0)))
+      unstorage: 1.17.6(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)))
+    transitivePeerDependencies:
+      - '@azure/app-configuration'
+      - '@azure/cosmos'
+      - '@azure/data-tables'
+      - '@azure/identity'
+      - '@azure/keyvault-secrets'
+      - '@azure/storage-blob'
+      - '@capacitor/preferences'
+      - '@deno/kv'
+      - '@netlify/blobs'
+      - '@planetscale/database'
+      - '@upstash/redis'
+      - '@vercel/blob'
+      - '@vercel/functions'
+      - '@vercel/kv'
+      - aws4fetch
+      - db0
+      - idb-keyval
+      - ioredis
+      - uploadthing
+
+  '@farming-labs/orm-unstorage@0.0.65(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)))':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      unstorage: 1.17.6(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)))
     transitivePeerDependencies:
       - '@azure/app-configuration'
       - '@azure/cosmos'
@@ -5131,7 +5708,16 @@ snapshots:
       '@farming-labs/orm-sql': 0.0.62
       '@xata.io/client': 0.30.1(typescript@5.9.3)
 
+  '@farming-labs/orm-xata@0.0.65(@xata.io/client@0.30.1(typescript@5.9.3))':
+    dependencies:
+      '@farming-labs/orm': 0.0.65
+      '@farming-labs/orm-sql': 0.0.65
+    optionalDependencies:
+      '@xata.io/client': 0.30.1(typescript@5.9.3)
+
   '@farming-labs/orm@0.0.62': {}
+
+  '@farming-labs/orm@0.0.65': {}
 
   '@floating-ui/core@1.8.0':
     dependencies:
@@ -5365,11 +5951,11 @@ snapshots:
 
   '@mdx-js/mdx@3.1.1(supports-color@10.2.2)':
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       '@types/estree-jsx': 1.0.5
       '@types/hast': 3.0.5
       '@types/mdx': 2.0.14
-      acorn: 8.18.0
+      acorn: 8.19.0
       collapse-white-space: 2.1.0
       devlop: 1.1.0
       estree-util-is-identifier-name: 3.0.0
@@ -5378,7 +5964,7 @@ snapshots:
       hast-util-to-jsx-runtime: 2.3.6(supports-color@10.2.2)
       markdown-extensions: 2.0.0
       recma-build-jsx: 1.0.0
-      recma-jsx: 1.0.1(acorn@8.18.0)
+      recma-jsx: 1.0.1(acorn@8.19.0)
       recma-stringify: 1.0.0
       rehype-recma: 1.0.0(supports-color@10.2.2)
       remark-mdx: 3.1.1(supports-color@10.2.2)
@@ -5388,7 +5974,7 @@ snapshots:
       unified: 11.0.5
       unist-util-position-from-estree: 2.0.0
       unist-util-stringify-position: 4.0.0
-      unist-util-visit: 5.1.0
+      unist-util-visit: 5.2.0
       vfile: 6.0.3
     transitivePeerDependencies:
       - supports-color
@@ -5418,7 +6004,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.4
     optional: true
 
-  '@napi-rs/wasm-runtime@1.2.5(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
+  '@napi-rs/wasm-runtime@1.2.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
     dependencies:
       '@emnapi/core': 1.11.1
       '@emnapi/runtime': 1.11.1
@@ -5426,6 +6012,18 @@ snapshots:
     optional: true
 
   '@noble/hashes@2.4.0': {}
+
+  '@nodelib/fs.scandir@2.1.5':
+    dependencies:
+      '@nodelib/fs.stat': 2.0.5
+      run-parallel: 1.2.0
+
+  '@nodelib/fs.stat@2.0.5': {}
+
+  '@nodelib/fs.walk@1.2.8':
+    dependencies:
+      '@nodelib/fs.scandir': 2.1.5
+      fastq: 1.20.3
 
   '@opentelemetry/api@1.9.0': {}
 
@@ -5437,7 +6035,7 @@ snapshots:
   '@oxc-project/types@0.140.0':
     optional: true
 
-  '@oxc-project/types@0.151.0': {}
+  '@oxc-project/types@0.155.0': {}
 
   '@phosphor-icons/core@2.1.1': {}
 
@@ -5458,7 +6056,7 @@ snapshots:
 
   '@resvg/resvg-wasm@2.4.0': {}
 
-  '@rolldown/binding-android-arm-eabi@1.2.11':
+  '@rolldown/binding-android-arm-eabi@1.2.15':
     optional: true
 
   '@rolldown/binding-android-arm64@1.1.5':
@@ -5467,7 +6065,7 @@ snapshots:
   '@rolldown/binding-android-arm64@1.2.0':
     optional: true
 
-  '@rolldown/binding-android-arm64@1.2.11':
+  '@rolldown/binding-android-arm64@1.2.15':
     optional: true
 
   '@rolldown/binding-darwin-arm64@1.1.5':
@@ -5476,7 +6074,7 @@ snapshots:
   '@rolldown/binding-darwin-arm64@1.2.0':
     optional: true
 
-  '@rolldown/binding-darwin-arm64@1.2.11':
+  '@rolldown/binding-darwin-arm64@1.2.15':
     optional: true
 
   '@rolldown/binding-darwin-x64@1.1.5':
@@ -5485,7 +6083,7 @@ snapshots:
   '@rolldown/binding-darwin-x64@1.2.0':
     optional: true
 
-  '@rolldown/binding-darwin-x64@1.2.11':
+  '@rolldown/binding-darwin-x64@1.2.15':
     optional: true
 
   '@rolldown/binding-freebsd-x64@1.1.5':
@@ -5494,7 +6092,7 @@ snapshots:
   '@rolldown/binding-freebsd-x64@1.2.0':
     optional: true
 
-  '@rolldown/binding-freebsd-x64@1.2.11':
+  '@rolldown/binding-freebsd-x64@1.2.15':
     optional: true
 
   '@rolldown/binding-linux-arm-gnueabihf@1.1.5':
@@ -5503,7 +6101,7 @@ snapshots:
   '@rolldown/binding-linux-arm-gnueabihf@1.2.0':
     optional: true
 
-  '@rolldown/binding-linux-arm-gnueabihf@1.2.11':
+  '@rolldown/binding-linux-arm-gnueabihf@1.2.15':
     optional: true
 
   '@rolldown/binding-linux-arm64-gnu@1.1.5':
@@ -5512,7 +6110,7 @@ snapshots:
   '@rolldown/binding-linux-arm64-gnu@1.2.0':
     optional: true
 
-  '@rolldown/binding-linux-arm64-gnu@1.2.11':
+  '@rolldown/binding-linux-arm64-gnu@1.2.15':
     optional: true
 
   '@rolldown/binding-linux-arm64-musl@1.1.5':
@@ -5521,7 +6119,7 @@ snapshots:
   '@rolldown/binding-linux-arm64-musl@1.2.0':
     optional: true
 
-  '@rolldown/binding-linux-arm64-musl@1.2.11':
+  '@rolldown/binding-linux-arm64-musl@1.2.15':
     optional: true
 
   '@rolldown/binding-linux-ppc64-gnu@1.1.5':
@@ -5530,7 +6128,7 @@ snapshots:
   '@rolldown/binding-linux-ppc64-gnu@1.2.0':
     optional: true
 
-  '@rolldown/binding-linux-ppc64-gnu@1.2.11':
+  '@rolldown/binding-linux-ppc64-gnu@1.2.15':
     optional: true
 
   '@rolldown/binding-linux-s390x-gnu@1.1.5':
@@ -5539,7 +6137,7 @@ snapshots:
   '@rolldown/binding-linux-s390x-gnu@1.2.0':
     optional: true
 
-  '@rolldown/binding-linux-s390x-gnu@1.2.11':
+  '@rolldown/binding-linux-s390x-gnu@1.2.15':
     optional: true
 
   '@rolldown/binding-linux-x64-gnu@1.1.5':
@@ -5548,7 +6146,7 @@ snapshots:
   '@rolldown/binding-linux-x64-gnu@1.2.0':
     optional: true
 
-  '@rolldown/binding-linux-x64-gnu@1.2.11':
+  '@rolldown/binding-linux-x64-gnu@1.2.15':
     optional: true
 
   '@rolldown/binding-linux-x64-musl@1.1.5':
@@ -5557,7 +6155,7 @@ snapshots:
   '@rolldown/binding-linux-x64-musl@1.2.0':
     optional: true
 
-  '@rolldown/binding-linux-x64-musl@1.2.11':
+  '@rolldown/binding-linux-x64-musl@1.2.15':
     optional: true
 
   '@rolldown/binding-openharmony-arm64@1.1.5':
@@ -5566,14 +6164,14 @@ snapshots:
   '@rolldown/binding-openharmony-arm64@1.2.0':
     optional: true
 
-  '@rolldown/binding-openharmony-arm64@1.2.11':
+  '@rolldown/binding-openharmony-arm64@1.2.15':
     optional: true
 
   '@rolldown/binding-wasm32-wasi@1.1.5':
     dependencies:
       '@emnapi/core': 1.11.1
       '@emnapi/runtime': 1.11.1
-      '@napi-rs/wasm-runtime': 1.2.5(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)
+      '@napi-rs/wasm-runtime': 1.2.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)
     optional: true
 
   '@rolldown/binding-wasm32-wasi@1.2.0':
@@ -5589,7 +6187,7 @@ snapshots:
   '@rolldown/binding-win32-arm64-msvc@1.2.0':
     optional: true
 
-  '@rolldown/binding-win32-arm64-msvc@1.2.11':
+  '@rolldown/binding-win32-arm64-msvc@1.2.15':
     optional: true
 
   '@rolldown/binding-win32-x64-msvc@1.1.5':
@@ -5598,7 +6196,7 @@ snapshots:
   '@rolldown/binding-win32-x64-msvc@1.2.0':
     optional: true
 
-  '@rolldown/binding-win32-x64-msvc@1.2.11':
+  '@rolldown/binding-win32-x64-msvc@1.2.15':
     optional: true
 
   '@rolldown/pluginutils@1.0.0-beta.27': {}
@@ -5853,7 +6451,7 @@ snapshots:
       remark-rehype: 11.1.2
       remark-stringify: 11.0.0
       unified: 11.0.5
-      unist-util-visit: 5.1.0
+      unist-util-visit: 5.2.0
     transitivePeerDependencies:
       - supports-color
 
@@ -6196,12 +6794,12 @@ snapshots:
       '@tailwindcss/oxide-win32-arm64-msvc': 4.1.18
       '@tailwindcss/oxide-win32-x64-msvc': 4.1.18
 
-  '@tailwindcss/vite@4.1.18(vite@7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3))':
+  '@tailwindcss/vite@4.1.18(vite@7.3.7(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3))':
     dependencies:
       '@tailwindcss/node': 4.1.18
       '@tailwindcss/oxide': 4.1.18
       tailwindcss: 4.1.18
-      vite: 7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3)
+      vite: 7.3.7(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3)
 
   '@tanstack/virtual-core@3.17.11': {}
 
@@ -6242,7 +6840,9 @@ snapshots:
 
   '@types/estree-jsx@1.0.5':
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
+
+  '@types/estree@1.0.10': {}
 
   '@types/estree@1.0.9': {}
 
@@ -6264,7 +6864,7 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
-  '@types/node@26.6.5':
+  '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
 
@@ -6302,12 +6902,12 @@ snapshots:
       unhead: 2.1.17
       vue: 3.5.43(typescript@5.9.3)
 
-  '@vercel/og@0.11.1(@types/node@26.6.5)':
+  '@vercel/og@0.11.1(@types/node@26.6.6)':
     dependencies:
       '@resvg/resvg-wasm': 2.4.0
       satori: 0.33.5
     optionalDependencies:
-      sharp: 0.35.5(@types/node@26.6.5)
+      sharp: 0.35.5(@types/node@26.6.6)
     transitivePeerDependencies:
       - '@types/node'
 
@@ -6334,15 +6934,15 @@ snapshots:
       - react-native-b4a
     optional: true
 
-  '@vitejs/plugin-react@4.7.0(supports-color@10.2.2)(vite@7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3))':
+  '@vitejs/plugin-react@4.7.0(supports-color@10.2.2)(vite@7.3.7(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
-      '@babel/plugin-transform-react-jsx-source': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
+      '@babel/plugin-transform-react-jsx-source': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
       '@rolldown/pluginutils': 1.0.0-beta.27
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
-      vite: 7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3)
+      vite: 7.3.7(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3)
     transitivePeerDependencies:
       - supports-color
 
@@ -6368,7 +6968,7 @@ snapshots:
       '@vue/shared': 3.5.43
       estree-walker: 2.0.2
       magic-string: 0.30.21
-      postcss: 8.5.31
+      postcss: 8.5.32
       source-map-js: 1.2.2
 
   '@vue/compiler-ssr@3.5.43':
@@ -6448,11 +7048,11 @@ snapshots:
     dependencies:
       typescript: 5.9.3
 
-  acorn-jsx@5.3.2(acorn@8.18.0):
+  acorn-jsx@5.3.2(acorn@8.19.0):
     dependencies:
-      acorn: 8.18.0
+      acorn: 8.19.0
 
-  acorn@8.18.0: {}
+  acorn@8.19.0: {}
 
   ai@6.0.33(zod@4.6.7):
     dependencies:
@@ -6538,11 +7138,24 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
+  better-call@1.4.4(zod@4.6.7):
+    dependencies:
+      '@better-auth/utils': 0.5.1
+      '@better-fetch/fetch': 1.3.3
+      rou3: 0.9.2
+      set-cookie-parser: 3.2.1
+    optionalDependencies:
+      zod: 4.6.7
+
   bowser@2.14.1: {}
 
   brace-expansion@2.1.7:
     dependencies:
       balanced-match: 1.0.2
+
+  braces@3.0.3:
+    dependencies:
+      fill-range: 7.1.1
 
   browserslist@4.29.1:
     dependencies:
@@ -6636,9 +7249,9 @@ snapshots:
     dependencies:
       uncrypto: 0.1.3
 
-  crossws@0.4.12(srvx@1.0.5):
+  crossws@0.4.17(srvx@1.0.8):
     optionalDependencies:
-      srvx: 1.0.5
+      srvx: 1.0.8
 
   css-background-parser@0.1.0: {}
 
@@ -6664,11 +7277,11 @@ snapshots:
 
   dayjs@1.11.23: {}
 
-  db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0)):
+  db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)):
     optionalDependencies:
-      drizzle-orm: 0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0)
+      drizzle-orm: 0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1)
 
-  db0@0.4.1: {}
+  db0@0.4.2: {}
 
   debug@4.4.3(supports-color@10.2.2):
     dependencies:
@@ -6704,13 +7317,13 @@ snapshots:
 
   dottie@2.0.7: {}
 
-  drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0):
+  drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1):
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@prisma/client': 6.19.3(typescript@5.9.3)
       '@xata.io/client': 0.30.1(typescript@5.9.3)
       kysely: 0.28.17
-      pg: 8.23.0
+      pg: 8.23.1
 
   dunder-proto@1.0.1:
     dependencies:
@@ -6739,10 +7352,10 @@ snapshots:
 
   env-runner@0.2.3:
     dependencies:
-      crossws: 0.4.12(srvx@1.0.5)
-      exsolve: 1.1.1
-      httpxy: 0.5.5
-      srvx: 1.0.5
+      crossws: 0.4.17(srvx@1.0.8)
+      exsolve: 1.2.0
+      httpxy: 0.5.6
+      srvx: 1.0.8
 
   es-define-property@1.0.1: {}
 
@@ -6764,7 +7377,7 @@ snapshots:
   esast-util-from-js@2.0.1:
     dependencies:
       '@types/estree-jsx': 1.0.5
-      acorn: 8.18.0
+      acorn: 8.19.0
       esast-util-from-estree: 2.0.0
       vfile-message: 4.0.3
 
@@ -6805,7 +7418,7 @@ snapshots:
 
   estree-util-attach-comments@3.0.0:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
 
   estree-util-build-jsx@3.0.1:
     dependencies:
@@ -6818,7 +7431,7 @@ snapshots:
 
   estree-util-scope@1.0.1:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       devlop: 1.1.0
 
   estree-util-to-js@2.0.0:
@@ -6836,7 +7449,7 @@ snapshots:
 
   estree-walker@3.0.3:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
 
   events-universal@1.0.1:
     dependencies:
@@ -6847,7 +7460,7 @@ snapshots:
 
   eventsource-parser@3.1.1: {}
 
-  exsolve@1.1.1: {}
+  exsolve@1.2.0: {}
 
   extend-shallow@2.0.1:
     dependencies:
@@ -6859,6 +7472,14 @@ snapshots:
 
   fast-fifo@1.3.2:
     optional: true
+
+  fast-glob@3.3.3:
+    dependencies:
+      '@nodelib/fs.stat': 2.0.5
+      '@nodelib/fs.walk': 1.2.8
+      glob-parent: 5.1.2
+      merge2: 1.4.1
+      micromatch: 4.0.8
 
   fast-string-truncated-width@3.0.3: {}
 
@@ -6872,11 +7493,19 @@ snapshots:
     dependencies:
       fast-string-width: 3.0.2
 
+  fastq@1.20.3:
+    dependencies:
+      reusify: 1.1.0
+
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
 
   fflate@0.7.5: {}
+
+  fill-range@7.1.1:
+    dependencies:
+      to-regex-range: 5.0.1
 
   flatted@3.4.4: {}
 
@@ -6926,6 +7555,10 @@ snapshots:
 
   github-slugger@2.0.0: {}
 
+  glob-parent@5.1.2:
+    dependencies:
+      is-glob: 4.0.3
+
   glob@10.5.0:
     dependencies:
       foreground-child: 3.3.1
@@ -6960,13 +7593,13 @@ snapshots:
       ufo: 1.6.4
       uncrypto: 0.1.3
 
-  h3@2.0.1-rc.32(crossws@0.4.12(srvx@1.0.5))(ocache@0.3.0):
+  h3@2.0.1-rc.32(crossws@0.4.17(srvx@1.0.8))(ocache@0.3.1):
     dependencies:
       rou3: 0.9.2
-      srvx: 1.0.5
+      srvx: 1.0.8
     optionalDependencies:
-      crossws: 0.4.12(srvx@1.0.5)
-      ocache: 0.3.0
+      crossws: 0.4.17(srvx@1.0.8)
+      ocache: 0.3.1
 
   harfbuzzjs@0.10.0: {}
 
@@ -6997,7 +7630,7 @@ snapshots:
       hast-util-phrasing: 3.0.1
       hast-util-whitespace: 3.0.0
       html-whitespace-sensitive-tag-names: 3.0.1
-      unist-util-visit-parents: 6.0.2
+      unist-util-visit-parents: 6.1.0
 
   hast-util-from-html@2.0.3:
     dependencies:
@@ -7062,7 +7695,7 @@ snapshots:
       mdast-util-to-hast: 13.2.1
       parse5: 7.3.0
       unist-util-position: 5.0.0
-      unist-util-visit: 5.1.0
+      unist-util-visit: 5.2.0
       vfile: 6.0.3
       web-namespaces: 2.0.1
       zwitch: 2.0.4
@@ -7075,7 +7708,7 @@ snapshots:
 
   hast-util-to-estree@3.1.3(supports-color@10.2.2):
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       '@types/estree-jsx': 1.0.5
       '@types/hast': 3.0.5
       comma-separated-tokens: 2.0.3
@@ -7110,7 +7743,7 @@ snapshots:
 
   hast-util-to-jsx-runtime@2.3.6(supports-color@10.2.2):
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       '@types/hast': 3.0.5
       '@types/unist': 3.0.3
       comma-separated-tokens: 2.0.3
@@ -7143,7 +7776,7 @@ snapshots:
       rehype-minify-whitespace: 6.0.2
       trim-trailing-lines: 2.1.0
       unist-util-position: 5.0.0
-      unist-util-visit: 5.1.0
+      unist-util-visit: 5.2.0
 
   hast-util-to-parse5@8.0.1:
     dependencies:
@@ -7186,7 +7819,7 @@ snapshots:
 
   html-whitespace-sensitive-tag-names@3.0.1: {}
 
-  httpxy@0.5.5: {}
+  httpxy@0.5.6: {}
 
   ieee754@1.2.1: {}
 
@@ -7220,9 +7853,17 @@ snapshots:
 
   is-extendable@0.1.1: {}
 
+  is-extglob@2.1.1: {}
+
   is-fullwidth-code-point@3.0.0: {}
 
+  is-glob@4.0.3:
+    dependencies:
+      is-extglob: 2.1.1
+
   is-hexadecimal@2.0.1: {}
+
+  is-number@7.0.0: {}
 
   is-plain-obj@4.1.0: {}
 
@@ -7375,7 +8016,6 @@ snapshots:
       lightningcss-linux-x64-musl: 1.33.0
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
-    optional: true
 
   linebreak@1.1.0:
     dependencies:
@@ -7400,9 +8040,9 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
-  lucide-react@1.48.0(react@19.3.0):
+  lucide-react@1.48.0(react@19.3.1):
     dependencies:
-      react: 19.3.0
+      react: 19.3.1
 
   magic-string@0.30.21:
     dependencies:
@@ -7416,26 +8056,26 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
-  mdast-util-find-and-replace@3.0.2:
+  mdast-util-find-and-replace@3.0.4:
     dependencies:
       '@types/mdast': 4.0.4
       escape-string-regexp: 5.0.0
       unist-util-is: 6.0.1
-      unist-util-visit-parents: 6.0.2
+      unist-util-visit-parents: 6.1.0
 
-  mdast-util-from-markdown@2.0.3(supports-color@10.2.2):
+  mdast-util-from-markdown@2.1.0(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
       '@types/unist': 3.0.3
       decode-named-character-reference: 1.3.0
       devlop: 1.1.0
       mdast-util-to-string: 4.0.0
-      micromark: 4.0.2(supports-color@10.2.2)
+      micromark: 4.0.3(supports-color@10.2.2)
       micromark-util-decode-numeric-character-reference: 2.0.2
       micromark-util-decode-string: 2.0.1
       micromark-util-normalize-identifier: 2.0.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
       unist-util-stringify-position: 4.0.0
     transitivePeerDependencies:
       - supports-color
@@ -7445,24 +8085,24 @@ snapshots:
       '@types/mdast': 4.0.4
       ccount: 2.0.1
       devlop: 1.1.0
-      mdast-util-find-and-replace: 3.0.2
+      mdast-util-find-and-replace: 3.0.4
       micromark-util-character: 2.1.1
 
   mdast-util-gfm-footnote@2.1.0(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
       devlop: 1.1.0
-      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
-      mdast-util-to-markdown: 2.1.2
+      mdast-util-from-markdown: 2.1.0(supports-color@10.2.2)
+      mdast-util-to-markdown: 2.2.1
       micromark-util-normalize-identifier: 2.0.1
     transitivePeerDependencies:
       - supports-color
 
-  mdast-util-gfm-strikethrough@2.0.0(supports-color@10.2.2):
+  mdast-util-gfm-strikethrough@2.0.1(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
-      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
-      mdast-util-to-markdown: 2.1.2
+      mdast-util-from-markdown: 2.1.0(supports-color@10.2.2)
+      mdast-util-to-markdown: 2.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -7471,8 +8111,8 @@ snapshots:
       '@types/mdast': 4.0.4
       devlop: 1.1.0
       markdown-table: 3.0.4
-      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
-      mdast-util-to-markdown: 2.1.2
+      mdast-util-from-markdown: 2.1.0(supports-color@10.2.2)
+      mdast-util-to-markdown: 2.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -7480,20 +8120,20 @@ snapshots:
     dependencies:
       '@types/mdast': 4.0.4
       devlop: 1.1.0
-      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
-      mdast-util-to-markdown: 2.1.2
+      mdast-util-from-markdown: 2.1.0(supports-color@10.2.2)
+      mdast-util-to-markdown: 2.2.1
     transitivePeerDependencies:
       - supports-color
 
   mdast-util-gfm@3.1.0(supports-color@10.2.2):
     dependencies:
-      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
+      mdast-util-from-markdown: 2.1.0(supports-color@10.2.2)
       mdast-util-gfm-autolink-literal: 2.0.1
       mdast-util-gfm-footnote: 2.1.0(supports-color@10.2.2)
-      mdast-util-gfm-strikethrough: 2.0.0(supports-color@10.2.2)
+      mdast-util-gfm-strikethrough: 2.0.1(supports-color@10.2.2)
       mdast-util-gfm-table: 2.0.0(supports-color@10.2.2)
       mdast-util-gfm-task-list-item: 2.0.0(supports-color@10.2.2)
-      mdast-util-to-markdown: 2.1.2
+      mdast-util-to-markdown: 2.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -7503,8 +8143,8 @@ snapshots:
       '@types/hast': 3.0.5
       '@types/mdast': 4.0.4
       devlop: 1.1.0
-      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
-      mdast-util-to-markdown: 2.1.2
+      mdast-util-from-markdown: 2.1.0(supports-color@10.2.2)
+      mdast-util-to-markdown: 2.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -7516,8 +8156,8 @@ snapshots:
       '@types/unist': 3.0.3
       ccount: 2.0.1
       devlop: 1.1.0
-      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
-      mdast-util-to-markdown: 2.1.2
+      mdast-util-from-markdown: 2.1.0(supports-color@10.2.2)
+      mdast-util-to-markdown: 2.2.1
       parse-entities: 4.0.2
       stringify-entities: 4.0.4
       unist-util-stringify-position: 4.0.0
@@ -7527,11 +8167,11 @@ snapshots:
 
   mdast-util-mdx@3.0.0(supports-color@10.2.2):
     dependencies:
-      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
+      mdast-util-from-markdown: 2.1.0(supports-color@10.2.2)
       mdast-util-mdx-expression: 2.0.1(supports-color@10.2.2)
       mdast-util-mdx-jsx: 3.2.0(supports-color@10.2.2)
       mdast-util-mdxjs-esm: 2.0.1(supports-color@10.2.2)
-      mdast-util-to-markdown: 2.1.2
+      mdast-util-to-markdown: 2.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -7541,8 +8181,8 @@ snapshots:
       '@types/hast': 3.0.5
       '@types/mdast': 4.0.4
       devlop: 1.1.0
-      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
-      mdast-util-to-markdown: 2.1.2
+      mdast-util-from-markdown: 2.1.0(supports-color@10.2.2)
+      mdast-util-to-markdown: 2.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -7560,19 +8200,21 @@ snapshots:
       micromark-util-sanitize-uri: 2.0.1
       trim-lines: 3.0.1
       unist-util-position: 5.0.0
-      unist-util-visit: 5.1.0
+      unist-util-visit: 5.2.0
       vfile: 6.0.3
 
-  mdast-util-to-markdown@2.1.2:
+  mdast-util-to-markdown@2.2.1:
     dependencies:
       '@types/mdast': 4.0.4
       '@types/unist': 3.0.3
       longest-streak: 3.1.0
       mdast-util-phrasing: 4.1.0
       mdast-util-to-string: 4.0.0
+      micromark-util-character: 2.1.1
       micromark-util-classify-character: 2.0.1
       micromark-util-decode-string: 2.0.1
-      unist-util-visit: 5.1.0
+      micromark-util-html-tag-name: 2.0.1
+      unist-util-visit: 5.2.0
       zwitch: 2.0.4
 
   mdast-util-to-string@4.0.0:
@@ -7581,44 +8223,47 @@ snapshots:
 
   memory-pager@1.5.0: {}
 
+  merge2@1.4.1: {}
+
   microdiff@1.6.0: {}
 
-  micromark-core-commonmark@2.0.3:
+  micromark-core-commonmark@2.0.4:
     dependencies:
       decode-named-character-reference: 1.3.0
       devlop: 1.1.0
       micromark-factory-destination: 2.0.1
       micromark-factory-label: 2.0.1
-      micromark-factory-space: 2.0.1
+      micromark-factory-space: 2.1.0
       micromark-factory-title: 2.0.1
       micromark-factory-whitespace: 2.0.1
       micromark-util-character: 2.1.1
       micromark-util-chunked: 2.0.1
       micromark-util-classify-character: 2.0.1
+      micromark-util-edit-map: 1.0.0
       micromark-util-html-tag-name: 2.0.1
       micromark-util-normalize-identifier: 2.0.1
       micromark-util-resolve-all: 2.0.1
       micromark-util-subtokenize: 2.1.0
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-extension-gfm-autolink-literal@2.1.0:
     dependencies:
       micromark-util-character: 2.1.1
       micromark-util-sanitize-uri: 2.0.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-extension-gfm-footnote@2.1.0:
     dependencies:
       devlop: 1.1.0
-      micromark-core-commonmark: 2.0.3
-      micromark-factory-space: 2.0.1
+      micromark-core-commonmark: 2.0.4
+      micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-normalize-identifier: 2.0.1
       micromark-util-sanitize-uri: 2.0.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-extension-gfm-strikethrough@2.1.0:
     dependencies:
@@ -7627,27 +8272,27 @@ snapshots:
       micromark-util-classify-character: 2.0.1
       micromark-util-resolve-all: 2.0.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-extension-gfm-table@2.1.2:
     dependencies:
       devlop: 1.1.0
-      micromark-factory-space: 2.0.1
+      micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-extension-gfm-tagfilter@2.0.0:
     dependencies:
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-extension-gfm-task-list-item@2.1.0:
     dependencies:
       devlop: 1.1.0
-      micromark-factory-space: 2.0.1
+      micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-extension-gfm@3.0.0:
     dependencies:
@@ -7658,107 +8303,107 @@ snapshots:
       micromark-extension-gfm-tagfilter: 2.0.0
       micromark-extension-gfm-task-list-item: 2.1.0
       micromark-util-combine-extensions: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-extension-mdx-expression@3.0.1:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       devlop: 1.1.0
       micromark-factory-mdx-expression: 2.0.3
-      micromark-factory-space: 2.0.1
+      micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-events-to-acorn: 2.0.3
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-extension-mdx-jsx@3.0.2:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       devlop: 1.1.0
       estree-util-is-identifier-name: 3.0.0
       micromark-factory-mdx-expression: 2.0.3
-      micromark-factory-space: 2.0.1
+      micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-events-to-acorn: 2.0.3
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
       vfile-message: 4.0.3
 
   micromark-extension-mdx-md@2.0.0:
     dependencies:
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-extension-mdxjs-esm@3.0.0:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       devlop: 1.1.0
-      micromark-core-commonmark: 2.0.3
+      micromark-core-commonmark: 2.0.4
       micromark-util-character: 2.1.1
       micromark-util-events-to-acorn: 2.0.3
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
       unist-util-position-from-estree: 2.0.0
       vfile-message: 4.0.3
 
   micromark-extension-mdxjs@3.0.0:
     dependencies:
-      acorn: 8.18.0
-      acorn-jsx: 5.3.2(acorn@8.18.0)
+      acorn: 8.19.0
+      acorn-jsx: 5.3.2(acorn@8.19.0)
       micromark-extension-mdx-expression: 3.0.1
       micromark-extension-mdx-jsx: 3.0.2
       micromark-extension-mdx-md: 2.0.0
       micromark-extension-mdxjs-esm: 3.0.0
       micromark-util-combine-extensions: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-factory-destination@2.0.1:
     dependencies:
       micromark-util-character: 2.1.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-factory-label@2.0.1:
     dependencies:
       devlop: 1.1.0
       micromark-util-character: 2.1.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-factory-mdx-expression@2.0.3:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       devlop: 1.1.0
-      micromark-factory-space: 2.0.1
+      micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-events-to-acorn: 2.0.3
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
       unist-util-position-from-estree: 2.0.0
       vfile-message: 4.0.3
 
-  micromark-factory-space@2.0.1:
+  micromark-factory-space@2.1.0:
     dependencies:
       micromark-util-character: 2.1.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-factory-title@2.0.1:
     dependencies:
-      micromark-factory-space: 2.0.1
+      micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-factory-whitespace@2.0.1:
     dependencies:
-      micromark-factory-space: 2.0.1
+      micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-util-character@2.1.1:
     dependencies:
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-util-chunked@2.0.1:
     dependencies:
@@ -7768,12 +8413,12 @@ snapshots:
     dependencies:
       micromark-util-character: 2.1.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-util-combine-extensions@2.0.1:
     dependencies:
       micromark-util-chunked: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-util-decode-numeric-character-reference@2.0.2:
     dependencies:
@@ -7786,16 +8431,20 @@ snapshots:
       micromark-util-decode-numeric-character-reference: 2.0.2
       micromark-util-symbol: 2.0.1
 
+  micromark-util-edit-map@1.0.0:
+    dependencies:
+      micromark-util-types: 2.0.3
+
   micromark-util-encode@2.0.1: {}
 
   micromark-util-events-to-acorn@2.0.3:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       '@types/unist': 3.0.3
       devlop: 1.1.0
       estree-util-visit: 2.0.0
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
       vfile-message: 4.0.3
 
   micromark-util-html-tag-name@2.0.1: {}
@@ -7806,7 +8455,7 @@ snapshots:
 
   micromark-util-resolve-all@2.0.1:
     dependencies:
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-util-sanitize-uri@2.0.1:
     dependencies:
@@ -7819,33 +8468,39 @@ snapshots:
       devlop: 1.1.0
       micromark-util-chunked: 2.0.1
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
 
   micromark-util-symbol@2.0.1: {}
 
-  micromark-util-types@2.0.2: {}
+  micromark-util-types@2.0.3: {}
 
-  micromark@4.0.2(supports-color@10.2.2):
+  micromark@4.0.3(supports-color@10.2.2):
     dependencies:
       '@types/debug': 4.1.13
       debug: 4.4.3(supports-color@10.2.2)
       decode-named-character-reference: 1.3.0
       devlop: 1.1.0
-      micromark-core-commonmark: 2.0.3
-      micromark-factory-space: 2.0.1
+      micromark-core-commonmark: 2.0.4
+      micromark-factory-space: 2.1.0
       micromark-util-character: 2.1.1
       micromark-util-chunked: 2.0.1
       micromark-util-combine-extensions: 2.0.1
       micromark-util-decode-numeric-character-reference: 2.0.2
+      micromark-util-edit-map: 1.0.0
       micromark-util-encode: 2.0.1
       micromark-util-normalize-identifier: 2.0.1
       micromark-util-resolve-all: 2.0.1
       micromark-util-sanitize-uri: 2.0.1
       micromark-util-subtokenize: 2.1.0
       micromark-util-symbol: 2.0.1
-      micromark-util-types: 2.0.2
+      micromark-util-types: 2.0.3
     transitivePeerDependencies:
       - supports-color
+
+  micromatch@4.0.8:
+    dependencies:
+      braces: 3.0.3
+      picomatch: 2.3.2
 
   minimatch@9.0.9:
     dependencies:
@@ -7922,16 +8577,16 @@ snapshots:
   nitro@3.0.260903-beta:
     dependencies:
       consola: 3.4.2
-      crossws: 0.4.12(srvx@1.0.5)
-      db0: 0.4.1
+      crossws: 0.4.17(srvx@1.0.8)
+      db0: 0.4.2
       env-runner: 0.2.3
-      h3: 2.0.1-rc.32(crossws@0.4.12(srvx@1.0.5))(ocache@0.3.0)
+      h3: 2.0.1-rc.32(crossws@0.4.17(srvx@1.0.8))(ocache@0.3.1)
       hookable: 6.1.2
       nf3: 0.3.24
-      ocache: 0.3.0
-      rolldown: 1.2.11
+      ocache: 0.3.1
+      rolldown: 1.2.15
       rou3: 0.9.2
-      srvx: 1.0.5
+      srvx: 1.0.8
       unenv: 2.0.0-rc.24
       unstorage: 2.0.0-alpha.10
 
@@ -7945,7 +8600,7 @@ snapshots:
 
   obliterator@1.6.1: {}
 
-  ocache@0.3.0: {}
+  ocache@0.3.1: {}
 
   ofetch@1.5.1:
     dependencies:
@@ -7993,6 +8648,9 @@ snapshots:
   pg-cloudflare@1.4.0:
     optional: true
 
+  pg-cloudflare@1.4.1:
+    optional: true
+
   pg-connection-string@2.14.0: {}
 
   pg-connection-string@2.14.1: {}
@@ -8003,7 +8661,13 @@ snapshots:
     dependencies:
       pg: 8.23.0
 
+  pg-pool@3.14.0(pg@8.23.1):
+    dependencies:
+      pg: 8.23.1
+
   pg-protocol@1.16.0: {}
+
+  pg-protocol@1.16.1: {}
 
   pg-types@2.2.0:
     dependencies:
@@ -8022,6 +8686,16 @@ snapshots:
       pgpass: 1.0.5
     optionalDependencies:
       pg-cloudflare: 1.4.0
+
+  pg@8.23.1:
+    dependencies:
+      pg-connection-string: 2.14.1
+      pg-pool: 3.14.0(pg@8.23.1)
+      pg-protocol: 1.16.1
+      pg-types: 2.2.0
+      pgpass: 1.0.5
+    optionalDependencies:
+      pg-cloudflare: 1.4.1
 
   pgpass@1.0.5:
     dependencies:
@@ -8043,6 +8717,12 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.2
 
+  postcss@8.5.32:
+    dependencies:
+      nanoid: 3.3.20
+      picocolors: 1.1.1
+      source-map-js: 1.2.2
+
   postgres-array@2.0.0: {}
 
   postgres-bytea@1.0.1: {}
@@ -8057,15 +8737,17 @@ snapshots:
     dependencies:
       parse-ms: 4.0.0
 
-  prism-react-renderer@2.4.1(react@19.3.0):
+  prism-react-renderer@2.4.1(react@19.3.1):
     dependencies:
       '@types/prismjs': 1.26.6
       clsx: 2.1.1
-      react: 19.3.0
+      react: 19.3.1
 
   property-information@7.2.0: {}
 
   punycode@2.3.1: {}
+
+  queue-microtask@1.2.3: {}
 
   radix-vue@1.9.17(vue@3.5.43(typescript@5.9.3)):
     dependencies:
@@ -8086,27 +8768,27 @@ snapshots:
 
   radix3@1.1.2: {}
 
-  react-dom@19.3.0(react@19.3.0):
+  react-dom@19.3.1(react@19.3.1):
     dependencies:
-      react: 19.3.0
+      react: 19.3.1
       scheduler: 0.28.0
 
   react-refresh@0.17.0: {}
 
-  react@19.3.0: {}
+  react@19.3.1: {}
 
   readdirp@5.1.1: {}
 
   recma-build-jsx@1.0.0:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       estree-util-build-jsx: 3.0.1
       vfile: 6.0.3
 
-  recma-jsx@1.0.1(acorn@8.18.0):
+  recma-jsx@1.0.1(acorn@8.19.0):
     dependencies:
-      acorn: 8.18.0
-      acorn-jsx: 5.3.2(acorn@8.18.0)
+      acorn: 8.19.0
+      acorn-jsx: 5.3.2(acorn@8.19.0)
       estree-util-to-js: 2.0.0
       recma-parse: 1.0.0
       recma-stringify: 1.0.0
@@ -8114,14 +8796,14 @@ snapshots:
 
   recma-parse@1.0.0:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       esast-util-from-js: 2.0.1
       unified: 11.0.5
       vfile: 6.0.3
 
   recma-stringify@1.0.0:
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       estree-util-to-js: 2.0.0
       unified: 11.0.5
       vfile: 6.0.3
@@ -8135,7 +8817,7 @@ snapshots:
       hast-util-is-element: 3.0.0
       is-absolute-url: 4.0.1
       space-separated-tokens: 2.0.2
-      unist-util-visit: 5.1.0
+      unist-util-visit: 5.2.0
 
   rehype-format@5.0.1:
     dependencies:
@@ -8161,7 +8843,7 @@ snapshots:
 
   rehype-recma@1.0.0(supports-color@10.2.2):
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.10
       '@types/hast': 3.0.5
       hast-util-to-estree: 3.1.3(supports-color@10.2.2)
     transitivePeerDependencies:
@@ -8207,8 +8889,8 @@ snapshots:
   remark-parse@11.0.0(supports-color@10.2.2):
     dependencies:
       '@types/mdast': 4.0.4
-      mdast-util-from-markdown: 2.0.3(supports-color@10.2.2)
-      micromark-util-types: 2.0.2
+      mdast-util-from-markdown: 2.1.0(supports-color@10.2.2)
+      micromark-util-types: 2.0.3
       unified: 11.0.5
     transitivePeerDependencies:
       - supports-color
@@ -8224,7 +8906,7 @@ snapshots:
   remark-stringify@11.0.0:
     dependencies:
       '@types/mdast': 4.0.4
-      mdast-util-to-markdown: 2.1.2
+      mdast-util-to-markdown: 2.2.1
       unified: 11.0.5
 
   require-directory@2.1.1: {}
@@ -8235,6 +8917,8 @@ snapshots:
 
   retry@0.13.1:
     optional: true
+
+  reusify@1.1.0: {}
 
   rolldown@1.1.5:
     dependencies:
@@ -8280,26 +8964,26 @@ snapshots:
       '@rolldown/binding-win32-x64-msvc': 1.2.0
     optional: true
 
-  rolldown@1.2.11:
+  rolldown@1.2.15:
     dependencies:
-      '@oxc-project/types': 0.151.0
+      '@oxc-project/types': 0.155.0
       '@rolldown/pluginutils': 1.0.1
     optionalDependencies:
-      '@rolldown/binding-android-arm-eabi': 1.2.11
-      '@rolldown/binding-android-arm64': 1.2.11
-      '@rolldown/binding-darwin-arm64': 1.2.11
-      '@rolldown/binding-darwin-x64': 1.2.11
-      '@rolldown/binding-freebsd-x64': 1.2.11
-      '@rolldown/binding-linux-arm-gnueabihf': 1.2.11
-      '@rolldown/binding-linux-arm64-gnu': 1.2.11
-      '@rolldown/binding-linux-arm64-musl': 1.2.11
-      '@rolldown/binding-linux-ppc64-gnu': 1.2.11
-      '@rolldown/binding-linux-s390x-gnu': 1.2.11
-      '@rolldown/binding-linux-x64-gnu': 1.2.11
-      '@rolldown/binding-linux-x64-musl': 1.2.11
-      '@rolldown/binding-openharmony-arm64': 1.2.11
-      '@rolldown/binding-win32-arm64-msvc': 1.2.11
-      '@rolldown/binding-win32-x64-msvc': 1.2.11
+      '@rolldown/binding-android-arm-eabi': 1.2.15
+      '@rolldown/binding-android-arm64': 1.2.15
+      '@rolldown/binding-darwin-arm64': 1.2.15
+      '@rolldown/binding-darwin-x64': 1.2.15
+      '@rolldown/binding-freebsd-x64': 1.2.15
+      '@rolldown/binding-linux-arm-gnueabihf': 1.2.15
+      '@rolldown/binding-linux-arm64-gnu': 1.2.15
+      '@rolldown/binding-linux-arm64-musl': 1.2.15
+      '@rolldown/binding-linux-ppc64-gnu': 1.2.15
+      '@rolldown/binding-linux-s390x-gnu': 1.2.15
+      '@rolldown/binding-linux-x64-gnu': 1.2.15
+      '@rolldown/binding-linux-x64-musl': 1.2.15
+      '@rolldown/binding-openharmony-arm64': 1.2.15
+      '@rolldown/binding-win32-arm64-msvc': 1.2.15
+      '@rolldown/binding-win32-x64-msvc': 1.2.15
 
   rollup@4.63.5:
     dependencies:
@@ -8335,6 +9019,10 @@ snapshots:
 
   rou3@0.9.2: {}
 
+  run-parallel@1.2.0:
+    dependencies:
+      queue-microtask: 1.2.3
+
   safe-buffer@5.2.1: {}
 
   satori@0.33.5:
@@ -8366,7 +9054,7 @@ snapshots:
 
   sequelize-pool@7.1.0: {}
 
-  sequelize@6.37.8(pg@8.23.0):
+  sequelize@6.37.8(pg@8.23.1):
     dependencies:
       '@types/debug': 4.1.13
       '@types/validator': 13.15.10
@@ -8385,13 +9073,15 @@ snapshots:
       validator: 13.15.35
       wkx: 0.5.0
     optionalDependencies:
-      pg: 8.23.0
+      pg: 8.23.1
     transitivePeerDependencies:
       - supports-color
 
   set-cookie-parser@3.1.0: {}
 
   set-cookie-parser@3.1.2: {}
+
+  set-cookie-parser@3.2.1: {}
 
   set-function-length@1.2.2:
     dependencies:
@@ -8408,7 +9098,7 @@ snapshots:
       safe-buffer: 5.2.1
       to-buffer: 1.2.2
 
-  sharp@0.35.5(@types/node@26.6.5):
+  sharp@0.35.5(@types/node@26.6.6):
     dependencies:
       '@img/colour': 1.1.0
       detect-libc: 2.1.2
@@ -8439,7 +9129,7 @@ snapshots:
       '@img/sharp-win32-arm64': 0.35.5
       '@img/sharp-win32-ia32': 0.35.5
       '@img/sharp-win32-x64': 0.35.5
-      '@types/node': 26.6.5
+      '@types/node': 26.6.6
     optional: true
 
   shebang-command@2.0.0:
@@ -8474,7 +9164,7 @@ snapshots:
 
   sql-highlight@6.1.0: {}
 
-  srvx@1.0.5: {}
+  srvx@1.0.8: {}
 
   streamx@2.28.1:
     dependencies:
@@ -8583,6 +9273,10 @@ snapshots:
       safe-buffer: 5.2.1
       typed-array-buffer: 1.0.3
 
+  to-regex-range@5.0.1:
+    dependencies:
+      is-number: 7.0.0
+
   toposort-class@1.0.1: {}
 
   totalist@3.0.1: {}
@@ -8615,7 +9309,7 @@ snapshots:
       es-errors: 1.3.0
       is-typed-array: 1.1.15
 
-  typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.0):
+  typeorm@0.3.31(mongodb@6.21.0)(pg@8.23.1):
     dependencies:
       '@sqltools/formatter': 1.2.5
       ansis: 4.4.0
@@ -8634,7 +9328,7 @@ snapshots:
       yargs: 17.7.3
     optionalDependencies:
       mongodb: 6.21.0
-      pg: 8.23.0
+      pg: 8.23.1
     transitivePeerDependencies:
       - babel-plugin-macros
       - supports-color
@@ -8695,18 +9389,18 @@ snapshots:
     dependencies:
       '@types/unist': 3.0.3
 
-  unist-util-visit-parents@6.0.2:
+  unist-util-visit-parents@6.1.0:
     dependencies:
       '@types/unist': 3.0.3
       unist-util-is: 6.0.1
 
-  unist-util-visit@5.1.0:
+  unist-util-visit@5.2.0:
     dependencies:
       '@types/unist': 3.0.3
       unist-util-is: 6.0.1
-      unist-util-visit-parents: 6.0.2
+      unist-util-visit-parents: 6.1.0
 
-  unstorage@1.17.5(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))):
+  unstorage@1.17.6(db0@0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))):
     dependencies:
       anymatch: 3.1.3
       chokidar: 5.0.0
@@ -8717,7 +9411,7 @@ snapshots:
       ofetch: 1.5.1
       ufo: 1.6.4
     optionalDependencies:
-      db0: 0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.0))
+      db0: 0.3.4(drizzle-orm@0.45.3(@opentelemetry/api@1.9.1)(@prisma/client@6.19.3(typescript@5.9.3))(@xata.io/client@0.30.1(typescript@5.9.3))(kysely@0.28.17)(pg@8.23.1))
 
   unstorage@2.0.0-alpha.10: {}
 
@@ -8748,7 +9442,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vite@7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3):
+  vite@7.3.7(@types/node@26.6.6)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.8.3):
     dependencies:
       esbuild: 0.28.2
       fdir: 6.5.0(picomatch@4.0.7)
@@ -8757,26 +9451,40 @@ snapshots:
       rollup: 4.63.5
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 26.6.5
+      '@types/node': 26.6.6
       fsevents: 2.3.3
       jiti: 2.7.0
       lightningcss: 1.33.0
       yaml: 2.8.3
 
-  vite@8.1.6(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.8.3):
+  vite@8.1.6(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.8.3):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
-      postcss: 8.5.31
+      postcss: 8.5.32
       rolldown: 1.1.5
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 26.6.5
+      '@types/node': 26.6.6
       esbuild: 0.28.2
       fsevents: 2.3.3
       jiti: 2.7.0
       yaml: 2.8.3
     optional: true
+
+  vite@8.3.4(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.8.3):
+    dependencies:
+      lightningcss: 1.33.0
+      picomatch: 4.0.7
+      postcss: 8.5.32
+      rolldown: 1.2.15
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      '@types/node': 26.6.6
+      esbuild: 0.28.2
+      fsevents: 2.3.3
+      jiti: 2.7.0
+      yaml: 2.8.3
 
   vue-component-type-helpers@3.3.11: {}
 
@@ -8823,7 +9531,7 @@ snapshots:
 
   wkx@0.5.0:
     dependencies:
-      '@types/node': 26.6.5
+      '@types/node': 26.6.6
 
   wrap-ansi@7.0.0:
     dependencies:
