@@ -30,7 +30,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: 1.92.0
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: cargo build --locked -p jevia
       - name: Install pinned native harnesses
         run: npm install --prefix "$RUNNER_TEMP/native-tools" --no-audit --no-fund --save-exact opencode-ai@1.18.33 @openai/codex@0.158.0-alpha.2
@@ -82,7 +82,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: 1.92.0
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Build CLI for SDK integration tests
         working-directory: .
         run: cargo build --locked -p jevia
@@ -141,7 +141,7 @@ jobs:
         with:
           toolchain: 1.92.0
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run Clippy
@@ -175,7 +175,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: 1.92.0
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Test PostgreSQL contracts and complete CLI flow
         # Tests share tables and some create temporary indexes. Unique project
         # IDs do not isolate DDL locks or query plans from those index changes.
@@ -203,7 +203,7 @@ jobs:
         with:
           toolchain: 1.92.0
           targets: x86_64-unknown-linux-musl
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Install musl C toolchain for bundled SQLite
         run: sudo apt-get update && sudo apt-get install --yes musl-tools
       - name: Build Linux distribution target
@@ -221,6 +221,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: 1.92.0
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Run tests
         run: cargo test --workspace --all-features
