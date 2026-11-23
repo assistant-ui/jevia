@@ -1,9 +1,10 @@
 # Website dependency patches
 
-## Farm 0.1.0 globbing
+## Farm 0.1.37 globbing
 
-`@farm.js__core@0.1.0.patch` switches the three async glob call sites
-(and their emitted ESM/CommonJS copies) to `tinyglobby.glob`. The package extension
+`@farm.js__core@0.1.37.patch` switches the three async glob call sites to
+`tinyglobby.glob` and the sync MCP tool scan to `tinyglobby.globSync`
+(and their emitted ESM/CommonJS copies). The package extension
 adds pinned `tinyglobby@0.2.17`; the scoped override removes Farm's `fast-glob`
 dependency, eliminating its `micromatch` → `braces` chain.
 
@@ -13,9 +14,9 @@ which currently has no patched `braces` release. No advisory is ignored and
 upgrade requires review. Remove the patch, override, and package extension together
 when Farm ships an equivalent migration or a safe upstream dependency path.
 
-The patch was regenerated against the published stable `0.1.0` package. Its three
-source call sites are emitted in three ESM chunks and five CommonJS bundles
-(18 replacements in total); the stable release still imports `fast-glob` upstream.
+The patch was regenerated against the published `0.1.37` package. Its four
+source call sites are emitted in four ESM chunks and four CommonJS bundles
+(eight `fast-glob` imports in total); the release still depends on `fast-glob` upstream.
 
 `tests/farm-glob.test.mjs` checks this installed bundle inventory and exercises
 the actual patched ESM/CommonJS entry points, route alternatives, nested files,
