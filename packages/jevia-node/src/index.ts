@@ -1,7 +1,6 @@
-import type { ExecFileException } from "node:child_process";
 import { constants } from "node:os";
 import { isRouteRecord, isExecutionRecording, isStorageCheckReport } from "./protocol.js";
-import { runCommand } from "./command.js";
+import { runCommand, type CommandFailure } from "./command.js";
 
 export type Outcome = "success" | "failure" | "unknown";
 export type OutcomeSource = "process_exit" | "verification" | "manual";
@@ -215,7 +214,7 @@ export class JeviaCommandError extends Error {
 
   constructor(
     command: readonly string[],
-    cause: ExecFileException,
+    cause: CommandFailure,
     stdout: string,
     stderr: string,
   ) {
@@ -476,7 +475,7 @@ function requireText(value: string, name: string): void {
   if (value.includes("\0")) throw new TypeError(`${name} cannot contain NUL`);
 }
 
-function commandErrorKind(cause: ExecFileException): JeviaCommandErrorKind {
+function commandErrorKind(cause: CommandFailure): JeviaCommandErrorKind {
   switch (cause.code) {
     // ENOENT can mean a missing executable OR cwd. Do not misdiagnose which one.
     case "ENOENT": case "ENOTDIR": return "not_found";
