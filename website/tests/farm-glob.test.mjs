@@ -36,21 +36,21 @@ test("the installed dependency graph removes the vulnerable glob chain", async (
 
 test("every emitted Farm glob call uses the replacement dependency", async () => {
   const dist = new URL("../node_modules/@farm.js/core/dist/", import.meta.url);
-  let esmCalls = 0;
-  let cjsCalls = 0;
+  let esmImports = 0;
+  let cjsImports = 0;
   for (const file of await readdir(dist, { recursive: true })) {
     if (!/\.(?:mjs|cjs)$/.test(file)) continue;
     const source = await readFile(new URL(file, dist), "utf8");
-    assert.doesNotMatch(source, /import\(["']fast-glob["']\)/, file);
+    assert.doesNotMatch(source, /fast-glob/, file);
     assert.doesNotMatch(source, /\bglob\.default\(/, file);
-    const calls = [...source.matchAll(/import\("tinyglobby"\)/g)].length;
-    if (file.endsWith(".mjs")) esmCalls += calls;
-    else cjsCalls += calls;
+    const imports = [...source.matchAll(/(?:import\(|from |require\()["']tinyglobby["']/g)].length;
+    if (file.endsWith(".mjs")) esmImports += imports;
+    else cjsImports += imports;
   }
-  // Three source call sites, emitted once as ESM chunks and in five CJS bundles.
+  // Three async call sites and one sync call site, each emitted once as an ESM chunk and once as a CJS bundle.
   // Re-review this inventory whenever Farm changes its published bundle layout.
-  assert.equal(esmCalls, 3);
-  assert.equal(cjsCalls, 15);
+  assert.equal(esmImports, 4);
+  assert.equal(cjsImports, 4);
 });
 
 test("Farm upgrades keep CLI/core and version-scoped security protections aligned", async () => {

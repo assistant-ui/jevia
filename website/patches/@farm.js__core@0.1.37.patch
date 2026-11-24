@@ -1,0 +1,140 @@
+diff --git a/dist/chunk-4P6ULFMD.mjs b/dist/chunk-4P6ULFMD.mjs
+index 5a047877474a750ab2e78772f561ff766abd38ce..5ce734d7a510abb38dc70c9d5e063d30f2880549 100644
+--- a/dist/chunk-4P6ULFMD.mjs
++++ b/dist/chunk-4P6ULFMD.mjs
+@@ -9134,7 +9134,7 @@ __name(resolveFarmAppPackages, "resolveFarmAppPackages");
+ import fs9 from "fs";
+ import { createRequire as createRequire2 } from "module";
+ import path15 from "path";
+-import fg from "fast-glob";
++import { globSync } from "tinyglobby";
+ var WEBMCP_CLIENT = "@farm.js/webmcp/client";
+ var DEFINERS = /* @__PURE__ */ new Set(["defineWebMCPTool", "registerWebMCPTool", "registerWebMCPTools"]);
+ var HINTS = ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"];
+@@ -9282,7 +9282,7 @@ function collectFarmWebMCPTools(root, srcDir = "src") {
+   const base = path15.resolve(root, srcDir);
+   let files;
+   try {
+-    files = fg.sync("**/*.{ts,tsx,js,jsx,mts,mjs,cts,cjs}", {
++    files = globSync("**/*.{ts,tsx,js,jsx,mts,mjs,cts,cjs}", {
+       cwd: base,
+       absolute: true,
+       ignore: ["**/node_modules/**", "**/*.d.ts", "**/*.{test,spec}.*", "**/__tests__/**"]
+diff --git a/dist/chunk-5D2JIPLH.cjs b/dist/chunk-5D2JIPLH.cjs
+index 73471c6756ea468285ce8b1bae569d490aaa8c3c..5f7c4b0ed3d334fe89972db8285d037e70820b42 100644
+--- a/dist/chunk-5D2JIPLH.cjs
++++ b/dist/chunk-5D2JIPLH.cjs
+@@ -715,11 +715,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+   );
+   const patterns = /* @__PURE__ */ new Set();
+   const routeModulePatterns = /* @__PURE__ */ new Set();
+-  const glob = await import("fast-glob");
++  const glob = await import("tinyglobby");
+   for (const source of sourceRoots) {
+     const appDir = path.join(source.root, source.srcDir, "app");
+     if (fs.existsSync(appDir)) {
+-      const routeModuleFiles = await glob.default(
++      const routeModuleFiles = await glob.glob(
+         `**/{page,layout,loading,error}.{${componentExtensions.join(",")},md,mdx}`,
+         {
+           cwd: appDir,
+diff --git a/dist/chunk-5QIKR7RR.cjs b/dist/chunk-5QIKR7RR.cjs
+index 5cd9c18dcb61de717139caa8c1f4ec661f7db1b3..7e20ae60267e8866d55b867187791f698d251e40 100644
+--- a/dist/chunk-5QIKR7RR.cjs
++++ b/dist/chunk-5QIKR7RR.cjs
+@@ -188,8 +188,8 @@ async function fileExists(filePath) {
+ }
+ _chunkS3JO3N4Hcjs.__name.call(void 0, fileExists, "fileExists");
+ async function globFiles(pattern, cwd) {
+-  const glob = await import("fast-glob");
+-  return glob.default(pattern, { cwd, absolute: false });
++  const glob = await import("tinyglobby");
++  return glob.glob(pattern, { cwd, absolute: false });
+ }
+ _chunkS3JO3N4Hcjs.__name.call(void 0, globFiles, "globFiles");
+ function parseSearchParams(searchParams) {
+diff --git a/dist/chunk-CQMVIOYP.mjs b/dist/chunk-CQMVIOYP.mjs
+index daff4f114de377074cac8e0ea50f3acaec2ba003..429b2981d6131b3d6bf6b5ffb041297d1e7a1181 100644
+--- a/dist/chunk-CQMVIOYP.mjs
++++ b/dist/chunk-CQMVIOYP.mjs
+@@ -715,11 +715,11 @@ async function createRouteTypeDeclarations(options, outPath) {
+   );
+   const patterns = /* @__PURE__ */ new Set();
+   const routeModulePatterns = /* @__PURE__ */ new Set();
+-  const glob = await import("fast-glob");
++  const glob = await import("tinyglobby");
+   for (const source of sourceRoots) {
+     const appDir = path.join(source.root, source.srcDir, "app");
+     if (fs.existsSync(appDir)) {
+-      const routeModuleFiles = await glob.default(
++      const routeModuleFiles = await glob.glob(
+         `**/{page,layout,loading,error}.{${componentExtensions.join(",")},md,mdx}`,
+         {
+           cwd: appDir,
+diff --git a/dist/chunk-FUCSUGDM.cjs b/dist/chunk-FUCSUGDM.cjs
+index 557611f18814bd88a78c89dd0a3d8dd19e87c911..e5b88e7ed07b7c39d8379a72b0d44ab36f16104e 100644
+--- a/dist/chunk-FUCSUGDM.cjs
++++ b/dist/chunk-FUCSUGDM.cjs
+@@ -59,8 +59,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+     return [];
+   }
+   try {
+-    const glob = await import("fast-glob");
+-    return await glob.default("**/*.{ts,tsx,js,jsx}", {
++    const glob = await import("tinyglobby");
++    return await glob.glob("**/*.{ts,tsx,js,jsx}", {
+       cwd: srcRoot,
+       absolute: true,
+       ignore: [
+diff --git a/dist/chunk-KI3MESHB.mjs b/dist/chunk-KI3MESHB.mjs
+index a4844a19f3a11399b1cb57dcdecbf33b9091448d..c6db9a6bc24eee534fdf829c23e748affc984b4a 100644
+--- a/dist/chunk-KI3MESHB.mjs
++++ b/dist/chunk-KI3MESHB.mjs
+@@ -188,8 +188,8 @@ async function fileExists(filePath) {
+ }
+ __name(fileExists, "fileExists");
+ async function globFiles(pattern, cwd) {
+-  const glob = await import("fast-glob");
+-  return glob.default(pattern, { cwd, absolute: false });
++  const glob = await import("tinyglobby");
++  return glob.glob(pattern, { cwd, absolute: false });
+ }
+ __name(globFiles, "globFiles");
+ function parseSearchParams(searchParams) {
+diff --git a/dist/chunk-MYIZXDZA.mjs b/dist/chunk-MYIZXDZA.mjs
+index bc992410a956a97017722a6a584ce1e685e6b104..d8e7445860db24b518caa1f1dffc20e5b5377af6 100644
+--- a/dist/chunk-MYIZXDZA.mjs
++++ b/dist/chunk-MYIZXDZA.mjs
+@@ -59,8 +59,8 @@ async function findProgrammaticRouteSourceFiles(srcRoot) {
+     return [];
+   }
+   try {
+-    const glob = await import("fast-glob");
+-    return await glob.default("**/*.{ts,tsx,js,jsx}", {
++    const glob = await import("tinyglobby");
++    return await glob.glob("**/*.{ts,tsx,js,jsx}", {
+       cwd: srcRoot,
+       absolute: true,
+       ignore: [
+diff --git a/dist/chunk-Q5FYSK45.cjs b/dist/chunk-Q5FYSK45.cjs
+index 3edcff7acf5ca110541d96fc9c5fd66363bfe9b5..5849ca0a5509f4f5a8c2a23e6ec7d89a621cb8cb 100644
+--- a/dist/chunk-Q5FYSK45.cjs
++++ b/dist/chunk-Q5FYSK45.cjs
+@@ -9135,7 +9135,7 @@ _chunkS3JO3N4Hcjs.__name.call(void 0, resolveFarmAppPackages, "resolveFarmAppPac
+ 
+ 
+ 
+-var _fastglob = require('fast-glob'); var _fastglob2 = _interopRequireDefault(_fastglob);
++var _tinyglobby = require('tinyglobby');
+ var WEBMCP_CLIENT = "@farm.js/webmcp/client";
+ var DEFINERS = /* @__PURE__ */ new Set(["defineWebMCPTool", "registerWebMCPTool", "registerWebMCPTools"]);
+ var HINTS = ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"];
+@@ -9283,7 +9283,7 @@ function collectFarmWebMCPTools(root, srcDir = "src") {
+   const base = path9.default.resolve(root, srcDir);
+   let files;
+   try {
+-    files = _fastglob2.default.sync("**/*.{ts,tsx,js,jsx,mts,mjs,cts,cjs}", {
++    files = _tinyglobby.globSync("**/*.{ts,tsx,js,jsx,mts,mjs,cts,cjs}", {
+       cwd: base,
+       absolute: true,
+       ignore: ["**/node_modules/**", "**/*.d.ts", "**/*.{test,spec}.*", "**/__tests__/**"]
