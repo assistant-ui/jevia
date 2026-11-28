@@ -11,7 +11,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@farm.js/core": "0.1.37",
+    "@farm.js/core": "0.1.86",
     "geist": "1.8.2",
     "lucide-react": "1.61.0",
     "prism-react-renderer": "^2.4.1",
