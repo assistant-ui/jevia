@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@farm.js/core": "0.1.37",
-    "geist": "1.8.2",
+    "geist": "1.9.2",
     "lucide-react": "1.61.0",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.3.1",
